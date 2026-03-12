@@ -39,6 +39,7 @@ import {
 } from "../lib/gitReactQuery";
 import { gitPushWithToast } from "../lib/gitPushWithToast";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { readNativeApi } from "../nativeApi";
 import { type DraftThreadEnvMode, useComposerDraftStore } from "../composerDraftStore";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
@@ -59,6 +60,7 @@ import {
 } from "./desktopUpdate.logic";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
+import { shouldOpenProjectFolderPickerImmediately } from "./Sidebar.logic";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
@@ -304,6 +306,7 @@ function ProjectFavicon({
 }
 
 export default function Sidebar() {
+  const isMobile = useMediaQuery("(max-width: 767px)");
   const projects = useStore((store) => store.projects);
   const threads = useStore((store) => store.threads);
   const markThreadUnread = useStore((store) => store.markThreadUnread);
@@ -357,6 +360,10 @@ export default function Sidebar() {
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
+  const shouldBrowseForProjectImmediately = shouldOpenProjectFolderPickerImmediately({
+    isElectron,
+    isMobile,
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const preSearchExpandedRef = useRef<Map<string, boolean> | null>(null);
 
@@ -660,7 +667,7 @@ export default function Sidebar() {
     }
     if (pickedPath) {
       await addProjectFromPath(pickedPath);
-    } else {
+    } else if (!shouldBrowseForProjectImmediately) {
       addProjectInputRef.current?.focus();
     }
     setIsPickingFolder(false);
@@ -1468,8 +1475,12 @@ export default function Sidebar() {
                     aria-label="Add project"
                     className="inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
                     onClick={() => {
-                      setShowAddProjectDialog(true);
                       setAddProjectError(null);
+                      if (shouldBrowseForProjectImmediately) {
+                        void handlePickFolder();
+                        return;
+                      }
+                      setShowAddProjectDialog(true);
                     }}
                   />
                 }

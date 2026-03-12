@@ -21,6 +21,10 @@ it, and re-implement it carefully against our current codebase.
 7. **Explain before implementing.** For each commit, explain clearly what it does and why
    it's useful BEFORE writing any code. If the commit is ambiguous or might not apply to
    our fork, ask the user whether to implement or skip.
+8. **Show your work.** When analyzing a commit, read the FULL upstream diff code AND the
+   corresponding sections of our current codebase. Explain the delta — what upstream changed,
+   how our code differs, and what specific edits are needed. Don't just summarize the commit
+   title — show the actual code context from both sides.
 
 ## Workflow
 
