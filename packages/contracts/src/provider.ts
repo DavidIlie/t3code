@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { TrimmedNonEmptyString } from "./baseSchemas";
+import { TrimmedNonEmptyString, NonNegativeInt } from "./baseSchemas";
 import { ProviderModelOptions } from "./model";
 import {
   ApprovalRequestId,
@@ -53,8 +53,20 @@ const CodexProviderStartOptions = Schema.Struct({
   homePath: Schema.optional(TrimmedNonEmptyStringSchema),
 });
 
+const ClaudeCodeProviderStartOptions = Schema.Struct({
+  binaryPath: Schema.optional(TrimmedNonEmptyStringSchema),
+  permissionMode: Schema.optional(TrimmedNonEmptyStringSchema),
+  maxThinkingTokens: Schema.optional(NonNegativeInt),
+});
+
+const CursorProviderStartOptions = Schema.Struct({
+  binaryPath: Schema.optional(TrimmedNonEmptyStringSchema),
+});
+
 export const ProviderStartOptions = Schema.Struct({
   codex: Schema.optional(CodexProviderStartOptions),
+  claudeCode: Schema.optional(ClaudeCodeProviderStartOptions),
+  cursor: Schema.optional(CursorProviderStartOptions),
 });
 export type ProviderStartOptions = typeof ProviderStartOptions.Type;
 

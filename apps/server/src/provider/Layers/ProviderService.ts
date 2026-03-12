@@ -527,6 +527,23 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
       ),
     );
 
+    const listTrackedClaudeSessionIds: ProviderServiceShape["listTrackedClaudeSessionIds"] = () =>
+      Effect.gen(function* () {
+        const threadIds = yield* directory.listThreadIds();
+        const sessionIds: string[] = [];
+        for (const threadId of threadIds) {
+          const bindingOption = yield* directory.getBinding(threadId);
+          if (Option.isNone(bindingOption)) continue;
+          const binding = bindingOption.value;
+          if (binding.provider !== "claudeCode") continue;
+          const cursor = binding.resumeCursor as { resume?: string } | null | undefined;
+          if (cursor && typeof cursor.resume === "string") {
+            sessionIds.push(cursor.resume);
+          }
+        }
+        return sessionIds;
+      }).pipe(Effect.catch(() => Effect.succeed([] as ReadonlyArray<string>)));
+
     return {
       startSession,
       sendTurn,
@@ -537,6 +554,7 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
       listSessions,
       getCapabilities,
       rollbackConversation,
+      listTrackedClaudeSessionIds,
       streamEvents: Stream.fromPubSub(runtimeEventPubSub),
     } satisfies ProviderServiceShape;
   });

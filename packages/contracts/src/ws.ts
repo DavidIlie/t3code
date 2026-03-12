@@ -29,7 +29,15 @@ import {
   TerminalWriteInput,
 } from "./terminal";
 import { KeybindingRule } from "./keybindings";
-import { ProjectSearchEntriesInput, ProjectWriteFileInput } from "./project";
+import {
+  ProjectAddMcpServerInput,
+  ProjectGetMcpServersInput,
+  ProjectGetSessionMessagesInput,
+  ProjectImportHistoryInput,
+  ProjectRemoveMcpServerInput,
+  ProjectSearchEntriesInput,
+  ProjectWriteFileInput,
+} from "./project";
 import { OpenInEditorInput } from "./editor";
 
 // ── WebSocket RPC Method Names ───────────────────────────────────────
@@ -41,6 +49,11 @@ export const WS_METHODS = {
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
   projectsWriteFile: "projects.writeFile",
+  projectsImportHistory: "projects.importHistory",
+  projectsGetSessionMessages: "projects.getSessionMessages",
+  projectsGetMcpServers: "projects.getMcpServers",
+  projectsAddMcpServer: "projects.addMcpServer",
+  projectsRemoveMcpServer: "projects.removeMcpServer",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -64,6 +77,9 @@ export const WS_METHODS = {
   terminalRestart: "terminal.restart",
   terminalClose: "terminal.close",
 
+  // Terminal meta
+  terminalListShells: "terminal.listShells",
+
   // Server meta
   serverGetConfig: "server.getConfig",
   serverUpsertKeybinding: "server.upsertKeybinding",
@@ -75,6 +91,9 @@ export const WS_CHANNELS = {
   terminalEvent: "terminal.event",
   serverWelcome: "server.welcome",
   serverConfigUpdated: "server.configUpdated",
+  providerSessionCommands: "provider.sessionCommands",
+  providerAccountUpdated: "provider.accountUpdated",
+  mcpStatusUpdated: "mcp.statusUpdated",
 } as const;
 
 // -- Tagged Union of all request body schemas ─────────────────────────
@@ -103,6 +122,11 @@ const WebSocketRequestBody = Schema.Union([
   // Project Search
   tagRequestBody(WS_METHODS.projectsSearchEntries, ProjectSearchEntriesInput),
   tagRequestBody(WS_METHODS.projectsWriteFile, ProjectWriteFileInput),
+  tagRequestBody(WS_METHODS.projectsImportHistory, ProjectImportHistoryInput),
+  tagRequestBody(WS_METHODS.projectsGetSessionMessages, ProjectGetSessionMessagesInput),
+  tagRequestBody(WS_METHODS.projectsGetMcpServers, ProjectGetMcpServersInput),
+  tagRequestBody(WS_METHODS.projectsAddMcpServer, ProjectAddMcpServerInput),
+  tagRequestBody(WS_METHODS.projectsRemoveMcpServer, ProjectRemoveMcpServerInput),
 
   // Shell methods
   tagRequestBody(WS_METHODS.shellOpenInEditor, OpenInEditorInput),
@@ -125,6 +149,9 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.terminalClear, TerminalClearInput),
   tagRequestBody(WS_METHODS.terminalRestart, TerminalRestartInput),
   tagRequestBody(WS_METHODS.terminalClose, TerminalCloseInput),
+
+  // Terminal meta
+  tagRequestBody(WS_METHODS.terminalListShells, Schema.Struct({})),
 
   // Server meta
   tagRequestBody(WS_METHODS.serverGetConfig, Schema.Struct({})),
@@ -162,10 +189,19 @@ export type WsResponse = typeof WsResponse.Type;
 
 // ── Server welcome payload ───────────────────────────────────────────
 
+export const WsMcpServerConfig = Schema.Struct({
+  name: Schema.String,
+  type: Schema.String,
+  status: Schema.String,
+});
+export type WsMcpServerConfig = typeof WsMcpServerConfig.Type;
+
 export const WsWelcomePayload = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   projectName: TrimmedNonEmptyString,
   bootstrapProjectId: Schema.optional(ProjectId),
   bootstrapThreadId: Schema.optional(ThreadId),
+  homeProjectId: Schema.optional(ProjectId),
+  mcpServers: Schema.optional(Schema.Array(WsMcpServerConfig)),
 });
 export type WsWelcomePayload = typeof WsWelcomePayload.Type;

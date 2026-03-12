@@ -12,6 +12,8 @@ import {
 } from "@t3tools/contracts";
 import { Cause, Schema } from "effect";
 
+import { useProviderSessionStore } from "./providerSessionStore";
+
 import { showContextMenuFallback } from "./contextMenuFallback";
 import { WsTransport } from "./wsTransport";
 
@@ -63,6 +65,10 @@ export function onServerWelcome(listener: (payload: WsWelcomePayload) => void): 
  * Subscribe to server config update events. Replays the latest update for
  * late subscribers to avoid missing config validation feedback.
  */
+export function getLastWelcome(): WsWelcomePayload | null {
+  return lastWelcome;
+}
+
 export function onServerConfigUpdated(
   listener: (payload: ServerConfigUpdatedPayload) => void,
 ): () => void {
@@ -92,6 +98,11 @@ export function createWsNativeApi(): NativeApi {
     const payload = decodeAndWarnOnFailure(WsWelcomePayload, data);
     if (!payload) return;
     lastWelcome = payload;
+    if (payload.mcpServers && payload.mcpServers.length > 0) {
+      useProviderSessionStore.getState().setGlobalMcpServers(
+        payload.mcpServers.map((s) => ({ name: s.name, status: s.status })),
+      );
+    }
     for (const listener of welcomeListeners) {
       try {
         listener(payload);
@@ -110,6 +121,36 @@ export function createWsNativeApi(): NativeApi {
       } catch {
         // Swallow listener errors
       }
+    }
+  });
+
+  // Provider session metadata push channels
+  transport.subscribe(WS_CHANNELS.providerSessionCommands, (data) => {
+    const raw = data as { threadId?: string; commands?: unknown[] };
+    if (raw.threadId && Array.isArray(raw.commands)) {
+      useProviderSessionStore
+        .getState()
+        .setCommands(
+          raw.threadId,
+          raw.commands as Array<{ name: string; description: string; argumentHint: string }>,
+        );
+    }
+  });
+  transport.subscribe(WS_CHANNELS.mcpStatusUpdated, (data) => {
+    const raw = data as { threadId?: string; status?: unknown[] };
+    if (raw.threadId && Array.isArray(raw.status)) {
+      useProviderSessionStore
+        .getState()
+        .setMcpStatus(
+          raw.threadId,
+          raw.status as Array<{ name: string; status: string; tools?: Array<{ name: string; description?: string }> }>,
+        );
+    }
+  });
+  transport.subscribe(WS_CHANNELS.providerAccountUpdated, (data) => {
+    const raw = data as { threadId?: string; account?: Record<string, unknown> };
+    if (raw.threadId && raw.account) {
+      useProviderSessionStore.getState().setAccountInfo(raw.threadId, raw.account);
     }
   });
 
@@ -133,6 +174,7 @@ export function createWsNativeApi(): NativeApi {
       clear: (input) => transport.request(WS_METHODS.terminalClear, input),
       restart: (input) => transport.request(WS_METHODS.terminalRestart, input),
       close: (input) => transport.request(WS_METHODS.terminalClose, input),
+      listShells: () => transport.request(WS_METHODS.terminalListShells, {}),
       onEvent: (callback) =>
         transport.subscribe(WS_CHANNELS.terminalEvent, (data) => {
           const payload = decodeAndWarnOnFailure(TerminalEvent, data);
@@ -142,6 +184,12 @@ export function createWsNativeApi(): NativeApi {
     projects: {
       searchEntries: (input) => transport.request(WS_METHODS.projectsSearchEntries, input),
       writeFile: (input) => transport.request(WS_METHODS.projectsWriteFile, input),
+      importHistory: (input) => transport.request(WS_METHODS.projectsImportHistory, input),
+      getSessionMessages: (input) =>
+        transport.request(WS_METHODS.projectsGetSessionMessages, input),
+      getMcpServers: (input) => transport.request(WS_METHODS.projectsGetMcpServers, input),
+      addMcpServer: (input) => transport.request(WS_METHODS.projectsAddMcpServer, input),
+      removeMcpServer: (input) => transport.request(WS_METHODS.projectsRemoveMcpServer, input),
     },
     shell: {
       openInEditor: (cwd, editor) =>

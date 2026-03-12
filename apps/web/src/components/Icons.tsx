@@ -326,6 +326,23 @@ export const Gemini: Icon = (props) => (
   </svg>
 );
 
+export const TerminalAppIcon: Icon = (props) => (
+  <svg {...props} viewBox="0 0 32 32" fill="none">
+    <rect width="28" height="20" x="2" y="6" rx="3" fill="currentColor" opacity="0.15" />
+    <rect width="28" height="20" x="2" y="6" rx="3" stroke="currentColor" strokeWidth="1.5" fill="none" />
+    <path d="M8 14l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M16 22h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+export const ITerm2Icon: Icon = (props) => (
+  <svg {...props} viewBox="0 0 32 32" fill="none">
+    <rect width="26" height="20" x="3" y="6" rx="3" fill="#000" opacity="0.85" />
+    <rect width="26" height="20" x="3" y="6" rx="3" stroke="#4CAF50" strokeWidth="1" fill="none" />
+    <text x="16" y="20" textAnchor="middle" fill="#4CAF50" fontSize="11" fontFamily="monospace" fontWeight="bold">&gt;_</text>
+  </svg>
+);
+
 export const OpenCodeIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg">
     <g clipPath="url(#opencode__clip0_1311_94969)">

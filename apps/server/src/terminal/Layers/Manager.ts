@@ -589,7 +589,13 @@ export class TerminalManagerRuntime extends EventEmitter<TerminalManagerEvents> 
     let ptyProcess: PtyProcess | null = null;
     let startedShell: string | null = null;
     try {
-      const shellCandidates = resolveShellCandidates(this.shellResolver);
+      const requestedShell = normalizeShellCommand(input.shell);
+      const shellCandidates = requestedShell
+        ? uniqueShellCandidates([
+            shellCandidateFromCommand(requestedShell),
+            ...resolveShellCandidates(this.shellResolver),
+          ])
+        : resolveShellCandidates(this.shellResolver);
       const terminalEnv = createTerminalSpawnEnv(process.env, session.runtimeEnv);
       let lastSpawnError: unknown = null;
 

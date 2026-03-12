@@ -7,6 +7,7 @@ import { assert, describe, it } from "@effect/vitest";
 import {
   isCommandAvailable,
   launchDetached,
+  macApplicationNameForEditor,
   resolveAvailableEditors,
   resolveEditorLaunch,
 } from "./open";
@@ -202,6 +203,71 @@ describe("isCommandAvailable", () => {
       });
     });
   });
+});
+
+describe("macApplicationNameForEditor", () => {
+  it("maps terminal to Terminal", () => {
+    assert.equal(macApplicationNameForEditor("terminal"), "Terminal");
+  });
+
+  it("maps iterm2 to iTerm", () => {
+    assert.equal(macApplicationNameForEditor("iterm2"), "iTerm");
+  });
+
+  it("returns null for non-terminal editors", () => {
+    assert.equal(macApplicationNameForEditor("cursor"), null);
+    assert.equal(macApplicationNameForEditor("vscode"), null);
+    assert.equal(macApplicationNameForEditor("zed"), null);
+    assert.equal(macApplicationNameForEditor("file-manager"), null);
+  });
+});
+
+describe("resolveEditorLaunch (terminal editors)", () => {
+  it.effect("returns open -a Terminal on macOS for terminal editor", () =>
+    Effect.gen(function* () {
+      const launch = yield* resolveEditorLaunch(
+        { cwd: "/tmp/workspace", editor: "terminal" },
+        "darwin",
+      );
+      assert.deepEqual(launch, {
+        command: "open",
+        args: ["-a", "Terminal", "/tmp/workspace"],
+      });
+    }),
+  );
+
+  it.effect("returns open -a iTerm on macOS for iterm2 editor", () =>
+    Effect.gen(function* () {
+      const launch = yield* resolveEditorLaunch(
+        { cwd: "/tmp/workspace", editor: "iterm2" },
+        "darwin",
+      );
+      assert.deepEqual(launch, {
+        command: "open",
+        args: ["-a", "iTerm", "/tmp/workspace"],
+      });
+    }),
+  );
+
+  it.effect("fails for terminal editor on non-macOS platform", () =>
+    Effect.gen(function* () {
+      const result = yield* resolveEditorLaunch(
+        { cwd: "/tmp/workspace", editor: "terminal" },
+        "linux",
+      ).pipe(Effect.result);
+      assert.equal(result._tag, "Failure");
+    }),
+  );
+
+  it.effect("fails for iterm2 editor on non-macOS platform", () =>
+    Effect.gen(function* () {
+      const result = yield* resolveEditorLaunch(
+        { cwd: "/tmp/workspace", editor: "iterm2" },
+        "win32",
+      ).pipe(Effect.result);
+      assert.equal(result._tag, "Failure");
+    }),
+  );
 });
 
 describe("resolveAvailableEditors", () => {

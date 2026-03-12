@@ -18,7 +18,7 @@ export const PROVIDER_OPTIONS: Array<{
   available: boolean;
 }> = [
   { value: "codex", label: "Codex", available: true },
-  { value: "claudeCode", label: "Claude Code", available: false },
+  { value: "claudeCode", label: "Claude Code", available: true },
   { value: "cursor", label: "Cursor", available: false },
 ];
 
@@ -434,6 +434,22 @@ export function deriveWorkLogEntries(
       if (changedFiles.length > 0) {
         entry.changedFiles = changedFiles;
       }
+
+      // Annotate MCP tool calls with server name from mcp__servername__toolname pattern
+      const dataRecord = asRecord(payload?.data);
+      const toolName =
+        typeof payload?.toolName === "string"
+          ? payload.toolName
+          : dataRecord && typeof dataRecord.toolName === "string"
+            ? dataRecord.toolName
+            : null;
+      if (toolName && toolName.startsWith("mcp__")) {
+        const parts = toolName.split("__");
+        if (parts.length >= 3) {
+          entry.label = `[${parts[1]}] ${entry.label}`;
+        }
+      }
+
       return entry;
     });
 }
@@ -595,9 +611,31 @@ export function deriveTimelineEntries(
     createdAt: entry.createdAt,
     entry,
   }));
-  return [...messageRows, ...proposedPlanRows, ...workRows].toSorted((a, b) =>
+
+  // Sort non-work entries chronologically.
+  const nonWork = [...messageRows, ...proposedPlanRows].toSorted((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
   );
+
+  if (workRows.length === 0) return nonWork;
+
+  // Work entries (only from the latest turn) must stay as a consecutive block so the
+  // rows grouping in ChatView can collapse them into a single work-log card.
+  // Interleaving by raw timestamp would split them around streaming assistant messages
+  // whose createdAt is set when streaming starts (before tool activities finish).
+  const sortedWork = workRows.toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  // Insert the work block after the last user message (= the prompt that started the turn).
+  let insertAt = nonWork.length;
+  for (let i = nonWork.length - 1; i >= 0; i--) {
+    const entry = nonWork[i];
+    if (entry && entry.kind === "message" && entry.message.role === "user") {
+      insertAt = i + 1;
+      break;
+    }
+  }
+
+  return [...nonWork.slice(0, insertAt), ...sortedWork, ...nonWork.slice(insertAt)];
 }
 
 export function inferCheckpointTurnCountByTurnId(

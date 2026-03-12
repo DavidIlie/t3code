@@ -10,6 +10,7 @@ import {
   InfoIcon,
   LoaderCircleIcon,
   TriangleAlertIcon,
+  XIcon,
 } from "lucide-react";
 
 import { cn } from "~/lib/utils";
@@ -289,6 +290,14 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
                   >
                     {toast.actionProps.children}
                   </Toast.Action>
+                )}
+                {toast.type !== "loading" && (
+                  <Toast.Close
+                    className="shrink-0 rounded-md p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground"
+                    data-slot="toast-close"
+                  >
+                    <XIcon className="size-3.5" />
+                  </Toast.Close>
                 )}
               </Toast.Content>
             </Toast.Root>

@@ -453,6 +453,9 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     directories: {
       buildResources: "apps/desktop/resources",
     },
+    asarUnpack: [
+      "node_modules/@anthropic-ai/claude-agent-sdk/**",
+    ],
   };
   const publishConfig = resolveGitHubPublishConfig();
   if (publishConfig) {

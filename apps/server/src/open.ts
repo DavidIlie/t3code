@@ -6,7 +6,7 @@
  *
  * @module Open
  */
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
@@ -159,6 +159,26 @@ export function isCommandAvailable(
   return false;
 }
 
+export function macApplicationNameForEditor(editorId: EditorId): string | null {
+  switch (editorId) {
+    case "terminal":
+      return "Terminal";
+    case "iterm2":
+      return "iTerm";
+    default:
+      return null;
+  }
+}
+
+export function isMacApplicationAvailable(appName: string): boolean {
+  try {
+    execFileSync("osascript", ["-e", `id of application "${appName}"`], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function resolveAvailableEditors(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
@@ -166,9 +186,27 @@ export function resolveAvailableEditors(
   const available: EditorId[] = [];
 
   for (const editor of EDITORS) {
-    const command = editor.command ?? fileManagerCommandForPlatform(platform);
-    if (isCommandAvailable(command, { platform, env })) {
+    if (editor.command === null) continue;
+    if (isCommandAvailable(editor.command, { platform, env })) {
       available.push(editor.id);
+    }
+  }
+
+  // file-manager: always available via platform-specific command
+  const fileManagerCommand = fileManagerCommandForPlatform(platform);
+  if (isCommandAvailable(fileManagerCommand, { platform, env })) {
+    available.push("file-manager");
+  }
+
+  // terminal editors on macOS
+  if (platform === "darwin") {
+    for (const editor of EDITORS) {
+      if (editor.command !== null) continue; // already handled above or is a CLI editor
+      if (editor.id === "file-manager") continue; // file-manager handled separately
+      const appName = macApplicationNameForEditor(editor.id);
+      if (appName && isMacApplicationAvailable(appName)) {
+        available.push(editor.id);
+      }
     }
   }
 
@@ -214,6 +252,14 @@ export const resolveEditorLaunch = Effect.fnUntraced(function* (
     return shouldUseGotoFlag(editorDef.id, input.cwd)
       ? { command: editorDef.command, args: ["--goto", input.cwd] }
       : { command: editorDef.command, args: [input.cwd] };
+  }
+
+  const appName = macApplicationNameForEditor(editorDef.id);
+  if (appName) {
+    if (platform !== "darwin") {
+      return yield* new OpenError({ message: `${editorDef.label} is only available on macOS` });
+    }
+    return { command: "open", args: ["-a", appName, input.cwd] };
   }
 
   if (editorDef.id !== "file-manager") {

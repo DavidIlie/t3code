@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type ProviderKind } from "@t3tools/contracts";
-import { getModelOptions, normalizeModelSlug } from "@t3tools/shared/model";
-import { ZapIcon } from "lucide-react";
+import { getDefaultModel, getModelOptions, normalizeModelSlug } from "@t3tools/shared/model";
+import { TerminalIcon, ZapIcon } from "lucide-react";
 
 import {
   APP_SERVICE_TIER_OPTIONS,
@@ -11,6 +11,7 @@ import {
   shouldShowFastTierIcon,
   useAppSettings,
 } from "../appSettings";
+import { AVAILABLE_PROVIDER_OPTIONS } from "../components/ProviderModelPicker";
 import { isElectron } from "../env";
 import { useTheme } from "../hooks/useTheme";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
@@ -21,6 +22,7 @@ import { Input } from "../components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { SidebarInset } from "~/components/ui/sidebar";
+import McpStatusPanel from "../components/McpStatusPanel";
 
 const THEME_OPTIONS = [
   {
@@ -54,6 +56,13 @@ const MODEL_PROVIDER_SETTINGS: Array<{
     placeholder: "your-codex-model-slug",
     example: "gpt-6.7-codex-ultra-preview",
   },
+  {
+    provider: "claudeCode",
+    title: "Claude Code",
+    description: "Save additional Claude model slugs for the picker and `/model` command.",
+    placeholder: "your-claude-model-slug",
+    example: "claude-sonnet-5-0",
+  },
 ] as const;
 
 function getCustomModelsForProvider(
@@ -61,6 +70,10 @@ function getCustomModelsForProvider(
   provider: ProviderKind,
 ) {
   switch (provider) {
+    case "claudeCode":
+      return settings.customClaudeModels;
+    case "cursor":
+      return settings.customCursorModels;
     case "codex":
     default:
       return settings.customCodexModels;
@@ -72,6 +85,10 @@ function getDefaultCustomModelsForProvider(
   provider: ProviderKind,
 ) {
   switch (provider) {
+    case "claudeCode":
+      return defaults.customClaudeModels;
+    case "cursor":
+      return defaults.customCursorModels;
     case "codex":
     default:
       return defaults.customCodexModels;
@@ -80,10 +97,102 @@ function getDefaultCustomModelsForProvider(
 
 function patchCustomModels(provider: ProviderKind, models: string[]) {
   switch (provider) {
+    case "claudeCode":
+      return { customClaudeModels: models };
+    case "cursor":
+      return { customCursorModels: models };
     case "codex":
     default:
       return { customCodexModels: models };
   }
+}
+
+function TerminalSettingsSection({
+  settings,
+  updateSettings,
+  defaults,
+}: {
+  settings: ReturnType<typeof useAppSettings>["settings"];
+  updateSettings: ReturnType<typeof useAppSettings>["updateSettings"];
+  defaults: ReturnType<typeof useAppSettings>["defaults"];
+}) {
+  const [shells, setShells] = useState<Array<{ path: string; label: string }>>([]);
+  const [systemDefault, setSystemDefault] = useState("");
+  const fetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+    const api = ensureNativeApi();
+    void api.terminal.listShells().then((result) => {
+      setShells(result.shells);
+      setSystemDefault(result.defaultShell);
+    }).catch(() => {});
+  }, []);
+
+  const currentShell = settings.defaultShell || systemDefault || "";
+  const currentLabel = shells.find((s) => s.path === currentShell)?.label ?? (currentShell ? currentShell.split("/").pop() : "System default");
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <div className="mb-4">
+        <h2 className="text-sm font-medium text-foreground">Terminal</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Configure the default shell for new terminal sessions.
+        </p>
+      </div>
+
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-foreground">Default shell</span>
+        <Select
+          items={[
+            { label: "System default", value: "" },
+            ...shells.map((s) => ({ label: s.label, value: s.path })),
+          ]}
+          value={settings.defaultShell}
+          onValueChange={(value) => {
+            if (value === undefined) return;
+            updateSettings({ defaultShell: value ?? "" });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="System default" />
+          </SelectTrigger>
+          <SelectPopup alignItemWithTrigger={false}>
+            <SelectItem value="">
+              <div className="flex items-center gap-2">
+                <TerminalIcon className="size-3.5" />
+                System default
+              </div>
+            </SelectItem>
+            {shells.map((shell) => (
+              <SelectItem key={shell.path} value={shell.path}>
+                <div className="flex items-center gap-2">
+                  <TerminalIcon className="size-3.5" />
+                  {shell.label}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        <span className="text-xs text-muted-foreground">
+          Current: <span className="font-medium text-foreground">{currentLabel}</span>
+        </span>
+      </label>
+
+      {settings.defaultShell !== defaults.defaultShell ? (
+        <div className="mt-3 flex justify-end">
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => updateSettings({ defaultShell: defaults.defaultShell })}
+          >
+            Restore default
+          </Button>
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 function SettingsRouteView() {
@@ -96,6 +205,8 @@ function SettingsRouteView() {
     Record<ProviderKind, string>
   >({
     codex: "",
+    claudeCode: "",
+    cursor: "",
   });
   const [customModelErrorByProvider, setCustomModelErrorByProvider] = useState<
     Partial<Record<ProviderKind, string | null>>
@@ -195,7 +306,7 @@ function SettingsRouteView() {
             <header className="space-y-1">
               <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
               <p className="text-sm text-muted-foreground">
-                Configure app-level preferences for this device.
+                Configure app-level preferences for this device. Changes save automatically.
               </p>
             </header>
 
@@ -310,6 +421,64 @@ function SettingsRouteView() {
               </div>
 
               <div className="space-y-5">
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-foreground">Default provider</span>
+                  <Select
+                    items={AVAILABLE_PROVIDER_OPTIONS.map((option) => ({
+                      label: option.label,
+                      value: option.value,
+                    }))}
+                    value={settings.defaultProvider}
+                    onValueChange={(value) => {
+                      if (!value) return;
+                      updateSettings({ defaultProvider: value, defaultModel: "" });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectPopup alignItemWithTrigger={false}>
+                      {AVAILABLE_PROVIDER_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">
+                    The provider pre-selected when creating new threads.
+                  </span>
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-foreground">Default model</span>
+                  <Select
+                    items={getModelOptions(settings.defaultProvider).map((option) => ({
+                      label: option.name,
+                      value: option.slug,
+                    }))}
+                    value={settings.defaultModel || getDefaultModel(settings.defaultProvider)}
+                    onValueChange={(value) => {
+                      if (!value) return;
+                      updateSettings({ defaultModel: value ?? "" });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectPopup alignItemWithTrigger={false}>
+                      {getModelOptions(settings.defaultProvider).map((option) => (
+                        <SelectItem key={option.slug} value={option.slug}>
+                          {option.name}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">
+                    The model pre-selected when creating new threads.
+                  </span>
+                </label>
+
                 <label className="block space-y-1">
                   <span className="text-xs font-medium text-foreground">Default service tier</span>
                   <Select
@@ -519,6 +688,8 @@ function SettingsRouteView() {
               ) : null}
             </section>
 
+            <TerminalSettingsSection settings={settings} updateSettings={updateSettings} defaults={defaults} />
+
             <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Keybindings</h2>
@@ -596,6 +767,16 @@ function SettingsRouteView() {
                   </Button>
                 </div>
               ) : null}
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="mb-4">
+                <h2 className="text-sm font-medium text-foreground">MCP Servers</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  View the status of MCP servers connected across active sessions.
+                </p>
+              </div>
+              <McpStatusPanel />
             </section>
           </div>
         </div>

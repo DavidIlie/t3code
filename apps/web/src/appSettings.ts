@@ -28,9 +28,14 @@ const AppServiceTierSchema = Schema.Literals(["auto", "fast", "flex"]);
 const MODELS_WITH_FAST_SUPPORT = new Set(["gpt-5.4"]);
 const BUILT_IN_MODEL_SLUGS_BY_PROVIDER: Record<ProviderKind, ReadonlySet<string>> = {
   codex: new Set(getModelOptions("codex").map((option) => option.slug)),
+  claudeCode: new Set(getModelOptions("claudeCode").map((option) => option.slug)),
+  cursor: new Set(getModelOptions("cursor").map((option) => option.slug)),
 };
 
+const ProviderKindSchema = Schema.Literals(["codex", "claudeCode", "cursor"]);
+
 const AppSettingsSchema = Schema.Struct({
+  defaultProvider: ProviderKindSchema.pipe(Schema.withConstructorDefault(() => Option.some("codex"))),
   codexBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(
     Schema.withConstructorDefault(() => Option.some("")),
   ),
@@ -45,6 +50,21 @@ const AppSettingsSchema = Schema.Struct({
   customCodexModels: Schema.Array(Schema.String).pipe(
     Schema.withConstructorDefault(() => Option.some([])),
   ),
+  customClaudeModels: Schema.Array(Schema.String).pipe(
+    Schema.withConstructorDefault(() => Option.some([])),
+  ),
+  customCursorModels: Schema.Array(Schema.String).pipe(
+    Schema.withConstructorDefault(() => Option.some([])),
+  ),
+  defaultModel: Schema.String.pipe(Schema.withConstructorDefault(() => Option.some(""))),
+  defaultShell: Schema.String.pipe(Schema.withConstructorDefault(() => Option.some(""))),
+  pinnedProjectIds: Schema.Array(Schema.String).pipe(
+    Schema.withConstructorDefault(() => Option.some([])),
+  ),
+  projectIcons: Schema.Record(Schema.String, Schema.Struct({
+    type: Schema.Literals(["lucide", "emoji", "file", "favicon"]),
+    value: Schema.String,
+  })).pipe(Schema.withConstructorDefault(() => Option.some({}))),
 });
 export type AppSettings = typeof AppSettingsSchema.Type;
 export interface AppModelOption {
@@ -108,6 +128,8 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
   return {
     ...settings,
     customCodexModels: normalizeCustomModelSlugs(settings.customCodexModels, "codex"),
+    customClaudeModels: normalizeCustomModelSlugs(settings.customClaudeModels, "claudeCode"),
+    customCursorModels: normalizeCustomModelSlugs(settings.customCursorModels, "cursor"),
   };
 }
 

@@ -476,6 +476,22 @@ export const makeGitManager = Effect.gen(function* () {
 
   const runStackedAction: GitManagerShape["runStackedAction"] = Effect.fnUntraced(
     function* (input) {
+      // Push-only: skip commit/branch/PR steps entirely.
+      if (input.action === "push") {
+        const status = yield* gitCore.statusDetails(input.cwd);
+        if (!status.branch) {
+          return yield* gitManagerError("runStackedAction", "Cannot push from detached HEAD.");
+        }
+        const push = yield* gitCore.pushCurrentBranch(input.cwd, status.branch);
+        return {
+          action: input.action,
+          branch: { status: "skipped_not_requested" as const },
+          commit: { status: "skipped_no_changes" as const },
+          push,
+          pr: { status: "skipped_not_requested" as const },
+        };
+      }
+
       const wantsPush = input.action !== "commit";
       const wantsPr = input.action === "commit_push_pr";
 

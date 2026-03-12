@@ -100,6 +100,14 @@ export interface ProviderServiceShape {
   }) => Effect.Effect<void, ProviderServiceError>;
 
   /**
+   * List Claude Code session IDs that are already tracked by provider runtime bindings.
+   *
+   * Returns session IDs extracted from resume cursors of claudeCode provider entries.
+   * Used to avoid re-importing sessions that T3 Code itself created.
+   */
+  readonly listTrackedClaudeSessionIds: () => Effect.Effect<ReadonlyArray<string>>;
+
+  /**
    * Canonical provider runtime event stream.
    *
    * Fan-out is owned by ProviderService (not by a standalone event-bus service).

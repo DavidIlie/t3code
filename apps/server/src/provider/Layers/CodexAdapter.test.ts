@@ -22,6 +22,7 @@ import {
   type CodexAppServerSendTurnInput,
 } from "../../codexAppServerManager.ts";
 import { ServerConfig } from "../../config.ts";
+import { ProviderAdapterValidationError } from "../Errors.ts";
 import { CodexAdapter } from "../Services/CodexAdapter.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import { makeCodexAdapterLive } from "./CodexAdapter.ts";
@@ -156,6 +157,31 @@ const validationLayer = it.layer(
 );
 
 validationLayer("CodexAdapterLive validation", (it) => {
+  it.effect("rejects startSession when provider does not match adapter", () =>
+    Effect.gen(function* () {
+      validationManager.startSessionImpl.mockClear();
+      const adapter = yield* CodexAdapter;
+      const result = yield* adapter
+        .startSession({
+          provider: "claudeCode",
+          threadId: asThreadId("thread-1"),
+          runtimeMode: "full-access",
+        })
+        .pipe(Effect.result);
+
+      assert.equal(result._tag, "Failure");
+      assert.deepStrictEqual(
+        result.failure,
+        new ProviderAdapterValidationError({
+          provider: "codex",
+          operation: "startSession",
+          issue: "Expected provider 'codex' but received 'claudeCode'.",
+        }),
+      );
+      assert.equal(validationManager.startSessionImpl.mock.calls.length, 0);
+    }),
+  );
+
   it.effect("maps codex model options before starting a session", () =>
     Effect.gen(function* () {
       validationManager.startSessionImpl.mockClear();
@@ -514,6 +540,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       });
     }),
   );
+
 
   it.effect("maps windowsSandbox/setupCompleted to session state and warning on failure", () =>
     Effect.gen(function* () {

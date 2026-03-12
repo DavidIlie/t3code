@@ -1,6 +1,6 @@
 import { splitPromptIntoComposerSegments } from "./composer-editor-mentions";
 
-export type ComposerTriggerKind = "path" | "slash-command" | "slash-model";
+export type ComposerTriggerKind = "path" | "slash-command" | "slash-model" | "provider-slash-command";
 export type ComposerSlashCommand = "model" | "plan" | "default";
 
 export interface ComposerTrigger {
@@ -132,7 +132,13 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
           rangeEnd: cursor,
         };
       }
-      return null;
+      // Fall through to provider slash commands (skills)
+      return {
+        kind: "provider-slash-command",
+        query: commandQuery,
+        rangeStart: lineStart,
+        rangeEnd: cursor,
+      };
     }
 
     const modelMatch = /^\/model(?:\s+(.*))?$/.exec(linePrefix);

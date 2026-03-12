@@ -217,7 +217,11 @@ const make = Effect.gen(function* () {
 
     const desiredRuntimeMode = thread.runtimeMode;
     const currentProvider: ProviderKind | undefined =
-      thread.session?.providerName === "codex" ? thread.session.providerName : undefined;
+      thread.session?.providerName === "codex" ||
+      thread.session?.providerName === "claudeCode" ||
+      thread.session?.providerName === "cursor"
+        ? thread.session.providerName
+        : undefined;
     const preferredProvider: ProviderKind | undefined = options?.provider ?? currentProvider;
     const desiredModel = options?.model ?? thread.model;
     const effectiveCwd = resolveThreadWorkspaceCwd({
@@ -482,7 +486,6 @@ const make = Effect.gen(function* () {
       ...(event.payload.model !== undefined ? { model: event.payload.model } : {}),
       ...(event.payload.serviceTier !== undefined ? { serviceTier: event.payload.serviceTier } : {}),
       ...(event.payload.modelOptions !== undefined ? { modelOptions: event.payload.modelOptions } : {}),
-      ...(event.payload.providerOptions !== undefined ? { providerOptions: event.payload.providerOptions } : {}),
       interactionMode: event.payload.interactionMode,
       createdAt: event.payload.createdAt,
     });

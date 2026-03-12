@@ -613,6 +613,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   const checkpointDiffQuery = yield* CheckpointDiffQuery;
   const orchestrationReactor = yield* OrchestrationReactor;
   const { openInEditor } = yield* Open;
+  const providerService = yield* ProviderService;
 
   const subscriptionsScope = yield* Scope.make("sequential");
   yield* Effect.addFinalizer(() => Scope.close(subscriptionsScope, Exit.void));
@@ -622,6 +623,36 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       type: "push",
       channel: ORCHESTRATION_WS_CHANNELS.domainEvent,
       data: event,
+    }),
+  ).pipe(Effect.forkIn(subscriptionsScope));
+
+  // Broadcast provider session metadata (commands, MCP status, account info) via push channels
+  yield* Stream.runForEach(providerService.streamEvents, (event) =>
+    Effect.gen(function* () {
+      if (event.type === "session.configured") {
+        const config = event.payload.config as Record<string, unknown>;
+        if (Array.isArray(config.commands) && config.commands.length > 0) {
+          yield* broadcastPush({
+            type: "push",
+            channel: WS_CHANNELS.providerSessionCommands,
+            data: { threadId: event.threadId, commands: config.commands },
+          });
+        }
+      }
+      if (event.type === "mcp.status.updated") {
+        yield* broadcastPush({
+          type: "push",
+          channel: WS_CHANNELS.mcpStatusUpdated,
+          data: { threadId: event.threadId, status: event.payload.status },
+        });
+      }
+      if (event.type === "account.updated") {
+        yield* broadcastPush({
+          type: "push",
+          channel: WS_CHANNELS.providerAccountUpdated,
+          data: { threadId: event.threadId, account: event.payload.account },
+        });
+      }
     }),
   ).pipe(Effect.forkIn(subscriptionsScope));
 
@@ -701,6 +732,99 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     );
   }
 
+  // Ensure a Home project exists for general-purpose chat
+  let welcomeHomeProjectId: ProjectId | undefined;
+  yield* Effect.gen(function* () {
+    const snapshot = yield* projectionReadModelQuery.getSnapshot();
+    const homeDir = process.env.HOME || process.env.USERPROFILE || cwd;
+    const existingHomeProject = snapshot.projects.find(
+      (p) => p.title === "Home" && p.deletedAt === null,
+    );
+    if (!existingHomeProject) {
+      const homeProjectId = ProjectId.makeUnsafe(crypto.randomUUID());
+      yield* orchestrationEngine.dispatch({
+        type: "project.create",
+        commandId: CommandId.makeUnsafe(crypto.randomUUID()),
+        projectId: homeProjectId,
+        title: "Home",
+        workspaceRoot: homeDir,
+        createdAt: new Date().toISOString(),
+      });
+      welcomeHomeProjectId = homeProjectId;
+    } else {
+      welcomeHomeProjectId = existingHomeProject.id;
+    }
+  }).pipe(
+    Effect.mapError(
+      (cause) => new ServerLifecycleError({ operation: "autoBootstrapHomeProject", cause }),
+    ),
+  );
+
+  // Read ~/.claude/mcp.json for pre-session MCP server list
+  type WelcomeMcpServer = { name: string; type: string; status: string };
+  let welcomeMcpServers: WelcomeMcpServer[] | undefined;
+  yield* Effect.gen(function* () {
+    const homeDir = process.env.HOME || process.env.USERPROFILE || cwd;
+    const fs = yield* FileSystem.FileSystem;
+    const servers: WelcomeMcpServer[] = [];
+    const seen = new Set<string>();
+
+    // 1. Read ~/.claude/mcp.json
+    const mcpConfigPath = `${homeDir}/.claude/mcp.json`;
+    const configExists = yield* fs.exists(mcpConfigPath);
+    if (configExists) {
+      const raw = yield* fs.readFileString(mcpConfigPath);
+      const parsed = JSON.parse(raw) as { mcpServers?: Record<string, { type?: string }> };
+      if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
+        for (const [name, config] of Object.entries(parsed.mcpServers)) {
+          if (!seen.has(name)) {
+            seen.add(name);
+            servers.push({ name, type: config.type ?? "unknown", status: "configured" });
+          }
+        }
+      }
+    }
+
+    // 2. Scan installed plugins at ~/.claude/plugins/marketplaces/*/external_plugins/*/
+    const pluginsBase = path.join(homeDir, ".claude", "plugins", "marketplaces");
+    const pluginsBaseExists = yield* fs.exists(pluginsBase);
+    if (pluginsBaseExists) {
+      const marketplaces = yield* fs.readDirectory(pluginsBase);
+      for (const marketplace of marketplaces) {
+        const extDir = path.join(pluginsBase, marketplace, "external_plugins");
+        const extExists = yield* fs.exists(extDir);
+        if (!extExists) continue;
+        const plugins = yield* fs.readDirectory(extDir);
+        for (const plugin of plugins) {
+          if (seen.has(plugin)) continue;
+          const pluginMcp = path.join(extDir, plugin, ".mcp.json");
+          const pluginMcpExists = yield* fs.exists(pluginMcp);
+          if (!pluginMcpExists) continue;
+          const raw = yield* fs.readFileString(pluginMcp);
+          try {
+            const parsed = JSON.parse(raw) as Record<string, { type?: string; command?: string }>;
+            for (const [name, config] of Object.entries(parsed)) {
+              if (!seen.has(name)) {
+                seen.add(name);
+                servers.push({
+                  name,
+                  type: config.type ?? (config.command ? "stdio" : "unknown"),
+                  status: "configured",
+                });
+              }
+            }
+          } catch {
+            // skip malformed plugin configs
+          }
+        }
+      }
+    }
+
+    if (servers.length > 0) {
+      welcomeMcpServers = servers;
+    }
+  }).pipe(Effect.catch(() => Effect.void));
+
   const runtimeServices = yield* Effect.services<
     ServerRuntimeServices | ServerConfig | FileSystem.FileSystem | Path.Path
   >();
@@ -768,6 +892,398 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
               message: `Failed to search workspace entries: ${String(cause)}`,
             }),
         });
+      }
+
+      case WS_METHODS.projectsImportHistory: {
+        const body = stripRequestTag(request.body);
+        const allSessions = yield* Effect.tryPromise({
+          try: async () => {
+            const { listSessions } = await import("@anthropic-ai/claude-agent-sdk");
+            return listSessions({ dir: body.workspaceRoot, limit: 100 });
+          },
+          catch: (cause) =>
+            new RouteRequestError({
+              message: `Failed to import Claude Code history: ${String(cause)}`,
+            }),
+        });
+
+        // Filter out sessions already tracked by T3 Code's Claude Code provider
+        // to prevent duplicate thread creation during import sync.
+        // Check both persisted bindings and active in-memory sessions.
+        const trackedIds = yield* providerService.listTrackedClaudeSessionIds();
+        const trackedSet = new Set(trackedIds);
+
+        const activeSessions = yield* providerService.listSessions().pipe(
+          Effect.catch(() => Effect.succeed([] as ReadonlyArray<{ resumeCursor?: unknown }>)),
+        );
+        for (const session of activeSessions) {
+          const cursor = session.resumeCursor as { resume?: string } | null | undefined;
+          if (cursor && typeof cursor.resume === "string") {
+            trackedSet.add(cursor.resume);
+          }
+        }
+
+        return {
+          sessions: allSessions
+            .filter((s) => !trackedSet.has(s.sessionId))
+            .map((s) => ({
+              sessionId: s.sessionId,
+              summary: s.summary,
+              lastModified: s.lastModified,
+              fileSize: s.fileSize,
+            })),
+        };
+      }
+
+      case WS_METHODS.projectsGetSessionMessages: {
+        const body = stripRequestTag(request.body);
+        return yield* Effect.tryPromise({
+          try: async () => {
+            const { getSessionMessages } = await import("@anthropic-ai/claude-agent-sdk");
+            const messages = await getSessionMessages(body.sessionId, {
+              dir: body.workspaceRoot,
+              ...(body.limit != null ? { limit: body.limit } : {}),
+            });
+
+            type ContentBlock = Record<string, unknown>;
+            interface ParsedBlock {
+              type: string;
+              [key: string]: unknown;
+            }
+
+            // First pass: extract all content blocks per message
+            const parsed = messages.map((msg) => {
+              const message = msg.message as
+                | { content?: unknown | unknown[] }
+                | undefined;
+              const contentArr = Array.isArray(message?.content)
+                ? (message!.content as ContentBlock[])
+                : typeof message?.content === "string"
+                  ? [{ type: "text", text: message.content }]
+                  : [];
+
+              const blocks: ParsedBlock[] = [];
+              for (const b of contentArr) {
+                switch (b.type) {
+                  case "text":
+                    if (typeof b.text === "string" && b.text.trim())
+                      blocks.push({ type: "text", text: b.text });
+                    break;
+                  case "thinking":
+                    if (typeof b.thinking === "string" && b.thinking.trim())
+                      blocks.push({ type: "thinking", thinking: b.thinking });
+                    break;
+                  case "tool_use":
+                    blocks.push({
+                      type: "tool_use",
+                      id: String(b.id),
+                      name: String(b.name),
+                      input: (b.input as Record<string, unknown>) ?? {},
+                    });
+                    break;
+                  case "tool_result":
+                    blocks.push({
+                      type: "tool_result",
+                      toolUseId: String(b.tool_use_id),
+                      content: b.content,
+                      isError: Boolean(b.is_error),
+                    });
+                    break;
+                }
+              }
+
+              return {
+                type: msg.type as "user" | "assistant",
+                uuid: msg.uuid,
+                sessionId: msg.session_id,
+                blocks,
+              };
+            });
+
+            // Second pass: pair tool_result blocks with their tool_use blocks
+            const resultMap = new Map<
+              string,
+              { content: unknown; isError: boolean }
+            >();
+            for (const msg of parsed) {
+              for (const block of msg.blocks) {
+                if (block.type === "tool_result") {
+                  resultMap.set(block.toolUseId as string, {
+                    content: block.content,
+                    isError: block.isError as boolean,
+                  });
+                }
+              }
+            }
+            for (const msg of parsed) {
+              for (const block of msg.blocks) {
+                if (block.type === "tool_use") {
+                  const result = resultMap.get(block.id as string);
+                  if (result) block.result = result;
+                }
+              }
+            }
+
+            // Filter out user messages that only contain tool_result blocks,
+            // and strip tool_result blocks from remaining messages
+            const result = [];
+            for (const msg of parsed) {
+              if (msg.type === "user" && !msg.blocks.some((b) => b.type !== "tool_result")) {
+                continue;
+              }
+              msg.blocks = msg.blocks.filter((b) => b.type !== "tool_result");
+              result.push(msg);
+            }
+            return result;
+          },
+          catch: (cause) =>
+            new RouteRequestError({
+              message: `Failed to get session messages: ${String(cause)}`,
+            }),
+        });
+      }
+
+      case WS_METHODS.projectsGetMcpServers: {
+        const body = stripRequestTag(request.body);
+        return yield* Effect.gen(function* () {
+          interface McpServerInfo {
+            name: string;
+            type: string;
+            status: string;
+            source: string;
+            command?: string;
+            args?: string[];
+            url?: string;
+          }
+          const servers: McpServerInfo[] = [];
+          const seen = new Set<string>();
+          const homeDir = process.env.HOME || process.env.USERPROFILE || cwd;
+
+          function addFromMcpServersRecord(
+            record: Record<string, { type?: string; command?: string; args?: string[]; url?: string }>,
+            source: string,
+          ) {
+            for (const [name, config] of Object.entries(record)) {
+              if (seen.has(name)) continue;
+              seen.add(name);
+              const inferredType = config.type ?? (config.command ? "stdio" : config.url ? "sse" : "unknown");
+              servers.push({
+                name,
+                type: inferredType,
+                status: "configured",
+                source,
+                ...(config.command ? { command: config.command } : {}),
+                ...(config.args ? { args: config.args } : {}),
+                ...(config.url ? { url: config.url } : {}),
+              });
+            }
+          }
+
+          // 1. Project-local configs
+          const candidates = [
+            path.join(body.workspaceRoot, ".mcp.json"),
+            path.join(body.workspaceRoot, ".claude", "mcp.json"),
+          ];
+          for (const configPath of candidates) {
+            const exists = yield* fileSystem.exists(configPath);
+            if (!exists) continue;
+            const raw = yield* fileSystem.readFileString(configPath);
+            const parsed = JSON.parse(raw) as {
+              mcpServers?: Record<string, { type?: string; command?: string; args?: string[]; url?: string }>;
+            };
+            if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
+              addFromMcpServersRecord(parsed.mcpServers, "project");
+            }
+          }
+
+          // 2. Global ~/.claude/mcp.json
+          const globalMcpPath = path.join(homeDir, ".claude", "mcp.json");
+          const globalMcpExists = yield* fileSystem.exists(globalMcpPath);
+          if (globalMcpExists) {
+            const raw = yield* fileSystem.readFileString(globalMcpPath);
+            const parsed = JSON.parse(raw) as {
+              mcpServers?: Record<string, { type?: string; command?: string; args?: string[]; url?: string }>;
+            };
+            if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
+              addFromMcpServersRecord(parsed.mcpServers, "global");
+            }
+          }
+
+          // 3. Cursor MCP config (~/.cursor/mcp.json)
+          const cursorMcpPath = path.join(homeDir, ".cursor", "mcp.json");
+          const cursorMcpExists = yield* fileSystem.exists(cursorMcpPath);
+          if (cursorMcpExists) {
+            const raw = yield* fileSystem.readFileString(cursorMcpPath);
+            try {
+              const parsed = JSON.parse(raw) as {
+                mcpServers?: Record<string, { type?: string; command?: string; args?: string[]; url?: string }>;
+              } & Record<string, { type?: string; command?: string; args?: string[]; url?: string }>;
+              // Cursor uses { mcpServers: {...} } OR top-level { name: config }
+              if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
+                addFromMcpServersRecord(parsed.mcpServers, "cursor");
+              } else {
+                // Top-level keys are server names
+                const topLevel: Record<string, { type?: string; command?: string; args?: string[]; url?: string }> = {};
+                for (const [key, val] of Object.entries(parsed)) {
+                  if (key !== "mcpServers" && val && typeof val === "object" && ("command" in val || "url" in val)) {
+                    topLevel[key] = val;
+                  }
+                }
+                if (Object.keys(topLevel).length > 0) {
+                  addFromMcpServersRecord(topLevel, "cursor");
+                }
+              }
+            } catch {
+              // skip malformed cursor config
+            }
+          }
+
+          // 4. Scan installed Claude Code plugins
+          const pluginsBase = path.join(homeDir, ".claude", "plugins", "marketplaces");
+          const pluginsBaseExists = yield* fileSystem.exists(pluginsBase);
+          if (pluginsBaseExists) {
+            const marketplaces = yield* fileSystem.readDirectory(pluginsBase);
+            for (const marketplace of marketplaces) {
+              const extDir = path.join(pluginsBase, marketplace, "external_plugins");
+              const extExists = yield* fileSystem.exists(extDir);
+              if (!extExists) continue;
+              const plugins = yield* fileSystem.readDirectory(extDir);
+              for (const plugin of plugins) {
+                if (seen.has(plugin)) continue;
+                const pluginMcp = path.join(extDir, plugin, ".mcp.json");
+                const pluginMcpExists = yield* fileSystem.exists(pluginMcp);
+                if (!pluginMcpExists) continue;
+                const raw = yield* fileSystem.readFileString(pluginMcp);
+                try {
+                  const parsed = JSON.parse(raw) as Record<string, { type?: string; command?: string; args?: string[]; url?: string }>;
+                  for (const [name, config] of Object.entries(parsed)) {
+                    if (seen.has(name)) continue;
+                    seen.add(name);
+                    const inferredType = config.type ?? (config.command ? "stdio" : "unknown");
+                    servers.push({
+                      name,
+                      type: inferredType,
+                      status: "configured",
+                      source: "plugin",
+                      ...(config.command ? { command: config.command } : {}),
+                      ...(config.args ? { args: config.args } : {}),
+                      ...(config.url ? { url: config.url } : {}),
+                    });
+                  }
+                } catch {
+                  // skip malformed plugin configs
+                }
+              }
+            }
+          }
+
+          return { servers };
+        }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new RouteRequestError({
+                message: `Failed to read project MCP config: ${String(cause)}`,
+              }),
+          ),
+        );
+      }
+
+      case WS_METHODS.projectsAddMcpServer: {
+        const body = stripRequestTag(request.body);
+        return yield* Effect.gen(function* () {
+          const configPath =
+            body.scope === "global"
+              ? path.join(process.env.HOME || process.env.USERPROFILE || cwd, ".claude", "mcp.json")
+              : path.join(body.workspaceRoot ?? cwd, ".mcp.json");
+
+          let existing: Record<string, unknown> = {};
+          const exists = yield* fileSystem.exists(configPath);
+          if (exists) {
+            const raw = yield* fileSystem.readFileString(configPath);
+            try {
+              existing = JSON.parse(raw) as Record<string, unknown>;
+            } catch {
+              existing = {};
+            }
+          }
+
+          const mcpServers =
+            typeof existing.mcpServers === "object" && existing.mcpServers !== null
+              ? { ...(existing.mcpServers as Record<string, unknown>) }
+              : {};
+
+          const serverConfig: Record<string, unknown> = {};
+          if (body.type === "stdio") {
+            serverConfig.command = body.command ?? "";
+            if (body.args && body.args.length > 0) {
+              serverConfig.args = body.args;
+            }
+          } else {
+            serverConfig.type = body.type;
+            serverConfig.url = body.url ?? "";
+          }
+          mcpServers[body.name] = serverConfig;
+
+          const dir = path.dirname(configPath);
+          yield* fileSystem
+            .makeDirectory(dir, { recursive: true })
+            .pipe(Effect.catch(() => Effect.void));
+          yield* fileSystem.writeFileString(
+            configPath,
+            JSON.stringify({ ...existing, mcpServers }, null, 2) + "\n",
+          );
+          return { ok: true };
+        }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new RouteRequestError({
+                message: `Failed to add MCP server: ${String(cause)}`,
+              }),
+          ),
+        );
+      }
+
+      case WS_METHODS.projectsRemoveMcpServer: {
+        const body = stripRequestTag(request.body);
+        return yield* Effect.gen(function* () {
+          const configPath =
+            body.scope === "global"
+              ? path.join(process.env.HOME || process.env.USERPROFILE || cwd, ".claude", "mcp.json")
+              : path.join(body.workspaceRoot ?? cwd, ".mcp.json");
+
+          const exists = yield* fileSystem.exists(configPath);
+          if (!exists) return { ok: true };
+
+          const raw = yield* fileSystem.readFileString(configPath);
+          let existing: Record<string, unknown> = {};
+          try {
+            existing = JSON.parse(raw) as Record<string, unknown>;
+          } catch {
+            return { ok: true };
+          }
+
+          if (
+            typeof existing.mcpServers === "object" &&
+            existing.mcpServers !== null
+          ) {
+            const mcpServers = { ...(existing.mcpServers as Record<string, unknown>) };
+            delete mcpServers[body.name];
+            existing = { ...existing, mcpServers };
+          }
+
+          yield* fileSystem.writeFileString(
+            configPath,
+            JSON.stringify(existing, null, 2) + "\n",
+          );
+          return { ok: true };
+        }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new RouteRequestError({
+                message: `Failed to remove MCP server: ${String(cause)}`,
+              }),
+          ),
+        );
       }
 
       case WS_METHODS.projectsWriteFile: {
@@ -876,6 +1392,47 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return yield* terminalManager.close(body);
       }
 
+      case WS_METHODS.terminalListShells: {
+        const shells: Array<{ path: string; label: string }> = [];
+        const seen = new Set<string>();
+        const addShell = (shellPath: string, label: string) => {
+          if (seen.has(shellPath)) return;
+          seen.add(shellPath);
+          shells.push({ path: shellPath, label });
+        };
+
+        if (process.platform === "win32") {
+          if (process.env.ComSpec) addShell(process.env.ComSpec, "Command Prompt");
+          addShell("powershell.exe", "PowerShell");
+          addShell("cmd.exe", "Command Prompt");
+        } else {
+          // Read /etc/shells for available shells
+          try {
+            const etcShells = yield* fileSystem.readFileString("/etc/shells");
+            for (const line of etcShells.split("\n")) {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed.startsWith("#")) continue;
+              const name = path.basename(trimmed);
+              const label = name.charAt(0).toUpperCase() + name.slice(1);
+              addShell(trimmed, label);
+            }
+          } catch {
+            // Fallback if /etc/shells doesn't exist
+            addShell("/bin/zsh", "Zsh");
+            addShell("/bin/bash", "Bash");
+            addShell("/bin/sh", "Sh");
+          }
+
+          // Ensure system default is included
+          if (process.env.SHELL && !seen.has(process.env.SHELL)) {
+            const name = path.basename(process.env.SHELL);
+            addShell(process.env.SHELL, name.charAt(0).toUpperCase() + name.slice(1));
+          }
+        }
+
+        return { shells, defaultShell: process.env.SHELL ?? (process.platform === "win32" ? "cmd.exe" : "/bin/bash") };
+      }
+
       case WS_METHODS.serverGetConfig:
         const keybindingsConfig = yield* keybindingsManager.loadConfigState;
         return {
@@ -981,6 +1538,8 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         projectName,
         ...(welcomeBootstrapProjectId ? { bootstrapProjectId: welcomeBootstrapProjectId } : {}),
         ...(welcomeBootstrapThreadId ? { bootstrapThreadId: welcomeBootstrapThreadId } : {}),
+        ...(welcomeHomeProjectId ? { homeProjectId: welcomeHomeProjectId } : {}),
+        ...(welcomeMcpServers ? { mcpServers: welcomeMcpServers } : {}),
       },
     };
     logOutgoingPush(welcome, 1);

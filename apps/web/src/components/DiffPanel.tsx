@@ -3,7 +3,7 @@ import { FileDiff, type FileDiffMetadata, Virtualizer } from "@pierre/diffs/reac
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { ThreadId, type TurnId } from "@t3tools/contracts";
-import { ChevronLeftIcon, ChevronRightIcon, Columns2Icon, Rows3Icon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, Columns2Icon, Rows3Icon, XIcon } from "lucide-react";
 import { type WheelEvent as ReactWheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { gitBranchesQueryOptions } from "~/lib/gitReactQuery";
 import { checkpointDiffQueryOptions } from "~/lib/providerReactQuery";
@@ -506,6 +506,22 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
           <Columns2Icon className="size-3" />
         </Toggle>
       </ToggleGroup>
+      <button
+        type="button"
+        className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
+        aria-label="Close diff panel"
+        onClick={() => {
+          if (routeThreadId) {
+            void navigate({
+              to: "/$threadId",
+              params: { threadId: routeThreadId },
+              search: (previous) => stripDiffSearchParams(previous),
+            });
+          }
+        }}
+      >
+        <XIcon className="size-3.5" />
+      </button>
     </>
   );
   const headerRowClassName = cn(

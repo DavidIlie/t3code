@@ -141,6 +141,9 @@ interface ComposerDraftStoreState {
   ) => void;
   clearComposerContent: (threadId: ThreadId) => void;
   clearThreadDraft: (threadId: ThreadId) => void;
+  pendingAutoSubmitThreadIds: Set<ThreadId>;
+  markAutoSubmit: (threadId: ThreadId) => void;
+  consumeAutoSubmit: (threadId: ThreadId) => boolean;
 }
 
 const EMPTY_PERSISTED_DRAFT_STORE_STATE: PersistedComposerDraftStoreState = {
@@ -208,7 +211,7 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
 }
 
 function normalizeProviderKind(value: unknown): ProviderKind | null {
-  return value === "codex" ? value : null;
+  return value === "codex" || value === "claudeCode" || value === "cursor" ? value : null;
 }
 
 function revokeObjectPreviewUrl(previewUrl: string): void {
@@ -1164,6 +1167,25 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
             projectDraftThreadIdByProjectId: nextProjectDraftThreadIdByProjectId,
           };
         });
+      },
+      pendingAutoSubmitThreadIds: new Set<ThreadId>(),
+      markAutoSubmit: (threadId) => {
+        set((state) => {
+          const next = new Set(state.pendingAutoSubmitThreadIds);
+          next.add(threadId);
+          return { pendingAutoSubmitThreadIds: next };
+        });
+      },
+      consumeAutoSubmit: (threadId) => {
+        const has = get().pendingAutoSubmitThreadIds.has(threadId);
+        if (has) {
+          set((state) => {
+            const next = new Set(state.pendingAutoSubmitThreadIds);
+            next.delete(threadId);
+            return { pendingAutoSubmitThreadIds: next };
+          });
+        }
+        return has;
       },
     }),
     {

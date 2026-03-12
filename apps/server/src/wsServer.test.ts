@@ -500,7 +500,7 @@ describe("WebSocket Server", () => {
     const message = (await waitForMessage(ws)) as WsPush;
     expect(message.type).toBe("push");
     expect(message.channel).toBe(WS_CHANNELS.serverWelcome);
-    expect(message.data).toEqual({
+    expect(message.data).toMatchObject({
       cwd: "/test/project",
       projectName: "project",
     });
@@ -1172,6 +1172,7 @@ describe("WebSocket Server", () => {
       listSessions: () => Effect.succeed([]),
       getCapabilities: () => Effect.succeed({ sessionModelSwitch: "in-session" }),
       rollbackConversation: () => unsupported(),
+      listTrackedClaudeSessionIds: () => Effect.succeed([]),
       streamEvents: Stream.fromPubSub(runtimeEventPubSub),
     };
     const providerLayer = Layer.succeed(ProviderService, providerService);

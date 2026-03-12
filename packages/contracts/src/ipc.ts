@@ -15,6 +15,12 @@ import type {
   GitStatusResult,
 } from "./git";
 import type {
+  ProjectAddMcpServerInput,
+  ProjectGetMcpServersInput,
+  ProjectGetSessionMessagesInput,
+  ProjectImportHistoryInput,
+  ProjectImportHistoryResult,
+  ProjectRemoveMcpServerInput,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
   ProjectWriteFileInput,
@@ -116,11 +122,22 @@ export interface NativeApi {
     clear: (input: TerminalClearInput) => Promise<void>;
     restart: (input: TerminalOpenInput) => Promise<TerminalSessionSnapshot>;
     close: (input: TerminalCloseInput) => Promise<void>;
+    listShells: () => Promise<{
+      shells: Array<{ path: string; label: string }>;
+      defaultShell: string;
+    }>;
     onEvent: (callback: (event: TerminalEvent) => void) => () => void;
   };
   projects: {
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
+    importHistory: (input: ProjectImportHistoryInput) => Promise<ProjectImportHistoryResult>;
+    getSessionMessages: (input: ProjectGetSessionMessagesInput) => Promise<unknown>;
+    getMcpServers: (input: ProjectGetMcpServersInput) => Promise<{
+      servers: Array<{ name: string; type: string; status: string }>;
+    }>;
+    addMcpServer: (input: ProjectAddMcpServerInput) => Promise<{ ok: boolean }>;
+    removeMcpServer: (input: ProjectRemoveMcpServerInput) => Promise<{ ok: boolean }>;
   };
   shell: {
     openInEditor: (cwd: string, editor: EditorId) => Promise<void>;

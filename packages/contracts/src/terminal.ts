@@ -34,12 +34,15 @@ const TerminalSessionInput = Schema.Struct({
 });
 export type TerminalSessionInput = Schema.Codec.Encoded<typeof TerminalSessionInput>;
 
+const TerminalShellSchema = Schema.String.check(Schema.isNonEmpty()).check(Schema.isMaxLength(512));
+
 export const TerminalOpenInput = Schema.Struct({
   ...TerminalSessionInput.fields,
   cwd: TrimmedNonEmptyStringSchema,
   cols: Schema.optional(TerminalColsSchema),
   rows: Schema.optional(TerminalRowsSchema),
   env: Schema.optional(TerminalEnvSchema),
+  shell: Schema.optional(TerminalShellSchema),
 });
 export type TerminalOpenInput = Schema.Codec.Encoded<typeof TerminalOpenInput>;
 
@@ -65,6 +68,7 @@ export const TerminalRestartInput = Schema.Struct({
   cols: TerminalColsSchema,
   rows: TerminalRowsSchema,
   env: Schema.optional(TerminalEnvSchema),
+  shell: Schema.optional(TerminalShellSchema),
 });
 
 export const TerminalCloseInput = Schema.Struct({

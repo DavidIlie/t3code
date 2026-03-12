@@ -3,12 +3,15 @@ import {
   ChevronRightIcon,
   FolderIcon,
   GitPullRequestIcon,
+  HomeIcon,
   PlusIcon,
   RocketIcon,
+  SearchIcon,
   SettingsIcon,
   SquarePenIcon,
   TerminalIcon,
   TriangleAlertIcon,
+  XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -30,12 +33,19 @@ import { useStore } from "../store";
 import { isChatNewLocalShortcut, isChatNewShortcut, shortcutLabelForCommand } from "../keybindings";
 import { type Thread } from "../types";
 import { derivePendingApprovals } from "../session-logic";
-import { gitRemoveWorktreeMutationOptions, gitStatusQueryOptions } from "../lib/gitReactQuery";
+import {
+  gitRemoveWorktreeMutationOptions,
+  gitStatusQueryOptions,
+} from "../lib/gitReactQuery";
+import { gitPushWithToast } from "../lib/gitPushWithToast";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { readNativeApi } from "../nativeApi";
 import { type DraftThreadEnvMode, useComposerDraftStore } from "../composerDraftStore";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { toastManager } from "./ui/toast";
+import { Dialog, DialogPopup, DialogHeader, DialogTitle, DialogDescription, DialogPanel } from "./ui/dialog";
+import ProjectSettingsDialog, { getProjectIconComponent } from "./ProjectSettingsDialog";
+import AccountPill from "./AccountPill";
 import {
   getArm64IntelBuildWarningDescription,
   getDesktopUpdateActionError,
@@ -245,20 +255,48 @@ function getServerHttpOrigin(): string {
 
 const serverHttpOrigin = getServerHttpOrigin();
 
-function ProjectFavicon({ cwd }: { cwd: string }) {
+function ProjectFavicon({
+  cwd,
+  projectId,
+  size = "sm",
+}: {
+  cwd: string;
+  projectId?: string;
+  size?: "sm" | "md";
+}) {
+  const { settings } = useAppSettings();
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+  const sizeClass = size === "md" ? "size-5" : "size-3.5";
+
+  // Check for custom icon
+  const customIcon = projectId ? settings.projectIcons[projectId] : undefined;
+
+  if (customIcon?.type === "lucide") {
+    const LucideIcon = getProjectIconComponent(customIcon.value);
+    if (LucideIcon) {
+      return <LucideIcon className={`${sizeClass} shrink-0 text-primary`} />;
+    }
+  }
+
+  if (customIcon?.type === "emoji") {
+    return (
+      <span className={`${size === "md" ? "text-base" : "text-sm"} shrink-0 leading-none`}>
+        {customIcon.value}
+      </span>
+    );
+  }
 
   const src = `${serverHttpOrigin}/api/project-favicon?cwd=${encodeURIComponent(cwd)}`;
 
   if (status === "error") {
-    return <FolderIcon className="size-3.5 shrink-0 text-muted-foreground/50" />;
+    return <FolderIcon className={`${sizeClass} shrink-0 text-muted-foreground/50`} />;
   }
 
   return (
     <img
       src={src}
       alt=""
-      className={`size-3.5 shrink-0 rounded-sm object-contain ${status === "loading" ? "hidden" : ""}`}
+      className={`${sizeClass} shrink-0 rounded-sm object-contain ${status === "loading" ? "hidden" : ""}`}
       onLoad={() => setStatus("loaded")}
       onError={() => setStatus("error")}
     />
@@ -270,6 +308,7 @@ export default function Sidebar() {
   const threads = useStore((store) => store.threads);
   const markThreadUnread = useStore((store) => store.markThreadUnread);
   const toggleProject = useStore((store) => store.toggleProject);
+  const setProjectExpanded = useStore((store) => store.setProjectExpanded);
   const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearThreadDraft);
   const getDraftThreadByProjectId = useComposerDraftStore(
     (store) => store.getDraftThreadByProjectId,
@@ -287,10 +326,15 @@ export default function Sidebar() {
   );
   const navigate = useNavigate();
   const isOnSettings = useLocation({ select: (loc) => loc.pathname === "/settings" });
-  const { settings: appSettings } = useAppSettings();
+  const isOnHome = useLocation({ select: (loc) => loc.pathname === "/" });
+  const { settings: appSettings, updateSettings } = useAppSettings();
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
+  });
+  const routeProjectId = useParams({
+    strict: false,
+    select: (params) => ("projectId" in params ? (params.projectId as string) : null),
   });
   const { data: keybindings = EMPTY_KEYBINDINGS } = useQuery({
     ...serverConfigQueryOptions(),
@@ -298,12 +342,13 @@ export default function Sidebar() {
   });
   const queryClient = useQueryClient();
   const removeWorktreeMutation = useMutation(gitRemoveWorktreeMutationOptions({ queryClient }));
-  const [addingProject, setAddingProject] = useState(false);
   const [newCwd, setNewCwd] = useState("");
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [isAddingProject, setIsAddingProject] = useState(false);
   const [addProjectError, setAddProjectError] = useState<string | null>(null);
   const addProjectInputRef = useRef<HTMLInputElement | null>(null);
+  const [settingsDialogProjectId, setSettingsDialogProjectId] = useState<ProjectId | null>(null);
+  const [showAddProjectDialog, setShowAddProjectDialog] = useState(false);
   const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
@@ -312,6 +357,37 @@ export default function Sidebar() {
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const preSearchExpandedRef = useRef<Map<string, boolean> | null>(null);
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const isSearching = normalizedSearchQuery.length > 0;
+
+  useEffect(() => {
+    if (isSearching) {
+      if (!preSearchExpandedRef.current) {
+        preSearchExpandedRef.current = new Map(
+          projects.map((p) => [p.id, p.expanded]),
+        );
+      }
+      // Auto-expand all projects during search
+      for (const project of projects) {
+        if (!project.expanded) {
+          setProjectExpanded(project.id, true);
+        }
+      }
+    } else if (preSearchExpandedRef.current) {
+      // Restore expansion state
+      for (const project of projects) {
+        const wasExpanded = preSearchExpandedRef.current.get(project.id) ?? false;
+        if (project.expanded !== wasExpanded) {
+          setProjectExpanded(project.id, wasExpanded);
+        }
+      }
+      preSearchExpandedRef.current = null;
+    }
+  }, [isSearching, projects, setProjectExpanded]);
+
   const pendingApprovalByThreadId = useMemo(() => {
     const map = new Map<ThreadId, boolean>();
     for (const thread of threads) {
@@ -498,7 +574,7 @@ export default function Sidebar() {
         setIsAddingProject(false);
         setNewCwd("");
         setAddProjectError(null);
-        setAddingProject(false);
+        setShowAddProjectDialog(false);
       };
 
       const existing = projects.find((project) => project.cwd === cwd);
@@ -522,6 +598,40 @@ export default function Sidebar() {
           createdAt,
         });
         await handleNewThread(projectId).catch(() => undefined);
+
+        // Import Claude Code session history
+        try {
+          const result = await api.projects.importHistory({ workspaceRoot: cwd });
+          let importedCount = 0;
+          for (const session of result.sessions) {
+            try {
+              await api.orchestration.dispatchCommand({
+                type: "thread.create",
+                commandId: newCommandId(),
+                threadId: ThreadId.makeUnsafe(`claude-${session.sessionId}`),
+                projectId,
+                title: session.summary || "Imported session",
+                model: DEFAULT_MODEL_BY_PROVIDER.codex,
+                runtimeMode: DEFAULT_RUNTIME_MODE,
+                interactionMode: "default",
+                branch: null,
+                worktreePath: null,
+                createdAt: new Date(session.lastModified).toISOString(),
+              });
+              importedCount++;
+            } catch {
+              // Ignore duplicate errors from requireThreadAbsent
+            }
+          }
+          if (importedCount > 0) {
+            toastManager.add({
+              type: "info",
+              title: `Imported ${importedCount} sessions from Claude Code`,
+            });
+          }
+        } catch {
+          // Silently ignore import failures — not critical
+        }
       } catch (error) {
         setIsAddingProject(false);
         setAddProjectError(
@@ -759,18 +869,159 @@ export default function Sidebar() {
     ],
   );
 
+  // Sync Claude Code sessions: on boot, on window re-focus after 5min, and via manual trigger
+  const lastSyncRef = useRef(0);
+  const syncClaudeCodeSessions = useCallback(
+    async (targetProjects?: typeof projects) => {
+      const api = readNativeApi();
+      if (!api) return;
+      const projectsToSync = targetProjects ?? projects;
+      let totalImported = 0;
+      for (const project of projectsToSync) {
+        try {
+          const result = await api.projects.importHistory({ workspaceRoot: project.cwd });
+          for (const session of result.sessions) {
+            const threadId = ThreadId.makeUnsafe(`claude-${session.sessionId}`);
+            if (threads.some((t) => t.id === threadId)) continue;
+            try {
+              await api.orchestration.dispatchCommand({
+                type: "thread.create",
+                commandId: newCommandId(),
+                threadId,
+                projectId: project.id,
+                title: session.summary || "Imported session",
+                model: DEFAULT_MODEL_BY_PROVIDER.codex,
+                runtimeMode: DEFAULT_RUNTIME_MODE,
+                interactionMode: "default",
+                branch: null,
+                worktreePath: null,
+                createdAt: new Date(session.lastModified).toISOString(),
+              });
+              totalImported++;
+            } catch {
+              // Ignore duplicate errors
+            }
+          }
+        } catch {
+          // Silently ignore
+        }
+      }
+      lastSyncRef.current = Date.now();
+      return totalImported;
+    },
+    [projects, threads],
+  );
+
+  // Keep a stable ref so the boot timer and focus handler don't re-fire
+  // every time `threads` or `projects` change (which would re-create
+  // syncClaudeCodeSessions and reset the timer during thread creation).
+  const syncRef = useRef(syncClaudeCodeSessions);
+  syncRef.current = syncClaudeCodeSessions;
+
+  useEffect(() => {
+    // Sync on boot after a short delay
+    const timer = setTimeout(() => void syncRef.current(), 3_000);
+
+    // Sync on window re-focus if >5 minutes since last sync
+    const REFOCUS_DEBOUNCE_MS = 5 * 60_000;
+    const handleFocus = () => {
+      if (Date.now() - lastSyncRef.current > REFOCUS_DEBOUNCE_MS) {
+        void syncRef.current();
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, []);
+
   const handleProjectContextMenu = useCallback(
     async (projectId: ProjectId, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
-      const clicked = await api.contextMenu.show(
-        [{ id: "delete", label: "Delete", destructive: true }],
-        position,
-      );
-      if (clicked !== "delete") return;
-
       const project = projects.find((entry) => entry.id === projectId);
       if (!project) return;
+
+      const isPinned = appSettings.pinnedProjectIds.includes(projectId);
+      const pinIdx = appSettings.pinnedProjectIds.indexOf(projectId);
+      const pinMenuItems = [
+        { id: "pin", label: isPinned ? "Unpin project" : "Pin project" },
+        ...(isPinned && pinIdx > 0 ? [{ id: "pin-up", label: "Move up" }] : []),
+        ...(isPinned && pinIdx < appSettings.pinnedProjectIds.length - 1
+          ? [{ id: "pin-down", label: "Move down" }]
+          : []),
+      ];
+      const clicked = await api.contextMenu.show(
+        [
+          ...pinMenuItems,
+          { id: "settings", label: "Project settings" },
+          { id: "sync-cc", label: "Sync from Claude Code" },
+          { id: "push", label: "Push all current changes" },
+          { id: "delete", label: "Delete", destructive: true },
+        ],
+        position,
+      );
+
+      if (clicked === "pin") {
+        if (isPinned) {
+          updateSettings({
+            pinnedProjectIds: appSettings.pinnedProjectIds.filter((id) => id !== projectId),
+          });
+        } else {
+          updateSettings({
+            pinnedProjectIds: [...appSettings.pinnedProjectIds, projectId],
+          });
+        }
+        return;
+      }
+
+      if (clicked === "pin-up" || clicked === "pin-down") {
+        const ids = [...appSettings.pinnedProjectIds];
+        const swapIdx = clicked === "pin-up" ? pinIdx - 1 : pinIdx + 1;
+        const a = ids[pinIdx]!;
+        const b = ids[swapIdx]!;
+        ids[pinIdx] = b;
+        ids[swapIdx] = a;
+        updateSettings({ pinnedProjectIds: ids });
+        return;
+      }
+
+      if (clicked === "settings") {
+        setSettingsDialogProjectId(projectId);
+        return;
+      }
+
+      if (clicked === "sync-cc") {
+        void syncClaudeCodeSessions([project]).then((count) => {
+          if (count && count > 0) {
+            toastManager.add({
+              type: "info",
+              title: `Imported ${count} new sessions from Claude Code`,
+            });
+          } else {
+            toastManager.add({
+              type: "info",
+              title: "No new Claude Code sessions found",
+            });
+          }
+        });
+        return;
+      }
+
+      if (clicked === "push") {
+        void gitPushWithToast({
+          cwd: project.cwd,
+          action: "commit_push",
+          queryClient,
+        }).catch(() => {
+          // Error already shown via toast
+        });
+        return;
+      }
+
+      if (clicked !== "delete") return;
 
       const projectThreads = threads.filter((thread) => thread.projectId === projectId);
       if (projectThreads.length > 0) {
@@ -809,11 +1060,16 @@ export default function Sidebar() {
       }
     },
     [
+      appSettings.pinnedProjectIds,
       clearComposerDraftForThread,
       clearProjectDraftThreadId,
       getDraftThreadByProjectId,
+      navigate,
       projects,
+      queryClient,
+      syncClaudeCodeSessions,
       threads,
+      updateSettings,
     ],
   );
 
@@ -1041,6 +1297,42 @@ export default function Sidebar() {
       )}
 
       <SidebarContent className="gap-0">
+        <div className="px-3 pt-2 pb-0">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                size="sm"
+                isActive={isOnHome}
+                className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+                onClick={() => void navigate({ to: "/" })}
+              >
+                <HomeIcon className="size-3.5" />
+                <span className="text-xs">Home</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </div>
+        <div className="px-3 pt-2 pb-1">
+          <div className="relative">
+            <SearchIcon className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
+            <input
+              className="w-full rounded-md border border-border bg-secondary py-1.5 pl-7 pr-7 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-ring focus:outline-none"
+              placeholder="Search projects & threads..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground/50 hover:text-muted-foreground"
+                onClick={() => setSearchQuery("")}
+                aria-label="Clear search"
+              >
+                <XIcon className="size-3" />
+              </button>
+            )}
+          </div>
+        </div>
         {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
           <SidebarGroup className="px-2 pt-2 pb-0">
             <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8">
@@ -1064,6 +1356,105 @@ export default function Sidebar() {
             </Alert>
           </SidebarGroup>
         ) : null}
+        {/* Pinned projects icon row */}
+        {appSettings.pinnedProjectIds.length > 0 && !isSearching && (() => {
+          const pinnedProjects = appSettings.pinnedProjectIds
+            .map((id) => projects.find((p) => p.id === id))
+            .filter((p): p is NonNullable<typeof p> => p != null && p.name !== "Home");
+          if (pinnedProjects.length === 0) return null;
+          // 1-2: side by side row with icon+name; 3: stacked rows with icon+name; 4+: icon-only tiles
+          const count = pinnedProjects.length;
+          const layout = count <= 2 ? "row" : count === 3 ? "stack" : "icons";
+
+          const renderNamedPin = (project: (typeof pinnedProjects)[number], isActive: boolean) => (
+            <button
+              key={project.id}
+              type="button"
+              className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors ${
+                isActive
+                  ? "border-primary/40 bg-primary/10"
+                  : "border-border/50 bg-secondary/50 hover:bg-accent"
+              }`}
+              onClick={() =>
+                void navigate({
+                  to: "/project/$projectId",
+                  params: { projectId: project.id },
+                })
+              }
+              onContextMenu={(event) => {
+                event.preventDefault();
+                void handleProjectContextMenu(project.id, {
+                  x: event.clientX,
+                  y: event.clientY,
+                });
+              }}
+            >
+              <ProjectFavicon cwd={project.cwd} projectId={project.id} size="md" />
+              <span className="flex-1 truncate text-xs font-medium text-foreground/90">
+                {project.name}
+              </span>
+            </button>
+          );
+
+          const renderIconPin = (project: (typeof pinnedProjects)[number], isActive: boolean) => (
+            <Tooltip key={project.id}>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={project.name}
+                    className={`flex size-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                      isActive
+                        ? "border-primary/40 bg-primary/10"
+                        : "border-border/50 bg-secondary/50 hover:bg-accent"
+                    }`}
+                    onClick={() =>
+                      void navigate({
+                        to: "/project/$projectId",
+                        params: { projectId: project.id },
+                      })
+                    }
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      void handleProjectContextMenu(project.id, {
+                        x: event.clientX,
+                        y: event.clientY,
+                      });
+                    }}
+                  />
+                }
+              >
+                <ProjectFavicon cwd={project.cwd} projectId={project.id} size="md" />
+              </TooltipTrigger>
+              <TooltipPopup side="bottom">{project.name}</TooltipPopup>
+            </Tooltip>
+          );
+
+          return (
+            <div className="px-3 pt-2 pb-0">
+              {layout === "row" ? (
+                <div className="flex gap-1.5">
+                  {pinnedProjects.map((project) =>
+                    renderNamedPin(project, routeProjectId === project.id),
+                  )}
+                </div>
+              ) : layout === "stack" ? (
+                <div className="flex flex-col gap-1">
+                  {pinnedProjects.map((project) =>
+                    renderNamedPin(project, routeProjectId === project.id),
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-1.5 overflow-x-auto">
+                  {pinnedProjects.map((project) =>
+                    renderIconPin(project, routeProjectId === project.id),
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <SidebarGroup className="px-2 py-2">
           <div className="mb-1 flex items-center justify-between px-2">
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
@@ -1077,7 +1468,7 @@ export default function Sidebar() {
                     aria-label="Add project"
                     className="inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
                     onClick={() => {
-                      setAddingProject((prev) => !prev);
+                      setShowAddProjectDialog(true);
                       setAddProjectError(null);
                     }}
                   />
@@ -1089,73 +1480,10 @@ export default function Sidebar() {
             </Tooltip>
           </div>
 
-          {addingProject && (
-            <div className="mb-2 px-1">
-              {isElectron && (
-                <button
-                  type="button"
-                  className="mb-1.5 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary py-1.5 text-xs text-foreground/80 transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => void handlePickFolder()}
-                  disabled={isPickingFolder || isAddingProject}
-                >
-                  <FolderIcon className="size-3.5" />
-                  {isPickingFolder ? "Picking folder..." : "Browse for folder"}
-                </button>
-              )}
-              <div className="flex gap-1.5">
-                <input
-                  ref={addProjectInputRef}
-                  className={`min-w-0 flex-1 rounded-md border bg-secondary px-2 py-1 font-mono text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none ${
-                    addProjectError
-                      ? "border-red-500/70 focus:border-red-500"
-                      : "border-border focus:border-ring"
-                  }`}
-                  placeholder="/path/to/project"
-                  value={newCwd}
-                  onChange={(event) => {
-                    setNewCwd(event.target.value);
-                    setAddProjectError(null);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") handleAddProject();
-                    if (event.key === "Escape") {
-                      setAddingProject(false);
-                      setAddProjectError(null);
-                    }
-                  }}
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 disabled:opacity-60"
-                  onClick={handleAddProject}
-                  disabled={isAddingProject}
-                >
-                  {isAddingProject ? "Adding..." : "Add"}
-                </button>
-              </div>
-              {addProjectError && (
-                <p className="mt-1 px-0.5 text-[11px] leading-tight text-red-400">
-                  {addProjectError}
-                </p>
-              )}
-              <div className="mt-1.5 px-0.5">
-                <button
-                  type="button"
-                  className="text-[11px] text-muted-foreground/50 transition-colors hover:text-muted-foreground"
-                  onClick={() => {
-                    setAddingProject(false);
-                    setAddProjectError(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
           <SidebarMenu>
-            {projects.map((project) => {
+            {projects
+              .filter((p) => p.name !== "Home")
+              .map((project) => {
               const projectThreads = threads
                 .filter((thread) => thread.projectId === project.id)
                 .toSorted((a, b) => {
@@ -1163,12 +1491,27 @@ export default function Sidebar() {
                   if (byDate !== 0) return byDate;
                   return b.id.localeCompare(a.id);
                 });
+
+              const filteredProjectThreads = isSearching
+                ? projectThreads.filter((thread) =>
+                    thread.title.toLowerCase().includes(normalizedSearchQuery),
+                  )
+                : projectThreads;
+
+              const projectNameMatches = isSearching
+                ? project.name.toLowerCase().includes(normalizedSearchQuery)
+                : true;
+
+              if (isSearching && !projectNameMatches && filteredProjectThreads.length === 0) {
+                return null;
+              }
+
               const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
-              const hasHiddenThreads = projectThreads.length > THREAD_PREVIEW_LIMIT;
+              const hasHiddenThreads = !isSearching && filteredProjectThreads.length > THREAD_PREVIEW_LIMIT;
               const visibleThreads =
                 hasHiddenThreads && !isThreadListExpanded
-                  ? projectThreads.slice(0, THREAD_PREVIEW_LIMIT)
-                  : projectThreads;
+                  ? filteredProjectThreads.slice(0, THREAD_PREVIEW_LIMIT)
+                  : filteredProjectThreads;
 
               return (
                 <Collapsible
@@ -1182,31 +1525,50 @@ export default function Sidebar() {
                 >
                   <SidebarMenuItem>
                     <div className="group/project-header relative">
-                      <CollapsibleTrigger
-                        render={
-                          <SidebarMenuButton
-                            size="sm"
-                            className="gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground"
+                      <div className="flex items-center gap-0">
+                        <CollapsibleTrigger
+                          render={
+                            <button
+                              type="button"
+                              className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground/70 hover:bg-accent"
+                            />
+                          }
+                        >
+                          <ChevronRightIcon
+                            className={`size-3.5 shrink-0 transition-transform duration-150 ${
+                              project.expanded ? "rotate-90" : ""
+                            }`}
                           />
-                        }
-                        onContextMenu={(event) => {
-                          event.preventDefault();
-                          void handleProjectContextMenu(project.id, {
-                            x: event.clientX,
-                            y: event.clientY,
-                          });
-                        }}
-                      >
-                        <ChevronRightIcon
-                          className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
-                            project.expanded ? "rotate-90" : ""
-                          }`}
-                        />
-                        <ProjectFavicon cwd={project.cwd} />
-                        <span className="flex-1 truncate text-xs font-medium text-foreground/90">
-                          {project.name}
-                        </span>
-                      </CollapsibleTrigger>
+                        </CollapsibleTrigger>
+                        <SidebarMenuButton
+                          size="sm"
+                          className="flex-1 gap-2 px-1 py-1.5 text-left hover:bg-accent group-hover/project-header:text-sidebar-accent-foreground"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void navigate({
+                              to: "/project/$projectId",
+                              params: { projectId: project.id },
+                            });
+                          }}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            void handleProjectContextMenu(project.id, {
+                              x: event.clientX,
+                              y: event.clientY,
+                            });
+                          }}
+                        >
+                          {project.name === "Home" ? (
+                            <HomeIcon className="size-4 shrink-0 text-muted-foreground/70" />
+                          ) : (
+                            <ProjectFavicon cwd={project.cwd} projectId={project.id} />
+                          )}
+                          <span className="flex-1 truncate text-xs font-medium text-foreground/90">
+                            {project.name}
+                          </span>
+                        </SidebarMenuButton>
+                      </div>
                       <Tooltip>
                         <TooltipTrigger
                           render={
@@ -1415,7 +1777,7 @@ export default function Sidebar() {
             })}
           </SidebarMenu>
 
-          {projects.length === 0 && !addingProject && (
+          {projects.length === 0 && !showAddProjectDialog && (
             <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
               No projects yet
             </div>
@@ -1425,6 +1787,7 @@ export default function Sidebar() {
 
       <SidebarSeparator />
       <SidebarFooter className="p-2">
+        <AccountPill />
         <SidebarMenu>
           <SidebarMenuItem>
             {isOnSettings ? (
@@ -1449,6 +1812,92 @@ export default function Sidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      {/* Project Settings Dialog */}
+      {settingsDialogProjectId && (() => {
+        const project = projects.find((p) => p.id === settingsDialogProjectId);
+        if (!project) return null;
+        return (
+          <ProjectSettingsDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) setSettingsDialogProjectId(null);
+            }}
+            projectId={project.id}
+            projectName={project.name}
+            projectCwd={project.cwd}
+          />
+        );
+      })()}
+
+      {/* Add Project Dialog */}
+      <Dialog
+        open={showAddProjectDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowAddProjectDialog(false);
+            setAddProjectError(null);
+            setNewCwd("");
+          }
+        }}
+      >
+        <DialogPopup className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Project</DialogTitle>
+            <DialogDescription>Add a project folder to T3 Code.</DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <div className="space-y-3">
+              {isElectron && (
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary py-2.5 text-sm text-foreground/80 transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => void handlePickFolder()}
+                  disabled={isPickingFolder || isAddingProject}
+                >
+                  <FolderIcon className="size-4" />
+                  {isPickingFolder ? "Picking folder..." : "Browse for folder"}
+                </button>
+              )}
+              <div className="flex gap-2">
+                <input
+                  ref={addProjectInputRef}
+                  className={`min-w-0 flex-1 rounded-md border bg-secondary px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none ${
+                    addProjectError
+                      ? "border-red-500/70 focus:border-red-500"
+                      : "border-border focus:border-ring"
+                  }`}
+                  placeholder="/path/to/project"
+                  value={newCwd}
+                  onChange={(event) => {
+                    setNewCwd(event.target.value);
+                    setAddProjectError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      handleAddProject();
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 disabled:opacity-60"
+                  onClick={handleAddProject}
+                  disabled={isAddingProject}
+                >
+                  {isAddingProject ? "Adding..." : "Add"}
+                </button>
+              </div>
+              {addProjectError && (
+                <p className="text-[11px] leading-tight text-red-400">
+                  {addProjectError}
+                </p>
+              )}
+            </div>
+          </DialogPanel>
+        </DialogPopup>
+      </Dialog>
     </>
   );
 }
