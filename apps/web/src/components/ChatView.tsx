@@ -123,6 +123,7 @@ import {
   type TurnDiffTreeNode,
 } from "../lib/turnDiffTree";
 import BranchToolbar from "./BranchToolbar";
+import { ComposerPullRequestCommandMenu } from "./ComposerPullRequestCommandMenu";
 import GitActionsControl from "./GitActionsControl";
 import {
   isOpenFavoriteEditorShortcut,
@@ -426,6 +427,11 @@ type ComposerCommandItem =
 
 type SendPhase = "idle" | "preparing-worktree" | "sending-turn";
 
+interface PullRequestComposerMenuState {
+  initialReference: string | null;
+  key: number;
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -631,6 +637,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const clearDraftThread = useComposerDraftStore((store) => store.clearDraftThread);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
+  const getDraftThreadByProjectId = useComposerDraftStore((store) => store.getDraftThreadByProjectId);
+  const getDraftThread = useComposerDraftStore((store) => store.getDraftThread);
+  const setProjectDraftThreadId = useComposerDraftStore((store) => store.setProjectDraftThreadId);
+  const clearProjectDraftThreadId = useComposerDraftStore(
+    (store) => store.clearProjectDraftThreadId,
+  );
   const draftThread = useComposerDraftStore(
     (store) => store.draftThreadsByThreadId[threadId] ?? null,
   );
@@ -667,6 +679,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [terminalFocusRequestId, setTerminalFocusRequestId] = useState(0);
   const [composerHighlightedItemId, setComposerHighlightedItemId] = useState<string | null>(null);
+  const [pullRequestComposerMenuState, setPullRequestComposerMenuState] =
+    useState<PullRequestComposerMenuState | null>(null);
   const [attachmentPreviewHandoffByMessageId, setAttachmentPreviewHandoffByMessageId] = useState<
     Record<string, string[]>
   >({});
@@ -765,6 +779,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     composerDraft.interactionMode ?? activeThread?.interactionMode ?? DEFAULT_INTERACTION_MODE;
   const isServerThread = serverThread !== undefined;
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
+  const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
   const activeThreadId = activeThread?.id ?? null;
   const providerCommands = useProviderSessionStore(
@@ -773,6 +788,83 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const activeLatestTurn = activeThread?.latestTurn ?? null;
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
   const activeProject = projects.find((p) => p.id === activeThread?.projectId);
+
+  const openPullRequestComposerMenu = useCallback((reference?: string) => {
+    if (!canCheckoutPullRequestIntoThread) {
+      return;
+    }
+    setPullRequestComposerMenuState({
+      initialReference: reference ?? null,
+      key: Date.now(),
+    });
+    setComposerHighlightedItemId(null);
+  }, [canCheckoutPullRequestIntoThread]);
+
+  const closePullRequestComposerMenu = useCallback(() => {
+    setPullRequestComposerMenuState(null);
+  }, []);
+
+  const openOrReuseProjectDraftThread = useCallback(
+    async (input: { branch: string; worktreePath: string | null; envMode: DraftThreadEnvMode }) => {
+      if (!activeProject) {
+        throw new Error("No active project is available for this pull request.");
+      }
+      const storedDraftThread = getDraftThreadByProjectId(activeProject.id);
+      if (storedDraftThread) {
+        setDraftThreadContext(storedDraftThread.threadId, input);
+        setProjectDraftThreadId(activeProject.id, storedDraftThread.threadId, input);
+        if (storedDraftThread.threadId !== threadId) {
+          await navigate({
+            to: "/$threadId",
+            params: { threadId: storedDraftThread.threadId },
+          });
+        }
+        return;
+      }
+
+      const activeDraftThread = getDraftThread(threadId);
+      if (!isServerThread && activeDraftThread?.projectId === activeProject.id) {
+        setDraftThreadContext(threadId, input);
+        setProjectDraftThreadId(activeProject.id, threadId, input);
+        return;
+      }
+
+      clearProjectDraftThreadId(activeProject.id);
+      const nextThreadId = newThreadId();
+      setProjectDraftThreadId(activeProject.id, nextThreadId, {
+        createdAt: new Date().toISOString(),
+        runtimeMode: DEFAULT_RUNTIME_MODE,
+        interactionMode: DEFAULT_INTERACTION_MODE,
+        ...input,
+      });
+      await navigate({
+        to: "/$threadId",
+        params: { threadId: nextThreadId },
+      });
+    },
+    [
+      activeProject,
+      clearProjectDraftThreadId,
+      getDraftThread,
+      getDraftThreadByProjectId,
+      isServerThread,
+      navigate,
+      setDraftThreadContext,
+      setProjectDraftThreadId,
+      threadId,
+    ],
+  );
+
+  const handlePreparedPullRequestThread = useCallback(
+    async (input: { branch: string; worktreePath: string | null }) => {
+      await openOrReuseProjectDraftThread({
+        branch: input.branch,
+        worktreePath: input.worktreePath,
+        envMode: input.worktreePath ? "worktree" : "local",
+      });
+    },
+    [openOrReuseProjectDraftThread],
+  );
 
   useEffect(() => {
     if (!activeThread?.id) return;
@@ -1224,6 +1316,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     timelineEntries,
   ]);
   const gitCwd = activeThread?.worktreePath ?? activeProject?.cwd ?? null;
+  const pullRequestComposerMenuOpen = pullRequestComposerMenuState !== null;
   const composerTriggerKind = composerTrigger?.kind ?? null;
   const pathTriggerQuery = composerTrigger?.kind === "path" ? composerTrigger.query : "";
   const isPathTrigger = composerTriggerKind === "path";
@@ -1280,7 +1373,17 @@ export default function ChatView({ threadId }: ChatViewProps) {
           label: "/default",
           description: "Switch this thread back to normal chat mode",
         },
+        {
+          id: "slash:checkout-pr",
+          type: "slash-command",
+          command: "checkout-pr",
+          label: "/checkout-pr",
+          description: "Create a new thread from a GitHub pull request",
+        },
       ];
+      const availableSlashCommandItems = canCheckoutPullRequestIntoThread
+        ? slashCommandItems
+        : slashCommandItems.filter((item) => item.type !== "slash-command" || item.command !== "checkout-pr");
       const providerCommandItems: ComposerCommandItem[] = providerCommands.map((cmd) => ({
         id: `provider-slash:${cmd.name}`,
         type: "provider-slash-command",
@@ -1288,7 +1391,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         label: `/${cmd.name}`,
         description: cmd.description,
       }));
-      const allItems = [...slashCommandItems, ...providerCommandItems];
+      const allItems = [...availableSlashCommandItems, ...providerCommandItems];
       const query = composerTrigger.query.trim().toLowerCase();
       if (!query) {
         return allItems;
@@ -1315,14 +1418,16 @@ export default function ChatView({ threadId }: ChatViewProps) {
         label: name,
         description: `${providerLabel} · ${slug}`,
       }));
-  }, [composerTrigger, providerCommands, searchableModelOptions, workspaceEntries]);
-  const composerMenuOpen = Boolean(composerTrigger);
+  }, [canCheckoutPullRequestIntoThread, composerTrigger, providerCommands, searchableModelOptions, workspaceEntries]);
+  const composerMenuOpen = Boolean(composerTrigger) || pullRequestComposerMenuOpen;
   const activeComposerMenuItem = useMemo(
     () =>
-      composerMenuItems.find((item) => item.id === composerHighlightedItemId) ??
-      composerMenuItems[0] ??
-      null,
-    [composerHighlightedItemId, composerMenuItems],
+      pullRequestComposerMenuOpen
+        ? null
+        : (composerMenuItems.find((item) => item.id === composerHighlightedItemId) ??
+          composerMenuItems[0] ??
+          null),
+    [composerHighlightedItemId, composerMenuItems, pullRequestComposerMenuOpen],
   );
   composerMenuOpenRef.current = composerMenuOpen;
   composerMenuItemsRef.current = composerMenuItems;
@@ -2021,6 +2126,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
 
   useEffect(() => {
     setExpandedWorkGroups({});
+    setPullRequestComposerMenuState(null);
     if (planSidebarOpenOnNextThreadRef.current) {
       planSidebarOpenOnNextThreadRef.current = false;
       setPlanSidebarOpen(true);
@@ -2037,12 +2143,16 @@ export default function ChatView({ threadId }: ChatViewProps) {
       setComposerHighlightedItemId(null);
       return;
     }
+    if (pullRequestComposerMenuOpen) {
+      setComposerHighlightedItemId(null);
+      return;
+    }
     setComposerHighlightedItemId((existing) =>
       existing && composerMenuItems.some((item) => item.id === existing)
         ? existing
         : (composerMenuItems[0]?.id ?? null),
     );
-  }, [composerMenuItems, composerMenuOpen]);
+  }, [composerMenuItems, composerMenuOpen, pullRequestComposerMenuOpen]);
 
   useEffect(() => {
     setIsRevertingCheckpoint(false);
@@ -2552,8 +2662,15 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
     const standaloneSlashCommand =
       composerImages.length === 0 ? parseStandaloneComposerSlashCommand(trimmed) : null;
-    if (standaloneSlashCommand) {
-      await handleInteractionModeChange(standaloneSlashCommand);
+    const shouldHandleStandaloneSlashCommand =
+      standaloneSlashCommand !== null &&
+      (standaloneSlashCommand !== "checkout-pr" || canCheckoutPullRequestIntoThread);
+    if (shouldHandleStandaloneSlashCommand && standaloneSlashCommand) {
+      if (standaloneSlashCommand === "checkout-pr") {
+        openPullRequestComposerMenu();
+      } else {
+        await handleInteractionModeChange(standaloneSlashCommand);
+      }
       promptRef.current = "";
       clearComposerDraftContent(activeThread.id);
       setComposerHighlightedItemId(null);
@@ -3414,7 +3531,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
           }
           return;
         }
-        void handleInteractionModeChange(item.command === "plan" ? "plan" : "default");
+        if (item.command === "checkout-pr") {
+          openPullRequestComposerMenu();
+        } else {
+          void handleInteractionModeChange(item.command === "plan" ? "plan" : "default");
+        }
         const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
           expectedText: expectedToken,
         });
@@ -3448,6 +3569,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     [
       applyPromptReplacement,
       handleInteractionModeChange,
+      openPullRequestComposerMenu,
       onProviderModelSelect,
       resolveActiveComposerTrigger,
     ],
@@ -3521,6 +3643,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
 
     const { trigger } = resolveActiveComposerTrigger();
     const menuIsActive = composerMenuOpenRef.current || trigger !== null;
+
+    if (pullRequestComposerMenuOpen) {
+      if (key === "ArrowDown" || key === "ArrowUp" || key === "Tab" || key === "Enter") {
+        return true;
+      }
+    }
 
     if (menuIsActive) {
       const currentItems = composerMenuItemsRef.current;
@@ -3778,15 +3906,28 @@ export default function ChatView({ threadId }: ChatViewProps) {
             >
               {composerMenuOpen && !isComposerApprovalState && (
                 <div className="absolute inset-x-0 bottom-full z-20 mb-2 px-1">
-                  <ComposerCommandMenu
-                    items={composerMenuItems}
-                    resolvedTheme={resolvedTheme}
-                    isLoading={isComposerMenuLoading}
-                    triggerKind={composerTriggerKind}
-                    activeItemId={activeComposerMenuItem?.id ?? null}
-                    onHighlightedItemChange={onComposerMenuItemHighlighted}
-                    onSelect={onSelectComposerItem}
-                  />
+                  {pullRequestComposerMenuState ? (
+                    <ComposerPullRequestCommandMenu
+                      key={pullRequestComposerMenuState.key}
+                      cwd={activeProject?.cwd ?? null}
+                      initialReference={pullRequestComposerMenuState.initialReference}
+                      onCancel={closePullRequestComposerMenu}
+                      onPrepared={async (input) => {
+                        await handlePreparedPullRequestThread(input);
+                        closePullRequestComposerMenu();
+                      }}
+                    />
+                  ) : (
+                    <ComposerCommandMenu
+                      items={composerMenuItems}
+                      resolvedTheme={resolvedTheme}
+                      isLoading={isComposerMenuLoading}
+                      triggerKind={composerTriggerKind}
+                      activeItemId={activeComposerMenuItem?.id ?? null}
+                      onHighlightedItemChange={onComposerMenuItemHighlighted}
+                      onSelect={onSelectComposerItem}
+                    />
+                  )}
                 </div>
               )}
 
@@ -3876,7 +4017,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                       ? "Add feedback to refine the plan, or leave this blank to implement it"
                       : phase === "disconnected"
                         ? "Ask for follow-up changes or attach images"
-                        : "Ask anything, @tag files/folders, or use /model"
+                        : "Ask anything, @tag files/folders, or use / to show available commands"
                 }
                 disabled={isConnecting || isComposerApprovalState}
               />
@@ -4276,6 +4417,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           onEnvModeChange={onEnvModeChange}
           envLocked={envLocked}
           onComposerFocusRequest={scheduleComposerFocus}
+          onCheckoutPullRequestRequest={openPullRequestComposerMenu}
         />
       )}
 
