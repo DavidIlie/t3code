@@ -235,7 +235,7 @@ function HomePage() {
                     model={selectedModel}
                     lockedProvider={null}
                     modelOptionsByProvider={modelOptionsByProvider}
-                    serviceTierSetting={settings.codexServiceTier}
+                    fastModeEnabled={false}
                     onProviderModelChange={(provider, model) => {
                       setSelectedProvider(provider);
                       setSelectedModel(model);

@@ -10,7 +10,6 @@ import { ChevronDownIcon, ZapIcon } from "lucide-react";
 import {
   getAppModelOptions,
   shouldShowFastTierIcon,
-  type AppServiceTier,
 } from "../appSettings";
 import {
   type ProviderPickerKind,
@@ -128,7 +127,7 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   model: ModelSlug;
   lockedProvider: ProviderKind | null;
   modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>>;
-  serviceTierSetting: AppServiceTier;
+  fastModeEnabled: boolean;
   disabled?: boolean;
   onProviderModelChange: (provider: ProviderKind, model: ModelSlug) => void;
 }) {
@@ -167,7 +166,7 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               props.provider === "claudeCode" ? "" : "text-muted-foreground/70",
             )}
           />
-          {props.provider === "codex" && shouldShowFastTierIcon(props.model, props.serviceTierSetting) ? (
+          {props.provider === "codex" && shouldShowFastTierIcon(props.model, props.fastModeEnabled) ? (
             <ZapIcon className="size-3.5 shrink-0 text-amber-500" />
           ) : null}
           <span className="truncate">{selectedModelLabel}</span>
@@ -213,7 +212,7 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                         onClick={() => setIsMenuOpen(false)}
                       >
                         {option.value === "codex" &&
-                        shouldShowFastTierIcon(modelOption.slug, props.serviceTierSetting) ? (
+                        shouldShowFastTierIcon(modelOption.slug, props.fastModeEnabled) ? (
                           <ZapIcon className="size-3.5 shrink-0 text-amber-500" />
                         ) : null}
                         {modelOption.name}

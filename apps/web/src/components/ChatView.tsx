@@ -208,7 +208,6 @@ import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 import {
   resolveAppModelSelection,
-  resolveAppServiceTier,
   shouldShowFastTierIcon,
   useAppSettings,
 } from "../appSettings";
@@ -811,8 +810,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
       activeThread.messages.length > 0 ||
       activeThread.session !== null),
   );
-  const selectedServiceTierSetting = settings.codexServiceTier;
-  const selectedServiceTier = resolveAppServiceTier(selectedServiceTierSetting);
   const lockedProvider: ProviderKind | null = hasThreadStarted
     ? (sessionProvider ?? selectedProviderByThreadId ?? null)
     : null;
@@ -1318,9 +1315,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
         label: name,
         description: `${providerLabel} · ${slug}`,
         showFastBadge:
-          provider === "codex" && shouldShowFastTierIcon(slug, selectedServiceTierSetting),
+          provider === "codex" && shouldShowFastTierIcon(slug, selectedCodexFastModeEnabled),
       }));
-  }, [composerTrigger, providerCommands, searchableModelOptions, selectedServiceTierSetting, workspaceEntries]);
+  }, [composerTrigger, providerCommands, searchableModelOptions, selectedCodexFastModeEnabled, workspaceEntries]);
   const composerMenuOpen = Boolean(composerTrigger);
   const activeComposerMenuItem = useMemo(
     () =>
@@ -2728,7 +2725,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
           attachments: turnAttachments,
         },
         model: selectedModel || undefined,
-        serviceTier: selectedServiceTier,
         ...(selectedModelOptionsForDispatch
           ? { modelOptions: selectedModelOptionsForDispatch }
           : {}),
@@ -3882,7 +3878,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                               model={selectedModelForPickerWithCustomFallback}
                               lockedProvider={lockedProvider}
                               modelOptionsByProvider={modelOptionsByProvider}
-                              serviceTierSetting={selectedServiceTierSetting}
+                              fastModeEnabled={selectedCodexFastModeEnabled}
                               disabled
                               onProviderModelChange={onProviderModelSelect}
                             />
@@ -3899,7 +3895,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                       model={selectedModelForPickerWithCustomFallback}
                       lockedProvider={lockedProvider}
                       modelOptionsByProvider={modelOptionsByProvider}
-                      serviceTierSetting={selectedServiceTierSetting}
+                      fastModeEnabled={selectedCodexFastModeEnabled}
                       onProviderModelChange={onProviderModelSelect}
                     />
                   )}
