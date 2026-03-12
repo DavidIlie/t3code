@@ -4,7 +4,6 @@ import {
   getAppModelOptions,
   getSlashModelOptions,
   normalizeCustomModelSlugs,
-  shouldShowFastTierIcon,
   resolveAppModelSelection,
 } from "./appSettings";
 
@@ -111,10 +110,3 @@ describe("getSlashModelOptions", () => {
   });
 });
 
-describe("shouldShowFastTierIcon", () => {
-  it("shows the fast-tier icon only for gpt-5.4 when fast mode is enabled", () => {
-    expect(shouldShowFastTierIcon("gpt-5.4", true)).toBe(true);
-    expect(shouldShowFastTierIcon("gpt-5.4", false)).toBe(false);
-    expect(shouldShowFastTierIcon("gpt-5.3-codex", true)).toBe(false);
-  });
-});

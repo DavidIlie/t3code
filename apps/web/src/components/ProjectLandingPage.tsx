@@ -302,7 +302,6 @@ export default function ProjectLandingPage() {
                 model={selectedModel}
                 lockedProvider={null}
                 modelOptionsByProvider={modelOptionsByProvider}
-                fastModeEnabled={false}
                 onProviderModelChange={(provider, model) => {
                   setSelectedProvider(provider);
                   setSelectedModel(model);

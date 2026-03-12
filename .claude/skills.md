@@ -25,6 +25,10 @@ it, and re-implement it carefully against our current codebase.
    corresponding sections of our current codebase. Explain the delta — what upstream changed,
    how our code differs, and what specific edits are needed. Don't just summarize the commit
    title — show the actual code context from both sides.
+9. **Periodic review checkpoint.** Every ~5 commits, pause and review all recent work:
+   re-read the upstream diffs you implemented, compare against your actual edits, mentally
+   test for missed changes or regressions. Fix any issues before continuing. The goal is
+   everything works properly on the first try once done.
 
 ## Workflow
 

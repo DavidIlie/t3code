@@ -208,7 +208,6 @@ import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 import {
   resolveAppModelSelection,
-  shouldShowFastTierIcon,
   useAppSettings,
 } from "../appSettings";
 import {
@@ -420,7 +419,6 @@ type ComposerCommandItem =
       model: ModelSlug;
       label: string;
       description: string;
-      showFastBadge: boolean;
     };
 
 type SendPhase = "idle" | "preparing-worktree" | "sending-turn";
@@ -534,9 +532,6 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
         </Badge>
       ) : null}
       <span className="flex min-w-0 items-center gap-1.5 truncate">
-        {props.item.type === "model" && props.item.showFastBadge ? (
-          <ZapIcon className="size-3.5 shrink-0 text-amber-500" />
-        ) : null}
         <span className="truncate">{props.item.label}</span>
       </span>
       <span className="truncate text-muted-foreground/70 text-xs">{props.item.description}</span>
@@ -1314,10 +1309,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
         model: slug,
         label: name,
         description: `${providerLabel} · ${slug}`,
-        showFastBadge:
-          provider === "codex" && shouldShowFastTierIcon(slug, selectedCodexFastModeEnabled),
       }));
-  }, [composerTrigger, providerCommands, searchableModelOptions, selectedCodexFastModeEnabled, workspaceEntries]);
+  }, [composerTrigger, providerCommands, searchableModelOptions, workspaceEntries]);
   const composerMenuOpen = Boolean(composerTrigger);
   const activeComposerMenuItem = useMemo(
     () =>
@@ -3878,7 +3871,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
                               model={selectedModelForPickerWithCustomFallback}
                               lockedProvider={lockedProvider}
                               modelOptionsByProvider={modelOptionsByProvider}
-                              fastModeEnabled={selectedCodexFastModeEnabled}
                               disabled
                               onProviderModelChange={onProviderModelSelect}
                             />
@@ -3895,7 +3887,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
                       model={selectedModelForPickerWithCustomFallback}
                       lockedProvider={lockedProvider}
                       modelOptionsByProvider={modelOptionsByProvider}
-                      fastModeEnabled={selectedCodexFastModeEnabled}
                       onProviderModelChange={onProviderModelSelect}
                     />
                   )}
