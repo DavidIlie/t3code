@@ -344,7 +344,7 @@ describe("when: working tree has local changes", () => {
     assert.deepInclude(quick, {
       kind: "run_action",
       action: "commit_push_pr",
-      label: "Commit, push & create PR",
+      label: "Commit, push & PR",
     });
   });
 
@@ -440,7 +440,7 @@ describe("when: working tree has local changes and branch is behind upstream", (
     assert.deepInclude(quick, {
       kind: "run_action",
       action: "commit_push_pr",
-      label: "Commit, push & create PR",
+      label: "Commit, push & PR",
     });
   });
 
@@ -784,10 +784,10 @@ describe("resolveDefaultBranchActionDialogCopy", () => {
     });
 
     assert.deepEqual(copy, {
-      title: "Commit, push & create PR from default branch?",
+      title: "Commit, push & PR from default branch?",
       description:
         'This action will commit, push, and create a PR on "main". You can continue on this branch or create a feature branch and run the same action there.',
-      continueLabel: "Commit, push & create PR",
+      continueLabel: "Commit, push & PR",
     });
   });
 });
