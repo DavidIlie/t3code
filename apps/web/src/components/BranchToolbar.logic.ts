@@ -93,6 +93,35 @@ export function filterBranchPickerItems(input: {
   });
 }
 
+export function resolveBranchSelectionTarget(input: {
+  activeProjectCwd: string;
+  activeWorktreePath: string | null;
+  branch: Pick<GitBranch, "isDefault" | "worktreePath">;
+}): {
+  checkoutCwd: string;
+  nextWorktreePath: string | null;
+  reuseExistingWorktree: boolean;
+} {
+  const { activeProjectCwd, activeWorktreePath, branch } = input;
+
+  if (branch.worktreePath) {
+    return {
+      checkoutCwd: branch.worktreePath,
+      nextWorktreePath: branch.worktreePath === activeProjectCwd ? null : branch.worktreePath,
+      reuseExistingWorktree: true,
+    };
+  }
+
+  const nextWorktreePath =
+    activeWorktreePath !== null && branch.isDefault ? null : activeWorktreePath;
+
+  return {
+    checkoutCwd: nextWorktreePath ?? activeProjectCwd,
+    nextWorktreePath,
+    reuseExistingWorktree: false,
+  };
+}
+
 export function dedupeRemoteBranchesWithLocalMatches(
   branches: ReadonlyArray<GitBranch>,
 ): ReadonlyArray<GitBranch> {
