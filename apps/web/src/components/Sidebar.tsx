@@ -640,15 +640,23 @@ export default function Sidebar() {
           // Silently ignore import failures — not critical
         }
       } catch (error) {
+        const description =
+          error instanceof Error ? error.message : "An error occurred while adding the project.";
         setIsAddingProject(false);
-        setAddProjectError(
-          error instanceof Error ? error.message : "An error occurred while adding the project.",
-        );
+        if (shouldBrowseForProjectImmediately) {
+          toastManager.add({
+            type: "error",
+            title: "Failed to add project",
+            description,
+          });
+        } else {
+          setAddProjectError(description);
+        }
         return;
       }
       finishAddingProject();
     },
-    [focusMostRecentThreadForProject, handleNewThread, isAddingProject, projects],
+    [focusMostRecentThreadForProject, handleNewThread, isAddingProject, projects, shouldBrowseForProjectImmediately],
   );
 
   const handleAddProject = () => {
