@@ -1969,10 +1969,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
   useLayoutEffect(() => {
     const composerForm = composerFormRef.current;
     if (!composerForm) return;
+    const measureComposerFormWidth = () => composerForm.clientWidth;
 
     composerFormHeightRef.current = composerForm.getBoundingClientRect().height;
     setIsComposerFooterCompact(
-      shouldUseCompactComposerFooter(composerForm.clientWidth, {
+      shouldUseCompactComposerFooter(measureComposerFormWidth(), {
         hasWideActions: composerFooterHasWideActions,
       }),
     );
@@ -1982,7 +1983,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       const [entry] = entries;
       if (!entry) return;
 
-      const nextCompact = shouldUseCompactComposerFooter(entry.contentRect.width, {
+      const nextCompact = shouldUseCompactComposerFooter(measureComposerFormWidth(), {
         hasWideActions: composerFooterHasWideActions,
       });
       setIsComposerFooterCompact((previous) => (previous === nextCompact ? previous : nextCompact));
