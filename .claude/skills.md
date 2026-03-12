@@ -18,6 +18,9 @@ it, and re-implement it carefully against our current codebase.
    We support BOTH providers. Analyze the Claude Code adapter and make it work.
 5. **Never break existing functionality.** Run typecheck + lint after every commit.
 6. **Our Claude Code additions always take priority** over upstream changes in conflicts.
+7. **Explain before implementing.** For each commit, explain clearly what it does and why
+   it's useful BEFORE writing any code. If the commit is ambiguous or might not apply to
+   our fork, ask the user whether to implement or skip.
 
 ## Workflow
 
