@@ -5,7 +5,7 @@ Fork: https://github.com/DavidIlie/t3code
 
 ## Last Synced Commit
 
-`1f47cc6f` — Remove ProviderHealth onReady callback from service interface (2026-03-09)
+`767de271` — Use Effect UUID generator as randomUUID fallback (2026-03-09)
 
 ## Pending Upstream Commits
 
@@ -34,6 +34,25 @@ Fork: https://github.com/DavidIlie/t3code
 - `6593645c` — perf: run provider health checks in background, notify clients on ready
 - `074d3af7` — cleanup: use Effect Fiber for background provider health checks
 - `1f47cc6f` — Remove ProviderHealth onReady callback from service interface
+- `e765051f` — perf: use Debouncer for store persistence (covered by 7a377fc5)
+- `5e66ab88` — perf: use Debouncer for composer draft storage (covered by 90e0c2ab)
+- `f5e4df5c` — perf: use Throttler for domain events (covered by 296eb82c)
+- `2f5e6260` — Fix project name badge truncation
+- `bb49ebf6` — Add drag-and-drop project reordering in the sidebar
+- `a6b22ec1` — Fix project drag clicks and sidebar collapse/scroll behavior
+- `b5dde6b9` — Prevent stale click suppression after project drag cancel
+- `3503dbc7` — Pin vite
+- `f9c3aff2` — Remove experimental tsconfig aliases flag
+- `e4203648` — Improve project drag collision detection
+- `9fb9467e` — Keep suppressProjectClickAfterDragRef on drag cancel
+- `eb7c428a` — Defer proposed plan rendering until expand
+- `3a86b606` — Render collapsed plan preview directly as markdown
+- `2fc0b01c` — fmt (max-width class cleanup)
+- `99dbe4ff` — Disable add project button for empty path
+- `4ed89e4b` — Treat retryable Codex errors as runtime warnings
+- `dcccca3f` — Fix UI overflow for commit/push PR label
+- `9d2c2cae` — Polyfill crypto.randomUUID for non-secure HTTP contexts
+- `767de271` — Use Effect UUID generator as randomUUID fallback
 
 ## Skipped
 
