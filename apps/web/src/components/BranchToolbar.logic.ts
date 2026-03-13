@@ -110,6 +110,10 @@ export function dedupeRemoteBranchesWithLocalMatches(
       return true;
     }
 
+    if (branch.remoteName !== "origin") {
+      return true;
+    }
+
     const localBranchCandidates = deriveLocalBranchNameCandidatesFromRemoteRef(
       branch.name,
       branch.remoteName,
