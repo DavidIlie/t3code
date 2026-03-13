@@ -396,20 +396,6 @@ export default function Sidebar() {
     }
   }, [isSearching, projects, setProjectExpanded]);
 
-  const pendingApprovalByThreadId = useMemo(() => {
-    const map = new Map<ThreadId, boolean>();
-    for (const thread of threads) {
-      map.set(thread.id, derivePendingApprovals(thread.activities).length > 0);
-    }
-    return map;
-  }, [threads]);
-  const pendingUserInputByThreadId = useMemo(() => {
-    const map = new Map<ThreadId, boolean>();
-    for (const thread of threads) {
-      map.set(thread.id, derivePendingUserInputs(thread.activities).length > 0);
-    }
-    return map;
-  }, [threads]);
   const projectCwdById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.cwd] as const)),
     [projects],
@@ -1105,7 +1091,7 @@ export default function Sidebar() {
           { id: "settings", label: "Project settings" },
           { id: "sync-cc", label: "Sync from Claude Code" },
           { id: "push", label: "Push all current changes" },
-          { id: "delete", label: "Delete", destructive: true },
+          { id: "delete", label: "Remove project", destructive: true },
         ],
         position,
       );
@@ -1174,13 +1160,13 @@ export default function Sidebar() {
         toastManager.add({
           type: "warning",
           title: "Project is not empty",
-          description: "Delete all threads in this project before deleting it.",
+          description: "Delete all threads in this project before removing it.",
         });
         return;
       }
 
       const confirmed = await api.dialogs.confirm(
-        [`Delete project "${project.name}"?`, "This action cannot be undone."].join("\n"),
+        `Remove project "${project.name}"?`,
       );
       if (!confirmed) return;
 
@@ -1196,11 +1182,11 @@ export default function Sidebar() {
           projectId,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error deleting project.";
+        const message = error instanceof Error ? error.message : "Unknown error removing project.";
         console.error("Failed to remove project", { projectId, error });
         toastManager.add({
           type: "error",
-          title: `Failed to delete "${project.name}"`,
+          title: `Failed to remove "${project.name}"`,
           description: message,
         });
       }
@@ -1495,7 +1481,7 @@ export default function Sidebar() {
       <Tooltip>
         <TooltipTrigger
           render={
-            <div className="flex min-w-0 flex-1 items-center gap-1 mt-1.5 ml-1 cursor-pointer">
+            <div className="flex min-w-0 flex-1 items-center gap-1 ml-1 cursor-pointer">
               <T3Wordmark />
               <span className="truncate text-sm font-medium tracking-tight text-muted-foreground">
                 Code
@@ -1876,9 +1862,9 @@ export default function Sidebar() {
                                   const threadStatus = resolveThreadStatusPill({
                                     thread,
                                     hasPendingApprovals:
-                                      pendingApprovalByThreadId.get(thread.id) === true,
+                                      derivePendingApprovals(thread.activities).length > 0,
                                     hasPendingUserInput:
-                                      pendingUserInputByThreadId.get(thread.id) === true,
+                                      derivePendingUserInputs(thread.activities).length > 0,
                                   });
                                   const prStatus = prStatusIndicator(
                                     prByThreadId.get(thread.id) ?? null,
