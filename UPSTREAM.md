@@ -5,12 +5,15 @@ Fork: https://github.com/DavidIlie/t3code
 
 ## Last Synced Commit
 
-`223c3dc8` — chore(ci): add and apply fmt:check script (2026-03-10)
+`1e276573` — feat: add fuzzy workspace entry search (2026-03-12)
 
 ## Pending Upstream Commits
 
-<!-- Updated by running: git log --oneline 223c3dc8..upstream/main -->
+<!-- Updated by running: git log --oneline 1e276573..upstream/main -->
 <!-- Each commit gets moved to Integrated or Skipped after processing -->
+
+- `db17ff33` — fix syntax errors from bad merge (already correct in our codebase)
+- `dcd2e5c3` — fix: don't restart the app on normal exits in dev runner
 
 ## Integrated
 
@@ -53,12 +56,56 @@ Fork: https://github.com/DavidIlie/t3code
 - `dcccca3f` — Fix UI overflow for commit/push PR label
 - `9d2c2cae` — Polyfill crypto.randomUUID for non-secure HTTP contexts
 - `767de271` — Use Effect UUID generator as randomUUID fallback
-- `3d358680`..`d28ced8f` — PR checkout/worktree workflow (13 commits: PR checkout UI, branch picker enhancements, fork PR handling, worktree integration, Effect Schema decoders, branch collision avoidance, dialog migration)
+- `3d358680`..`d28ced8f` — PR checkout/worktree workflow (13 commits)
 - `9309edf4` — rm test (cleanup removed checkout-pr test)
 - `afb6e89b` — Shift-click multi-select for sidebar threads
 - `223c3dc8` — Add and apply fmt:check script
+- `b8d07eb8` — Add downloads page and shared marketing layout (marketing only)
+- `9e891d2e` — Display application version in sidebar and settings
+- `2c351726` — fix(contracts): align terminal restart input type across IPC, WS, and server
+- `9becb3f4` — fix(server): skip auth check when Codex CLI uses a custom model provider
+- `1c290767` — fix: use commit as the default git action without origin
+- `1e9bac7f` — Sync desktop native theme with web theme setting
+- `13eeb07f` — prevent squashing some known errors
+- `b37279ca` — fix: prevent Codex overrides footer overflow with long binary paths
+- `dfd41da2` — Fix Windows keybindings for font size: use Ctrl+ to increase
+- `ddd98876` — fix: invalidate workspace entry cache after turn completion and revert
+- `1031a226` — Fix cross-repo PR detection and push remote selection
+- `7d115334` — Stabilize runtime orchestration and fix flaky CI tests
+- `065ef922` — Require bun fmt for completion and clarify Electron history
+- `90d9a2ad` — fix: map gitignore to ini for Shiki syntax highlighting
+- `e8b01263` — fix: checkpoint diffs never resolve (shared PubSub subscription)
+- `7ddcb239` — feat: persist diff panel state across thread navigation
+- `e3d46b68` — feat: split out components from ChatView.tsx
+- `ff6a66dc` — Use live thread activities for sidebar status pills
+- `a01d7127` — fix(web): resolve preferred editor from available editors & useLocalStorage
+- `a33cc8c7` — fix: diff panel unclosable after retainSearchParams middleware
+- `c3bfcc36` — feat: add selective file staging to commit dialog
+- `ed4be2c8` — fix: Fix response duration for agent to no longer always be 1ms
+- `b60a34eb` — fix: fix logo alignment regression on macOS
+- `ab0002f9` — update project removal copy
+- `fcbf3f3c` — Fix new-thread shortcuts when terminal is focused
+- `c52ad29b` — Fix mod+N new thread flow and terminal split limits
+- `f63cda22` — fix: improve business logic in prompt editor and fix cursor bugs in Plan mode
+- `224acebb` — fix(web): add pointer cursor to running stop-generation button
+- `85c174a6` — fix: Linux icon now shows up
+- `b6eba334` — fix: add logging for WebSocket errors
+- `724f54c2` — fix: clean up timeout in PlanSidebar to prevent memory leaks
+- `b496ae83` — fix: add error logging for code highlighting failures
+- `1e276573` — feat: add fuzzy workspace entry search
 
 ## Skipped
 
 - `47117a7d` — Inline SidebarInset base classes (already done in our codebase)
 - `ed518ef1` — Fix provider picker after rebase (removes serviceTierSetting we never added)
+- `bbab1fc8` — chore(release): prepare v0.0.10 (version bump — we have our own versioning)
+- `2ac73565` — chore(release): align package versions before building artifacts (release infra)
+- `82a50da8` — revert formatting on mockServiceWorker.js (formatting only)
+- `9e4e2219` — chore: added eggfriedrice24 to vouched list (upstream-specific)
+- `774cff9a` — ci(github): add pull request size labels (upstream CI)
+- `8636ea0e` — Add maria-rcks to the list of contributors (upstream-specific)
+- `5e23e9c7` — add Ymit24 to vouched list (upstream-specific)
+- `74c22628` — chore: update actions/checkout and actions/github-script (upstream CI)
+- `581d2429` — remove triggers (upstream CI)
+- `d9d0216e` — fix pr size workflow (upstream CI)
+- `db17ff33` — fix syntax errors from bad merge (already correct in our codebase)
