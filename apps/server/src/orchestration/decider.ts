@@ -473,6 +473,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           messageId: command.messageId,
           role: "assistant",
           text: command.delta,
+          ...(command.reasoning !== undefined ? { reasoning: command.reasoning } : {}),
           turnId: command.turnId ?? null,
           streaming: true,
           createdAt: command.createdAt,

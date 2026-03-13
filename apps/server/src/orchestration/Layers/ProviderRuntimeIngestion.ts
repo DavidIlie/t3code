@@ -887,6 +887,10 @@ const make = Effect.gen(function* () {
         event.type === "content.delta" && event.payload.streamKind === "assistant_text"
           ? event.payload.delta
           : undefined;
+      const reasoningDelta =
+        event.type === "content.delta" && event.payload.streamKind === "reasoning_text"
+          ? event.payload.delta
+          : undefined;
       const proposedPlanDelta =
         event.type === "turn.proposed.delta" ? event.payload.delta : undefined;
 
@@ -924,6 +928,26 @@ const make = Effect.gen(function* () {
             createdAt: now,
           });
         }
+      }
+
+      if (reasoningDelta && reasoningDelta.length > 0) {
+        const assistantMessageId = MessageId.makeUnsafe(
+          `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
+        );
+        const turnId = toTurnId(event.turnId);
+        if (turnId) {
+          yield* rememberAssistantMessageId(thread.id, turnId, assistantMessageId);
+        }
+        yield* orchestrationEngine.dispatch({
+          type: "thread.message.assistant.delta",
+          commandId: providerCommandId(event, "reasoning-delta"),
+          threadId: thread.id,
+          messageId: assistantMessageId,
+          delta: "",
+          reasoning: reasoningDelta,
+          ...(turnId ? { turnId } : {}),
+          createdAt: now,
+        });
       }
 
       if (proposedPlanDelta && proposedPlanDelta.length > 0) {

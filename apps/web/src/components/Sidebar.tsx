@@ -1996,6 +1996,17 @@ export default function Sidebar() {
             )}
           </SidebarMenuItem>
         </SidebarMenu>
+        <p className="px-2 text-[10px] text-muted-foreground/40">
+          Opinionated fork by{" "}
+          <a
+            href="https://davidilie.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-muted-foreground/70"
+          >
+            David Ilie
+          </a>
+        </p>
       </SidebarFooter>
 
       {/* Project Settings Dialog */}

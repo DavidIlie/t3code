@@ -10,16 +10,36 @@ import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../chat-scroll";
 import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import ChatMarkdown from "../ChatMarkdown";
-import { Undo2Icon } from "lucide-react";
+import { BrainIcon, ChevronRightIcon, Undo2Icon } from "lucide-react";
 import { Button } from "../ui/button";
 import { clamp } from "effect/Number";
 import { estimateTimelineMessageHeight } from "../timelineHeight";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
+import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "../ui/collapsible";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesTree } from "./ChangedFilesTree";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { MessageCopyButton } from "./MessageCopyButton";
 import { computeMessageDurationStart } from "./MessagesTimeline.logic";
+
+function ThinkingBlock({ thinking, streaming }: { thinking: string; streaming?: boolean }) {
+  return (
+    <Collapsible defaultOpen={streaming}>
+      <CollapsibleTrigger className="flex items-center gap-2 py-1.5 text-[11px] text-muted-foreground/50">
+        <BrainIcon className="size-3.5" />
+        <span className="italic">{streaming ? "Thinking..." : "Thinking"}</span>
+        <ChevronRightIcon className="size-3 transition-transform duration-200 [[data-panel-open]_&]:rotate-90" />
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <div className="border-l-2 border-muted-foreground/15 py-1 pl-3">
+          <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-muted-foreground/40">
+            {thinking}
+          </pre>
+        </div>
+      </CollapsiblePanel>
+    </Collapsible>
+  );
+}
 
 const MAX_VISIBLE_WORK_LOG_ENTRIES = 6;
 const ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
@@ -448,6 +468,12 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                 </div>
               )}
               <div className="min-w-0 px-1 py-0.5">
+                {row.message.reasoning && (
+                  <ThinkingBlock
+                    thinking={row.message.reasoning}
+                    streaming={row.message.streaming && !messageText}
+                  />
+                )}
                 <ChatMarkdown
                   text={messageText}
                   cwd={markdownCwd}

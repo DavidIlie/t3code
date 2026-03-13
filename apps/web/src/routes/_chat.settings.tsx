@@ -759,19 +759,55 @@ function SettingsRouteView() {
             <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">About</h2>
+              </div>
+
+              <div className="mb-4 rounded-lg border border-border bg-background px-4 py-3">
+                <p className="text-sm font-medium text-foreground">
+                  An opinionated fork by{" "}
+                  <a
+                    href="https://davidilie.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-primary"
+                  >
+                    David Ilie
+                  </a>
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Application version and environment information.
+                  Based on{" "}
+                  <a
+                    href="https://github.com/pingdotgg/t3code"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    T3 Code
+                  </a>{" "}
+                  by Ping.gg
                 </p>
               </div>
 
-              <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Version</p>
-                  <p className="text-xs text-muted-foreground">
-                    Current version of the application.
-                  </p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Version</p>
+                  </div>
+                  <code className="text-xs font-medium text-muted-foreground">{APP_VERSION}</code>
                 </div>
-                <code className="text-xs font-medium text-muted-foreground">{APP_VERSION}</code>
+
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Source Code</p>
+                  </div>
+                  <a
+                    href="https://github.com/DavidIlie/t3code"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  >
+                    DavidIlie/t3code
+                  </a>
+                </div>
               </div>
             </section>
 

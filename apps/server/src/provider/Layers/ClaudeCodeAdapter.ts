@@ -165,6 +165,8 @@ interface ClaudeTurnState {
   readonly messageCompleted: boolean;
   readonly emittedTextDelta: boolean;
   readonly fallbackAssistantText: string;
+  readonly isPlanMode: boolean;
+  planTextBuffer: string;
 }
 
 interface PendingApproval {
@@ -849,6 +851,26 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           });
         }
 
+        // Emit plan completion if this turn accumulated plan text.
+        if (turnState.isPlanMode && turnState.planTextBuffer.length > 0) {
+          const planStamp = yield* makeEventStamp();
+          yield* offerRuntimeEvent({
+            type: "turn.proposed.completed",
+            eventId: planStamp.eventId,
+            provider: PROVIDER,
+            createdAt: planStamp.createdAt,
+            threadId: context.session.threadId,
+            turnId: turnState.turnId,
+            payload: {
+              planMarkdown: turnState.planTextBuffer,
+            },
+            providerRefs: {
+              ...providerThreadRef(context),
+              providerTurnId: turnState.turnId,
+            },
+          });
+        }
+
         context.turns.push({
           id: turnState.turnId,
           items: [...turnState.items],
@@ -927,30 +949,52 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
                 emittedTextDelta: true,
               };
             }
-            const stamp = yield* makeEventStamp();
-            yield* offerRuntimeEvent({
-              type: "content.delta",
-              eventId: stamp.eventId,
-              provider: PROVIDER,
-              createdAt: stamp.createdAt,
-              threadId: context.session.threadId,
-              turnId: context.turnState.turnId,
-              itemId: asRuntimeItemId(context.turnState.assistantItemId),
-              payload: {
-                streamKind: streamKindFromDeltaType(event.delta.type),
-                delta: event.delta.text,
-              },
-              providerRefs: {
-                ...providerThreadRef(context),
-                providerTurnId: context.turnState.turnId,
-                providerItemId: ProviderItemId.makeUnsafe(context.turnState.assistantItemId),
-              },
-              raw: {
-                source: "claude.sdk.message",
-                method: "claude/stream_event/content_block_delta",
-                payload: message,
-              },
-            });
+
+            // In plan mode, emit text as plan deltas instead of regular content.
+            if (context.turnState.isPlanMode) {
+              context.turnState.planTextBuffer += event.delta.text;
+              const stamp = yield* makeEventStamp();
+              yield* offerRuntimeEvent({
+                type: "turn.proposed.delta",
+                eventId: stamp.eventId,
+                provider: PROVIDER,
+                createdAt: stamp.createdAt,
+                threadId: context.session.threadId,
+                turnId: context.turnState.turnId,
+                payload: {
+                  delta: event.delta.text,
+                },
+                providerRefs: {
+                  ...providerThreadRef(context),
+                  providerTurnId: context.turnState.turnId,
+                },
+              });
+            } else {
+              const stamp = yield* makeEventStamp();
+              yield* offerRuntimeEvent({
+                type: "content.delta",
+                eventId: stamp.eventId,
+                provider: PROVIDER,
+                createdAt: stamp.createdAt,
+                threadId: context.session.threadId,
+                turnId: context.turnState.turnId,
+                itemId: asRuntimeItemId(context.turnState.assistantItemId),
+                payload: {
+                  streamKind: streamKindFromDeltaType(event.delta.type),
+                  delta: event.delta.text,
+                },
+                providerRefs: {
+                  ...providerThreadRef(context),
+                  providerTurnId: context.turnState.turnId,
+                  providerItemId: ProviderItemId.makeUnsafe(context.turnState.assistantItemId),
+                },
+                raw: {
+                  source: "claude.sdk.message",
+                  method: "claude/stream_event/content_block_delta",
+                  payload: message,
+                },
+              });
+            }
           }
           return;
         }
@@ -1977,6 +2021,8 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           messageCompleted: false,
           emittedTextDelta: false,
           fallbackAssistantText: "",
+          isPlanMode: input.interactionMode === "plan",
+          planTextBuffer: "",
         };
 
         const updatedAt = yield* nowIso;

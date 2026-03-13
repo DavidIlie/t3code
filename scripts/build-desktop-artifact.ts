@@ -467,7 +467,15 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
+      identity: signed ? undefined : null,
     };
+    if (!signed) {
+      // Ad-hoc re-sign the .app so all binaries share a consistent (empty)
+      // Team ID. Without this, macOS code signing monitor rejects launch
+      // due to Team ID mismatch between the main binary and the pre-signed
+      // Electron Framework.
+      buildConfig.afterPack = "./afterPack.cjs";
+    }
   }
 
   if (platform === "linux") {
@@ -644,6 +652,22 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   const stagePackageJsonString = yield* encodeJsonString(stagePackageJson);
   yield* fs.writeFileString(path.join(stageAppDir, "package.json"), `${stagePackageJsonString}\n`);
+
+  // Write afterPack hook for unsigned macOS builds (ad-hoc re-sign).
+  if (options.platform === "mac" && !options.signed) {
+    yield* fs.writeFileString(
+      path.join(stageAppDir, "afterPack.cjs"),
+      [
+        `const { execSync } = require("child_process");`,
+        `const path = require("path");`,
+        `module.exports = async function afterPack(context) {`,
+        `  const appPath = path.join(context.appOutDir, context.packager.appInfo.productFilename + ".app");`,
+        `  console.log("[afterPack] Ad-hoc signing " + appPath);`,
+        `  execSync("codesign --force --deep --sign - " + JSON.stringify(appPath), { stdio: "inherit" });`,
+        `};`,
+      ].join("\n"),
+    );
+  }
 
   yield* Effect.log("[desktop-artifact] Installing staged production dependencies...");
   yield* runCommand(

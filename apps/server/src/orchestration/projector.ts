@@ -349,6 +349,7 @@ export function projectEvent(
             id: payload.messageId,
             role: payload.role,
             text: payload.text,
+            ...(payload.reasoning !== undefined ? { reasoning: payload.reasoning } : {}),
             ...(payload.attachments !== undefined ? { attachments: payload.attachments } : {}),
             turnId: payload.turnId,
             streaming: payload.streaming,
@@ -370,6 +371,13 @@ export function projectEvent(
                       : message.text.length > 0
                         ? message.text
                         : entry.text,
+                    ...(message.reasoning !== undefined
+                      ? {
+                          reasoning: message.streaming
+                            ? `${entry.reasoning ?? ""}${message.reasoning}`
+                            : message.reasoning,
+                        }
+                      : {}),
                     streaming: message.streaming,
                     updatedAt: message.updatedAt,
                     turnId: message.turnId,

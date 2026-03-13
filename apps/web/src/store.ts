@@ -321,6 +321,7 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
             id: message.id,
             role: message.role,
             text: message.text,
+            ...(message.reasoning !== undefined ? { reasoning: message.reasoning } : {}),
             createdAt: message.createdAt,
             streaming: message.streaming,
             ...(message.streaming ? {} : { completedAt: message.updatedAt }),
