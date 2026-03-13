@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   hasUnseenCompletion,
   resolveThreadStatusPill,
+  shouldClearThreadSelectionOnMouseDown,
   shouldOpenProjectFolderPickerImmediately,
 } from "./Sidebar.logic";
 
@@ -60,6 +61,34 @@ describe("hasUnseenCompletion", () => {
         session: null,
       }),
     ).toBe(true);
+  });
+});
+
+describe("shouldClearThreadSelectionOnMouseDown", () => {
+  it("preserves selection for thread items", () => {
+    const child = {
+      closest: (selector: string) =>
+        selector.includes("[data-thread-item]") ? ({} as Element) : null,
+    } as unknown as HTMLElement;
+
+    expect(shouldClearThreadSelectionOnMouseDown(child)).toBe(false);
+  });
+
+  it("preserves selection for thread list toggle controls", () => {
+    const selectionSafe = {
+      closest: (selector: string) =>
+        selector.includes("[data-thread-selection-safe]") ? ({} as Element) : null,
+    } as unknown as HTMLElement;
+
+    expect(shouldClearThreadSelectionOnMouseDown(selectionSafe)).toBe(false);
+  });
+
+  it("clears selection for unrelated sidebar clicks", () => {
+    const unrelated = {
+      closest: () => null,
+    } as unknown as HTMLElement;
+
+    expect(shouldClearThreadSelectionOnMouseDown(unrelated)).toBe(true);
   });
 });
 
