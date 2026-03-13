@@ -5,6 +5,7 @@ import {
   ORCHESTRATION_WS_METHODS,
   type MessageId,
   type OrchestrationReadModel,
+  type OrchestrationSessionStatus,
   type ProjectId,
   type ServerConfig,
   type ThreadId,
@@ -151,6 +152,7 @@ function createSnapshotForTargetUser(options: {
   targetMessageId: MessageId;
   targetText: string;
   targetAttachmentCount?: number;
+  sessionStatus?: OrchestrationSessionStatus;
 }): OrchestrationReadModel {
   const messages: Array<OrchestrationReadModel["threads"][number]["messages"][number]> = [];
 
@@ -220,7 +222,7 @@ function createSnapshotForTargetUser(options: {
         checkpoints: [],
         session: {
           threadId: THREAD_ID,
-          status: "ready",
+          status: options.sessionStatus ?? "ready",
           providerName: "codex",
           runtimeMode: "full-access",
           activeTurnId: null,
@@ -878,6 +880,30 @@ describe("ChatView timeline estimator parity (full app)", () => {
         },
         { timeout: 8_000, interval: 16 },
       );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("renders stop button with pointer cursor during generation", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-target-stop" as MessageId,
+        targetText: "stop cursor target",
+        sessionStatus: "running",
+      }),
+    });
+
+    try {
+      const stopButton = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll("button")).find(
+            (button) => button.getAttribute("aria-label") === "Stop generation",
+          ) as HTMLButtonElement | null,
+        "Unable to find stop generation button.",
+      );
+      expect(getComputedStyle(stopButton).cursor).toBe("pointer");
     } finally {
       await mounted.cleanup();
     }
