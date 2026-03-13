@@ -22,6 +22,25 @@ import Layout from "../layouts/Layout.astro";
 
   <a href="/download" class="other-platforms">Other platforms</a>
 
+  <!-- macOS arch picker dialog -->
+  <dialog id="mac-dialog" class="mac-dialog">
+    <div class="mac-dialog-content">
+      <h2 class="mac-dialog-title">Choose your Mac</h2>
+      <p class="mac-dialog-desc">Not sure? Go to  &gt; About This Mac. Apple Silicon includes M1, M2, M3, and M4 chips.</p>
+      <div class="mac-dialog-buttons">
+        <a id="mac-arm64-btn" href="#" class="mac-dialog-btn">
+          <span class="mac-dialog-btn-label">Apple Silicon</span>
+          <span class="mac-dialog-btn-sub">M1, M2, M3, M4</span>
+        </a>
+        <a id="mac-x64-btn" href="#" class="mac-dialog-btn">
+          <span class="mac-dialog-btn-label">Intel</span>
+          <span class="mac-dialog-btn-sub">x86_64</span>
+        </a>
+      </div>
+      <button id="mac-dialog-close" class="mac-dialog-close" type="button">&times;</button>
+    </div>
+  </dialog>
+
   <div class="screenshot-wrap">
     <img src="/screenshot-home.png" alt="T3 Code (Gurt) — Home" class="screenshot" />
   </div>
@@ -50,37 +69,18 @@ import Layout from "../layouts/Layout.astro";
 <script>
   import { fetchLatestRelease, RELEASES_URL, type ReleaseAsset } from "../lib/releases";
 
-  type Platform = { os: "mac" | "win" | "linux"; label: string; arch?: string };
+  type Platform = { os: "mac" | "win" | "linux"; label: string };
 
   function detectPlatform(): Platform | null {
     const ua = navigator.userAgent;
     if (/Win/i.test(ua)) return { os: "win", label: "Download for Windows" };
-    if (/Mac/i.test(ua)) return { os: "mac", label: "Download for macOS", arch: "arm64" };
+    if (/Mac/i.test(ua)) return { os: "mac", label: "Download for macOS" };
     if (/Linux/i.test(ua)) return { os: "linux", label: "Download for Linux" };
     return null;
   }
 
-  function pickAsset(assets: ReleaseAsset[], platform: Platform): string | null {
-    if (platform.os === "win") {
-      return (
-        assets.find((a) => a.name.endsWith("-x64.exe"))
-          ?.browser_download_url ?? null
-      );
-    }
-    if (platform.os === "mac") {
-      const preferred = assets.find((a) =>
-        a.name.endsWith(`-${platform.arch}.dmg`),
-      );
-      const fallback = assets.find((a) => a.name.endsWith(".dmg"));
-      return (preferred ?? fallback)?.browser_download_url ?? null;
-    }
-    if (platform.os === "linux") {
-      return (
-        assets.find((a) => a.name.endsWith(".AppImage"))
-          ?.browser_download_url ?? null
-      );
-    }
-    return null;
+  function findAsset(assets: ReleaseAsset[], suffix: string): string | null {
+    return assets.find((a) => a.name.endsWith(`-${suffix}`))?.browser_download_url ?? null;
   }
 
   async function init() {
@@ -96,11 +96,43 @@ import Layout from "../layouts/Layout.astro";
 
     try {
       const release = await fetchLatestRelease();
-      const url = pickAsset(release.assets ?? [], platform);
-      if (url) {
-        btn.href = url;
-        btn.removeAttribute("target");
-        btn.removeAttribute("rel");
+      const assets = release.assets ?? [];
+
+      if (platform.os === "mac") {
+        // Show arch picker dialog on click instead of direct download
+        const dialog = document.getElementById("mac-dialog") as HTMLDialogElement | null;
+        const arm64Btn = document.getElementById("mac-arm64-btn") as HTMLAnchorElement | null;
+        const x64Btn = document.getElementById("mac-x64-btn") as HTMLAnchorElement | null;
+        const closeBtn = document.getElementById("mac-dialog-close");
+
+        if (dialog && arm64Btn && x64Btn) {
+          arm64Btn.href = findAsset(assets, "arm64.dmg") ?? RELEASES_URL;
+          x64Btn.href = findAsset(assets, "x64.dmg") ?? RELEASES_URL;
+
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            dialog.showModal();
+          });
+
+          closeBtn?.addEventListener("click", () => dialog.close());
+          dialog.addEventListener("click", (e) => {
+            if (e.target === dialog) dialog.close();
+          });
+        }
+      } else if (platform.os === "win") {
+        const url = findAsset(assets, "x64.exe");
+        if (url) {
+          btn.href = url;
+          btn.removeAttribute("target");
+          btn.removeAttribute("rel");
+        }
+      } else if (platform.os === "linux") {
+        const url = findAsset(assets, "x86_64.AppImage");
+        if (url) {
+          btn.href = url;
+          btn.removeAttribute("target");
+          btn.removeAttribute("rel");
+        }
       }
     } catch {
       btn.href = RELEASES_URL;
@@ -300,6 +332,100 @@ import Layout from "../layouts/Layout.astro";
     font-size: 0.8rem;
     color: var(--fg-muted);
     line-height: 1.55;
+  }
+
+  /* ── macOS dialog ── */
+
+  .mac-dialog {
+    border: none;
+    border-radius: 16px;
+    background: #18181b;
+    color: var(--fg);
+    padding: 0;
+    max-width: 420px;
+    width: calc(100vw - 2rem);
+    box-shadow: 0 40px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+
+  .mac-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+  }
+
+  .mac-dialog-content {
+    padding: 2rem;
+    position: relative;
+  }
+
+  .mac-dialog-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .mac-dialog-desc {
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+  }
+
+  .mac-dialog-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .mac-dialog-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 1rem;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    text-align: center;
+  }
+
+  .mac-dialog-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .mac-dialog-btn:active {
+    transform: translateY(0);
+  }
+
+  .mac-dialog-btn-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  .mac-dialog-btn-sub {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+  }
+
+  .mac-dialog-close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    color: var(--fg-dim);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    transition: color 0.2s, background 0.2s;
+  }
+
+  .mac-dialog-close:hover {
+    color: var(--fg);
+    background: rgba(255, 255, 255, 0.08);
   }
 
   /* ── Mobile ── */
