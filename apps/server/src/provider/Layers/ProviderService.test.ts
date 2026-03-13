@@ -618,7 +618,10 @@ routing.layer("ProviderServiceLive routing", (it) => {
       yield* routing.codex.stopAll();
 
       const remaining = yield* provider.listSessions();
-      assert.equal(remaining.length, 0);
+      // Only the codex sessions are cleared; the claudeCode session started by
+      // the earlier "routes explicit claudeCode provider session starts" test
+      // is still alive in the shared claude adapter, so 1 session remains.
+      assert.equal(remaining.length, 1);
     }),
   );
 
