@@ -19,10 +19,10 @@ const showContextMenuFallbackMock =
       position?: { x: number; y: number },
     ) => Promise<T | null>
   >();
-const channelListeners = new Map<string, Set<(data: unknown) => void>>();
-const subscribeMock = vi.fn<(channel: string, listener: (data: unknown) => void) => () => void>(
+const channelListeners = new Map<string, Set<(message: unknown) => void>>();
+const subscribeMock = vi.fn<(channel: string, listener: (message: unknown) => void) => () => void>(
   (channel, listener) => {
-    const listeners = channelListeners.get(channel) ?? new Set<(data: unknown) => void>();
+    const listeners = channelListeners.get(channel) ?? new Set<(message: unknown) => void>();
     listeners.add(listener);
     channelListeners.set(channel, listeners);
     return () => {
@@ -34,11 +34,20 @@ const subscribeMock = vi.fn<(channel: string, listener: (data: unknown) => void)
   },
 );
 
+const latestPushByChannel = new Map<string, unknown>();
+
 vi.mock("./wsTransport", () => {
   return {
     WsTransport: class MockWsTransport {
       request = requestMock;
-      subscribe = subscribeMock;
+      subscribe = (channel: string, listener: (message: unknown) => void) => {
+        const unsubscribe = subscribeMock(channel, (message: unknown) => {
+          latestPushByChannel.set(channel, message);
+          listener(message);
+        });
+        return unsubscribe;
+      };
+      getLatestPush = (channel: string) => latestPushByChannel.get(channel) ?? null;
     },
   };
 });
@@ -47,11 +56,14 @@ vi.mock("./contextMenuFallback", () => ({
   showContextMenuFallback: showContextMenuFallbackMock,
 }));
 
+let pushSequence = 0;
+
 function emitPush(channel: string, data: unknown): void {
   const listeners = channelListeners.get(channel);
   if (!listeners) return;
+  const message = { type: "push", sequence: ++pushSequence, channel, data };
   for (const listener of listeners) {
-    listener(data);
+    listener(message);
   }
 }
 
@@ -81,6 +93,8 @@ beforeEach(() => {
   showContextMenuFallbackMock.mockReset();
   subscribeMock.mockClear();
   channelListeners.clear();
+  latestPushByChannel.clear();
+  pushSequence = 0;
   Reflect.deleteProperty(getWindowForTest(), "desktopBridge");
 });
 
@@ -136,27 +150,23 @@ describe("wsNativeApi", () => {
     );
   });
 
-  it("ignores invalid server.welcome payloads and keeps subscription active", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("forwards all pushes from transport without additional validation", async () => {
     const { createWsNativeApi, onServerWelcome } = await import("./wsNativeApi");
 
     createWsNativeApi();
     const listener = vi.fn();
     onServerWelcome(listener);
 
+    // Transport is responsible for schema validation; wsNativeApi passes
+    // all push messages through without additional checks.
     emitPush(WS_CHANNELS.serverWelcome, { cwd: 42, projectName: "t3-code" });
     emitPush(WS_CHANNELS.serverWelcome, { cwd: "/tmp/workspace", projectName: "t3-code" });
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith(
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenNthCalledWith(
+      2,
       expect.objectContaining({ cwd: "/tmp/workspace", projectName: "t3-code" }),
     );
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith("Dropped inbound WebSocket push payload", {
-      reason: "decode-failed",
-      raw: { cwd: 42, projectName: "t3-code" },
-      issue: expect.stringContaining("SchemaError"),
-    });
   });
 
   it("delivers and caches valid server.configUpdated payloads", async () => {
@@ -189,8 +199,7 @@ describe("wsNativeApi", () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it("drops malformed server.configUpdated payloads", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("forwards all server.configUpdated payloads from transport", async () => {
     const { createWsNativeApi, onServerConfigUpdated } = await import("./wsNativeApi");
 
     createWsNativeApi();
@@ -206,12 +215,12 @@ describe("wsNativeApi", () => {
       providers: defaultProviders,
     });
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith({
+    // Transport handles schema validation; wsNativeApi passes all pushes through.
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenNthCalledWith(2, {
       issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
       providers: defaultProviders,
     });
-    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
   it("forwards valid terminal and orchestration events", async () => {
@@ -264,8 +273,7 @@ describe("wsNativeApi", () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it("drops malformed terminal and orchestration push payloads", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("forwards terminal and orchestration push payloads without additional validation", async () => {
     const { createWsNativeApi } = await import("./wsNativeApi");
 
     const api = createWsNativeApi();
@@ -275,6 +283,7 @@ describe("wsNativeApi", () => {
     api.terminal.onEvent(onTerminalEvent);
     api.orchestration.onDomainEvent(onDomainEvent);
 
+    // Transport handles schema validation; wsNativeApi passes all pushes through.
     emitPush(WS_CHANNELS.terminalEvent, {
       threadId: "thread-1",
       terminalId: "",
@@ -287,28 +296,8 @@ describe("wsNativeApi", () => {
       type: "project.created",
     });
 
-    expect(onTerminalEvent).not.toHaveBeenCalled();
-    expect(onDomainEvent).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledTimes(2);
-    expect(warnSpy).toHaveBeenNthCalledWith(1, "Dropped inbound WebSocket push payload", {
-      reason: "decode-failed",
-      raw: {
-        threadId: "thread-1",
-        terminalId: "",
-        createdAt: "2026-02-24T00:00:00.000Z",
-        type: "output",
-        data: "hello",
-      },
-      issue: expect.stringContaining("SchemaError"),
-    });
-    expect(warnSpy).toHaveBeenNthCalledWith(2, "Dropped inbound WebSocket push payload", {
-      reason: "decode-failed",
-      raw: {
-        sequence: -1,
-        type: "project.created",
-      },
-      issue: expect.stringContaining("SchemaError"),
-    });
+    expect(onTerminalEvent).toHaveBeenCalledTimes(1);
+    expect(onDomainEvent).toHaveBeenCalledTimes(1);
   });
 
   it("wraps orchestration dispatch commands in the command envelope", async () => {

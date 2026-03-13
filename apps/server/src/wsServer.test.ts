@@ -893,11 +893,14 @@ describe("WebSocket Server", () => {
     const malformedPush = await waitForPush(
       ws,
       WS_CHANNELS.serverConfigUpdated,
-      (push) =>
-        Array.isArray((push.data as { issues?: unknown[] }).issues) &&
-        Boolean((push.data as { issues: Array<{ kind: string }> }).issues[0]) &&
-        (push.data as { issues: Array<{ kind: string }> }).issues[0]!.kind ===
-          "keybindings.malformed-config",
+      (push) => {
+        const data = push.data as unknown as { issues?: Array<{ kind: string }> };
+        return (
+          Array.isArray(data.issues) &&
+          Boolean(data.issues[0]) &&
+          data.issues[0]!.kind === "keybindings.malformed-config"
+        );
+      },
     );
     expect(malformedPush.data).toEqual({
       issues: [{ kind: "keybindings.malformed-config", message: expect.any(String) }],
@@ -908,9 +911,10 @@ describe("WebSocket Server", () => {
     const successPush = await waitForPush(
       ws,
       WS_CHANNELS.serverConfigUpdated,
-      (push) =>
-        Array.isArray((push.data as { issues?: unknown[] }).issues) &&
-        (push.data as { issues: unknown[] }).issues.length === 0,
+      (push) => {
+        const data = push.data as unknown as { issues?: unknown[] };
+        return Array.isArray(data.issues) && data.issues.length === 0;
+      },
     );
     expect(successPush.data).toEqual({ issues: [], providers: defaultProviderStatuses });
   });

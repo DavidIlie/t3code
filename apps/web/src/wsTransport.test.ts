@@ -1,3 +1,4 @@
+import { WS_CHANNELS } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WsTransport } from "./wsTransport";
@@ -90,18 +91,28 @@ describe("WsTransport", () => {
     socket.open();
 
     const listener = vi.fn();
-    transport.subscribe("providers.event", listener);
+    transport.subscribe(WS_CHANNELS.terminalEvent, listener);
 
+    const terminalEvent = {
+      threadId: "thread-1",
+      terminalId: "terminal-1",
+      createdAt: "2026-02-24T00:00:00.000Z",
+      type: "output",
+      data: "hello",
+    };
     socket.serverMessage(
       JSON.stringify({
         type: "push",
-        channel: "providers.event",
-        data: { status: "ok" },
+        sequence: 1,
+        channel: WS_CHANNELS.terminalEvent,
+        data: terminalEvent,
       }),
     );
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith({ status: "ok" });
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "push", channel: WS_CHANNELS.terminalEvent }),
+    );
 
     transport.dispose();
   });
@@ -137,39 +148,74 @@ describe("WsTransport", () => {
     socket.open();
 
     const listener = vi.fn();
-    transport.subscribe("providers.event", listener);
+    transport.subscribe(WS_CHANNELS.terminalEvent, listener);
 
     socket.serverMessage("{ invalid-json");
     socket.serverMessage(
       JSON.stringify({
         type: "push",
+        sequence: 1,
         channel: 42,
         data: { bad: true },
       }),
     );
+    const terminalEvent = {
+      threadId: "thread-1",
+      terminalId: "terminal-1",
+      createdAt: "2026-02-24T00:00:00.000Z",
+      type: "output",
+      data: "hello",
+    };
     socket.serverMessage(
       JSON.stringify({
         type: "push",
-        channel: "providers.event",
-        data: { ok: true },
+        sequence: 2,
+        channel: WS_CHANNELS.terminalEvent,
+        data: terminalEvent,
       }),
     );
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith({ ok: true });
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "push", channel: WS_CHANNELS.terminalEvent }),
+    );
     expect(warnSpy).toHaveBeenCalledTimes(2);
-    expect(warnSpy).toHaveBeenNthCalledWith(1, "Dropped inbound WebSocket envelope", {
-      reason: "decode-failed",
-      issue:
-        "SchemaError: SyntaxError: Expected property name or '}' in JSON at position 2 (line 1 column 3)",
-      raw: "{ invalid-json",
-    });
-    expect(warnSpy).toHaveBeenNthCalledWith(2, "Dropped inbound WebSocket envelope", {
-      reason: "decode-failed",
-      issue: expect.stringContaining("SchemaError: Expected string, got 42"),
-      raw: '{"type":"push","channel":42,"data":{"bad":true}}',
-    });
+    expect(warnSpy).toHaveBeenNthCalledWith(
+      1,
+      "Dropped inbound WebSocket envelope",
+      expect.stringContaining("SyntaxError"),
+    );
+    expect(warnSpy).toHaveBeenNthCalledWith(
+      2,
+      "Dropped inbound WebSocket envelope",
+      expect.stringContaining("channel"),
+    );
 
     transport.dispose();
+  });
+
+  it("queues outbound messages until the socket is open", () => {
+    const transport = new WsTransport("ws://localhost:3020");
+    const socket = getSocket();
+
+    // Send a request before the socket is open — it should be queued.
+    const requestPromise = transport.request("projects.list");
+    expect(socket.sent).toHaveLength(0);
+
+    // Opening the socket should flush the queued message.
+    socket.open();
+    expect(socket.sent).toHaveLength(1);
+
+    // Resolve the pending request so the promise does not dangle.
+    const requestEnvelope = JSON.parse(socket.sent[0]!) as { id: string };
+    socket.serverMessage(
+      JSON.stringify({
+        id: requestEnvelope.id,
+        result: { projects: [] },
+      }),
+    );
+
+    transport.dispose();
+    return requestPromise;
   });
 });

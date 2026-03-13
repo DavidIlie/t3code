@@ -45,6 +45,7 @@ interface TestFixture {
 }
 
 let fixture: TestFixture;
+let pushSequence = 1;
 const wsRequests: WsRequestEnvelope["body"][] = [];
 const wsLink = ws.link(/ws(s)?:\/\/.*/);
 
@@ -303,9 +304,11 @@ function resolveWsRpc(tag: string): unknown {
 
 const worker = setupWorker(
   wsLink.addEventListener("connection", ({ client }) => {
+    pushSequence = 1;
     client.send(
       JSON.stringify({
         type: "push",
+        sequence: pushSequence++,
         channel: WS_CHANNELS.serverWelcome,
         data: fixture.welcome,
       }),
@@ -583,6 +586,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     await setViewport(DEFAULT_VIEWPORT);
     localStorage.clear();
     document.body.innerHTML = "";
+    pushSequence = 1;
     wsRequests.length = 0;
     useComposerDraftStore.setState({
       draftsByThreadId: {},
