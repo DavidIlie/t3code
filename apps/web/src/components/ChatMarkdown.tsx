@@ -213,8 +213,8 @@ function SuspenseShikiCodeBlock({
   const highlightedHtml = useMemo(() => {
     try {
       return highlighter.codeToHtml(code, { lang: language, theme: themeName });
-    } catch {
-      // If highlighting fails for this language, render as plain text
+    } catch (error) {
+      console.warn("codeToHtml failed, falling back to plain text", { lang: language, error });
       return highlighter.codeToHtml(code, { lang: "text", theme: themeName });
     }
   }, [code, highlighter, language, themeName]);
