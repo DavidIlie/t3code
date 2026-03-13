@@ -1,6 +1,11 @@
 import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import type { ModelSlug, ProviderInteractionMode, ProviderKind, RuntimeMode } from "@t3tools/contracts";
+import type {
+  ModelSlug,
+  ProviderInteractionMode,
+  ProviderKind,
+  RuntimeMode,
+} from "@t3tools/contracts";
 import { PROVIDER_SEND_TURN_MAX_IMAGE_BYTES } from "@t3tools/contracts";
 import { getDefaultModel } from "@t3tools/shared/model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -70,7 +75,8 @@ export default function ProjectLandingPage() {
     (settings.defaultModel as ModelSlug) || getDefaultModel(settings.defaultProvider),
   );
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("full-access");
-  const [interactionMode, setInteractionMode] = useState<ProviderInteractionMode>(DEFAULT_INTERACTION_MODE);
+  const [interactionMode, setInteractionMode] =
+    useState<ProviderInteractionMode>(DEFAULT_INTERACTION_MODE);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const queryClient = useQueryClient();
@@ -163,7 +169,22 @@ export default function ProjectLandingPage() {
         params: { threadId },
       });
     },
-    [project, navigate, setProjectDraftThreadId, setComposerPrompt, setComposerDraftProvider, setComposerDraftModel, setComposerDraftRuntimeMode, setComposerDraftInteractionMode, addDraftImages, selectedProvider, selectedModel, runtimeMode, interactionMode, prompt],
+    [
+      project,
+      navigate,
+      setProjectDraftThreadId,
+      setComposerPrompt,
+      setComposerDraftProvider,
+      setComposerDraftModel,
+      setComposerDraftRuntimeMode,
+      setComposerDraftInteractionMode,
+      addDraftImages,
+      selectedProvider,
+      selectedModel,
+      runtimeMode,
+      interactionMode,
+      prompt,
+    ],
   );
 
   const createThreadWithPrompt = useCallback(
@@ -195,7 +216,21 @@ export default function ProjectLandingPage() {
         params: { threadId },
       });
     },
-    [project, navigate, setProjectDraftThreadId, setComposerPrompt, setComposerDraftProvider, setComposerDraftModel, setComposerDraftRuntimeMode, setComposerDraftInteractionMode, markAutoSubmit, selectedProvider, selectedModel, runtimeMode, interactionMode],
+    [
+      project,
+      navigate,
+      setProjectDraftThreadId,
+      setComposerPrompt,
+      setComposerDraftProvider,
+      setComposerDraftModel,
+      setComposerDraftRuntimeMode,
+      setComposerDraftInteractionMode,
+      markAutoSubmit,
+      selectedProvider,
+      selectedModel,
+      runtimeMode,
+      interactionMode,
+    ],
   );
 
   const handleSubmit = useCallback(
@@ -253,193 +288,190 @@ export default function ProjectLandingPage() {
       )}
 
       <div className="flex flex-1 items-center justify-center overflow-y-auto px-4">
-      <div className="w-full max-w-2xl space-y-8 my-12">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground/60 font-mono">{project.cwd}</p>
-        </div>
-
-        {/* Central input */}
-        <div>
-          <div className="relative">
-            <textarea
-              ref={textareaRef}
-              className="w-full resize-none rounded-xl border border-border bg-secondary px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground/40 focus:border-ring focus:outline-none"
-              placeholder="What can I help you with?"
-              rows={3}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-              onPaste={(e) => {
-                const files = Array.from(e.clipboardData.files).filter((f) =>
-                  f.type.startsWith("image/"),
-                );
-                if (files.length > 0) {
-                  e.preventDefault();
-                  void handlePasteImages(files);
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="absolute bottom-3 right-3 rounded-lg bg-primary p-1.5 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
-              disabled={!prompt.trim()}
-              onClick={() => handleSubmit()}
-            >
-              <SendIcon className="size-4" />
-            </button>
+        <div className="w-full max-w-2xl space-y-8 my-12">
+          {/* Header */}
+          <div className="text-center">
+            <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
+            <p className="mt-1 text-sm text-muted-foreground/60 font-mono">{project.cwd}</p>
           </div>
-          <div className="mt-1.5 flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <ProviderModelPicker
-                provider={selectedProvider}
-                model={selectedModel}
-                lockedProvider={null}
-                modelOptionsByProvider={modelOptionsByProvider}
-                onProviderModelChange={(provider, model) => {
-                  setSelectedProvider(provider);
-                  setSelectedModel(model);
-                  updateSettings({ defaultProvider: provider, defaultModel: model });
+
+          {/* Central input */}
+          <div>
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                className="w-full resize-none rounded-xl border border-border bg-secondary px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground/40 focus:border-ring focus:outline-none"
+                placeholder="What can I help you with?"
+                rows={3}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                }}
+                onPaste={(e) => {
+                  const files = Array.from(e.clipboardData.files).filter((f) =>
+                    f.type.startsWith("image/"),
+                  );
+                  if (files.length > 0) {
+                    e.preventDefault();
+                    void handlePasteImages(files);
+                  }
                 }}
               />
               <button
                 type="button"
-                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-                onClick={() =>
-                  setInteractionMode(
-                    interactionMode === "plan" ? "default" : "plan",
-                  )
-                }
-                title={
-                  interactionMode === "plan"
-                    ? "Plan mode — click to return to agent mode"
-                    : "Agent mode — click to enter plan mode"
-                }
+                className="absolute bottom-3 right-3 rounded-lg bg-primary p-1.5 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+                disabled={!prompt.trim()}
+                onClick={() => handleSubmit()}
               >
-                <BotIcon className="size-3.5" />
-                <span className="hidden sm:inline">
-                  {interactionMode === "plan" ? "Plan" : "Agent"}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-                onClick={() =>
-                  setRuntimeMode(
-                    runtimeMode === "full-access" ? "approval-required" : "full-access",
-                  )
-                }
-                title={
-                  runtimeMode === "full-access"
-                    ? "Full access — click to require approvals"
-                    : "Approval required — click for full access"
-                }
-              >
-                {runtimeMode === "full-access" ? (
-                  <LockOpenIcon className="size-3.5" />
-                ) : (
-                  <LockIcon className="size-3.5" />
-                )}
-                <span className="hidden sm:inline">
-                  {runtimeMode === "full-access" ? "Full access" : "Supervised"}
-                </span>
+                <SendIcon className="size-4" />
               </button>
             </div>
-            <button
-              type="button"
-              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-              onClick={() => void openTerminal()}
-            >
-              <TerminalIcon className="size-3.5" />
-              <span>Terminal</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Quick actions */}
-        <div>
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/50">
-            Quick actions
-          </h2>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {QUICK_ACTIONS.map((action) => (
-              <button
-                key={action.label}
-                type="button"
-                className="flex items-center gap-2 rounded-lg border border-border/50 bg-secondary/50 px-3 py-2.5 text-left text-xs text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-                onClick={() => void createThreadWithPrompt(action.prompt)}
-              >
-                <action.icon className="size-4 shrink-0 text-muted-foreground/70" />
-                <span>{action.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Git actions */}
-        {gitStatus && (
-          <div>
-            <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/50">
-              Git
-            </h2>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="flex items-center gap-2 rounded-lg border border-border/50 bg-secondary/50 px-3 py-2.5 text-xs text-foreground/80 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:pointer-events-none"
-                disabled={!hasGitChanges || isPushing}
-                onClick={() => void handlePush()}
-              >
-                <CloudUploadIcon className="size-4 shrink-0 text-muted-foreground/70" />
-                <span>{isPushing ? "Pushing..." : "Push to GitHub"}</span>
-              </button>
-              {gitStatus.branch && (
-                <span className="text-[10px] text-muted-foreground/50">
-                  {gitStatus.branch}
-                  {gitStatus.hasWorkingTreeChanges && " (uncommitted changes)"}
-                  {gitStatus.aheadCount > 0 && ` (${gitStatus.aheadCount} ahead)`}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Recent threads */}
-        {projectThreads.length > 0 && (
-          <div>
-            <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/50">
-              Recent threads
-            </h2>
-            <div className="space-y-1">
-              {projectThreads.map((thread) => (
+            <div className="mt-1.5 flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <ProviderModelPicker
+                  provider={selectedProvider}
+                  model={selectedModel}
+                  lockedProvider={null}
+                  modelOptionsByProvider={modelOptionsByProvider}
+                  onProviderModelChange={(provider, model) => {
+                    setSelectedProvider(provider);
+                    setSelectedModel(model);
+                    updateSettings({ defaultProvider: provider, defaultModel: model });
+                  }}
+                />
                 <button
-                  key={thread.id}
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-foreground/80 transition-colors hover:bg-accent"
+                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
                   onClick={() =>
-                    void navigate({
-                      to: "/$threadId",
-                      params: { threadId: thread.id },
-                    })
+                    setInteractionMode(interactionMode === "plan" ? "default" : "plan")
+                  }
+                  title={
+                    interactionMode === "plan"
+                      ? "Plan mode — click to return to agent mode"
+                      : "Agent mode — click to enter plan mode"
                   }
                 >
-                  <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground/40">
-                    {new Date(thread.createdAt).toLocaleDateString()}
+                  <BotIcon className="size-3.5" />
+                  <span className="hidden sm:inline">
+                    {interactionMode === "plan" ? "Plan" : "Agent"}
                   </span>
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+                  onClick={() =>
+                    setRuntimeMode(
+                      runtimeMode === "full-access" ? "approval-required" : "full-access",
+                    )
+                  }
+                  title={
+                    runtimeMode === "full-access"
+                      ? "Full access — click to require approvals"
+                      : "Approval required — click for full access"
+                  }
+                >
+                  {runtimeMode === "full-access" ? (
+                    <LockOpenIcon className="size-3.5" />
+                  ) : (
+                    <LockIcon className="size-3.5" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {runtimeMode === "full-access" ? "Full access" : "Supervised"}
+                  </span>
+                </button>
+              </div>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+                onClick={() => void openTerminal()}
+              >
+                <TerminalIcon className="size-3.5" />
+                <span>Terminal</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick actions */}
+          <div>
+            <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/50">
+              Quick actions
+            </h2>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {QUICK_ACTIONS.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  className="flex items-center gap-2 rounded-lg border border-border/50 bg-secondary/50 px-3 py-2.5 text-left text-xs text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                  onClick={() => void createThreadWithPrompt(action.prompt)}
+                >
+                  <action.icon className="size-4 shrink-0 text-muted-foreground/70" />
+                  <span>{action.label}</span>
                 </button>
               ))}
             </div>
           </div>
-        )}
-      </div>
+
+          {/* Git actions */}
+          {gitStatus && (
+            <div>
+              <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/50">
+                Git
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 rounded-lg border border-border/50 bg-secondary/50 px-3 py-2.5 text-xs text-foreground/80 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:pointer-events-none"
+                  disabled={!hasGitChanges || isPushing}
+                  onClick={() => void handlePush()}
+                >
+                  <CloudUploadIcon className="size-4 shrink-0 text-muted-foreground/70" />
+                  <span>{isPushing ? "Pushing..." : "Push to GitHub"}</span>
+                </button>
+                {gitStatus.branch && (
+                  <span className="text-[10px] text-muted-foreground/50">
+                    {gitStatus.branch}
+                    {gitStatus.hasWorkingTreeChanges && " (uncommitted changes)"}
+                    {gitStatus.aheadCount > 0 && ` (${gitStatus.aheadCount} ahead)`}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Recent threads */}
+          {projectThreads.length > 0 && (
+            <div>
+              <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/50">
+                Recent threads
+              </h2>
+              <div className="space-y-1">
+                {projectThreads.map((thread) => (
+                  <button
+                    key={thread.id}
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-foreground/80 transition-colors hover:bg-accent"
+                    onClick={() =>
+                      void navigate({
+                        to: "/$threadId",
+                        params: { threadId: thread.id },
+                      })
+                    }
+                  >
+                    <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground/40">
+                      {new Date(thread.createdAt).toLocaleDateString()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-

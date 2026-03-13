@@ -106,20 +106,15 @@ const SOURCE_COLORS: Record<string, string> = {
   cursor: "bg-amber-500/15 text-amber-400",
 };
 
-function McpServerCard({
-  server,
-  onRemove,
-}: {
-  server: McpServerInfo;
-  onRemove: () => void;
-}) {
+function McpServerCard({ server, onRemove }: { server: McpServerInfo; onRemove: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const canRemove = server.source !== "plugin" && server.source !== "cursor";
   const badgeColor = SOURCE_COLORS[server.source] ?? "bg-secondary text-muted-foreground";
 
-  const detail = server.type === "stdio" && server.command
-    ? `${server.command}${server.args?.length ? ` ${server.args.join(" ")}` : ""}`
-    : server.url ?? null;
+  const detail =
+    server.type === "stdio" && server.command
+      ? `${server.command}${server.args?.length ? ` ${server.args.join(" ")}` : ""}`
+      : (server.url ?? null);
 
   return (
     <div className="rounded-lg border border-border/50 bg-secondary/30 transition-colors hover:bg-secondary/60">
@@ -129,7 +124,9 @@ function McpServerCard({
         onClick={() => setExpanded(!expanded)}
       >
         <ServerIcon className="size-4 shrink-0 text-blue-500" />
-        <span className="flex-1 truncate text-xs font-medium text-foreground/90">{server.name}</span>
+        <span className="flex-1 truncate text-xs font-medium text-foreground/90">
+          {server.name}
+        </span>
         <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${badgeColor}`}>
           {server.source}
         </span>
@@ -216,9 +213,11 @@ function McpServerGroupedList({
         groups.set(server.source, [server]);
       }
     }
-    return SOURCE_ORDER
-      .filter((key) => groups.has(key))
-      .map((key) => ({ source: key, label: SOURCE_LABELS[key] ?? key, servers: groups.get(key)! }));
+    return SOURCE_ORDER.filter((key) => groups.has(key)).map((key) => ({
+      source: key,
+      label: SOURCE_LABELS[key] ?? key,
+      servers: groups.get(key)!,
+    }));
   }, [filtered]);
 
   if (filtered.length === 0) {
@@ -274,13 +273,11 @@ export default function ProjectSettingsDialog({
 
   // ── Icon state ──
   const [iconTab, setIconTab] = useState<"favicon" | "lucide" | "emoji">(
-    currentIcon?.type === "lucide"
-      ? "lucide"
-      : currentIcon?.type === "emoji"
-        ? "emoji"
-        : "favicon",
+    currentIcon?.type === "lucide" ? "lucide" : currentIcon?.type === "emoji" ? "emoji" : "favicon",
   );
-  const [emojiInput, setEmojiInput] = useState(currentIcon?.type === "emoji" ? currentIcon.value : "");
+  const [emojiInput, setEmojiInput] = useState(
+    currentIcon?.type === "emoji" ? currentIcon.value : "",
+  );
   const [selectedLucideIcon, setSelectedLucideIcon] = useState(
     currentIcon?.type === "lucide" ? currentIcon.value : "",
   );
@@ -355,7 +352,17 @@ export default function ProjectSettingsDialog({
     } finally {
       setIsAdding(false);
     }
-  }, [addName, addType, addCommand, addArgs, addUrl, addScope, projectCwd, loadMcpServers, queryClient]);
+  }, [
+    addName,
+    addType,
+    addCommand,
+    addArgs,
+    addUrl,
+    addScope,
+    projectCwd,
+    loadMcpServers,
+    queryClient,
+  ]);
 
   const handleRemoveMcp = useCallback(
     async (name: string, source: string) => {
@@ -484,11 +491,7 @@ export default function ProjectSettingsDialog({
                   className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
                   onClick={() => setShowAddMcp(!showAddMcp)}
                 >
-                  {showAddMcp ? (
-                    <XIcon className="size-3.5" />
-                  ) : (
-                    <PlusIcon className="size-3.5" />
-                  )}
+                  {showAddMcp ? <XIcon className="size-3.5" /> : <PlusIcon className="size-3.5" />}
                   <span>{showAddMcp ? "Cancel" : "Add"}</span>
                 </button>
               </div>

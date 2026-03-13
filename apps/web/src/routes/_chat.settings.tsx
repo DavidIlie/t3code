@@ -5,10 +5,7 @@ import { type ProviderKind } from "@t3tools/contracts";
 import { getDefaultModel, getModelOptions, normalizeModelSlug } from "@t3tools/shared/model";
 import { TerminalIcon } from "lucide-react";
 
-import {
-  MAX_CUSTOM_MODEL_LENGTH,
-  useAppSettings,
-} from "../appSettings";
+import { MAX_CUSTOM_MODEL_LENGTH, useAppSettings } from "../appSettings";
 import { AVAILABLE_PROVIDER_OPTIONS } from "../components/ProviderModelPicker";
 import { isElectron } from "../env";
 import { useTheme } from "../hooks/useTheme";
@@ -17,7 +14,13 @@ import { ensureNativeApi } from "../nativeApi";
 import { preferredTerminalEditor } from "../terminal-links";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../components/ui/select";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { SidebarInset } from "~/components/ui/sidebar";
 import McpStatusPanel from "../components/McpStatusPanel";
@@ -122,14 +125,19 @@ function TerminalSettingsSection({
     if (fetchedRef.current) return;
     fetchedRef.current = true;
     const api = ensureNativeApi();
-    void api.terminal.listShells().then((result) => {
-      setShells(result.shells);
-      setSystemDefault(result.defaultShell);
-    }).catch(() => {});
+    void api.terminal
+      .listShells()
+      .then((result) => {
+        setShells(result.shells);
+        setSystemDefault(result.defaultShell);
+      })
+      .catch(() => {});
   }, []);
 
   const currentShell = settings.defaultShell || systemDefault || "";
-  const currentLabel = shells.find((s) => s.path === currentShell)?.label ?? (currentShell ? currentShell.split("/").pop() : "System default");
+  const currentLabel =
+    shells.find((s) => s.path === currentShell)?.label ??
+    (currentShell ? currentShell.split("/").pop() : "System default");
 
   return (
     <section className="rounded-2xl border border-border bg-card p-5">
@@ -231,54 +239,62 @@ function SettingsRouteView() {
       });
   }, [keybindingsConfigPath]);
 
-  const addCustomModel = useCallback((provider: ProviderKind) => {
-    const customModelInput = customModelInputByProvider[provider];
-    const customModels = getCustomModelsForProvider(settings, provider);
-    const normalized = normalizeModelSlug(customModelInput, provider);
-    if (!normalized) {
-      setCustomModelErrorByProvider((existing) => ({
-        ...existing,
-        [provider]: "Enter a model slug.",
-      }));
-      return;
-    }
-    if (getModelOptions(provider).some((option) => option.slug === normalized)) {
-      setCustomModelErrorByProvider((existing) => ({
-        ...existing,
-        [provider]: "That model is already built in.",
-      }));
-      return;
-    }
-    if (normalized.length > MAX_CUSTOM_MODEL_LENGTH) {
-      setCustomModelErrorByProvider((existing) => ({
-        ...existing,
-        [provider]: `Model slugs must be ${MAX_CUSTOM_MODEL_LENGTH} characters or less.`,
-      }));
-      return;
-    }
-    if (customModels.includes(normalized)) {
-      setCustomModelErrorByProvider((existing) => ({
-        ...existing,
-        [provider]: "That custom model is already saved.",
-      }));
-      return;
-    }
+  const addCustomModel = useCallback(
+    (provider: ProviderKind) => {
+      const customModelInput = customModelInputByProvider[provider];
+      const customModels = getCustomModelsForProvider(settings, provider);
+      const normalized = normalizeModelSlug(customModelInput, provider);
+      if (!normalized) {
+        setCustomModelErrorByProvider((existing) => ({
+          ...existing,
+          [provider]: "Enter a model slug.",
+        }));
+        return;
+      }
+      if (getModelOptions(provider).some((option) => option.slug === normalized)) {
+        setCustomModelErrorByProvider((existing) => ({
+          ...existing,
+          [provider]: "That model is already built in.",
+        }));
+        return;
+      }
+      if (normalized.length > MAX_CUSTOM_MODEL_LENGTH) {
+        setCustomModelErrorByProvider((existing) => ({
+          ...existing,
+          [provider]: `Model slugs must be ${MAX_CUSTOM_MODEL_LENGTH} characters or less.`,
+        }));
+        return;
+      }
+      if (customModels.includes(normalized)) {
+        setCustomModelErrorByProvider((existing) => ({
+          ...existing,
+          [provider]: "That custom model is already saved.",
+        }));
+        return;
+      }
 
-    updateSettings(patchCustomModels(provider, [...customModels, normalized]));
-    setCustomModelInputByProvider((existing) => ({
-      ...existing,
-      [provider]: "",
-    }));
-    setCustomModelErrorByProvider((existing) => ({
-      ...existing,
-      [provider]: null,
-    }));
-  }, [customModelInputByProvider, settings, updateSettings]);
+      updateSettings(patchCustomModels(provider, [...customModels, normalized]));
+      setCustomModelInputByProvider((existing) => ({
+        ...existing,
+        [provider]: "",
+      }));
+      setCustomModelErrorByProvider((existing) => ({
+        ...existing,
+        [provider]: null,
+      }));
+    },
+    [customModelInputByProvider, settings, updateSettings],
+  );
 
   const removeCustomModel = useCallback(
     (provider: ProviderKind, slug: string) => {
       const customModels = getCustomModelsForProvider(settings, provider);
-      updateSettings(patchCustomModels(provider, customModels.filter((model) => model !== slug)));
+      updateSettings(
+        patchCustomModels(
+          provider,
+          customModels.filter((model) => model !== slug),
+        ),
+      );
       setCustomModelErrorByProvider((existing) => ({
         ...existing,
         [provider]: null,
@@ -555,10 +571,9 @@ function SettingsRouteView() {
                                 variant="outline"
                                 onClick={() =>
                                   updateSettings(
-                                    patchCustomModels(
-                                      provider,
-                                      [...getDefaultCustomModelsForProvider(defaults, provider)],
-                                    ),
+                                    patchCustomModels(provider, [
+                                      ...getDefaultCustomModelsForProvider(defaults, provider),
+                                    ]),
                                   )
                                 }
                               >
@@ -645,7 +660,11 @@ function SettingsRouteView() {
               ) : null}
             </section>
 
-            <TerminalSettingsSection settings={settings} updateSettings={updateSettings} defaults={defaults} />
+            <TerminalSettingsSection
+              settings={settings}
+              updateSettings={updateSettings}
+              defaults={defaults}
+            />
 
             <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">

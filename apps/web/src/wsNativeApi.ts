@@ -99,9 +99,9 @@ export function createWsNativeApi(): NativeApi {
     if (!payload) return;
     lastWelcome = payload;
     if (payload.mcpServers && payload.mcpServers.length > 0) {
-      useProviderSessionStore.getState().setGlobalMcpServers(
-        payload.mcpServers.map((s) => ({ name: s.name, status: s.status })),
-      );
+      useProviderSessionStore
+        .getState()
+        .setGlobalMcpServers(payload.mcpServers.map((s) => ({ name: s.name, status: s.status })));
     }
     for (const listener of welcomeListeners) {
       try {
@@ -139,12 +139,14 @@ export function createWsNativeApi(): NativeApi {
   transport.subscribe(WS_CHANNELS.mcpStatusUpdated, (data) => {
     const raw = data as { threadId?: string; status?: unknown[] };
     if (raw.threadId && Array.isArray(raw.status)) {
-      useProviderSessionStore
-        .getState()
-        .setMcpStatus(
-          raw.threadId,
-          raw.status as Array<{ name: string; status: string; tools?: Array<{ name: string; description?: string }> }>,
-        );
+      useProviderSessionStore.getState().setMcpStatus(
+        raw.threadId,
+        raw.status as Array<{
+          name: string;
+          status: string;
+          tools?: Array<{ name: string; description?: string }>;
+        }>,
+      );
     }
   });
   transport.subscribe(WS_CHANNELS.providerAccountUpdated, (data) => {

@@ -6,10 +6,7 @@ import {
   AlertCircleIcon,
   RefreshCwIcon,
 } from "lucide-react";
-import {
-  useProviderSessionStore,
-  type McpServerInfo,
-} from "../providerSessionStore";
+import { useProviderSessionStore, type McpServerInfo } from "../providerSessionStore";
 import { useStore } from "../store";
 
 function statusBadge(status: string) {
@@ -50,12 +47,8 @@ function statusBadge(status: string) {
 
 export default function McpStatusPanel() {
   const threads = useStore((s) => s.threads);
-  const mcpStatusByThread = useProviderSessionStore(
-    (s) => s.mcpStatusByThread,
-  );
-  const globalMcpServers = useProviderSessionStore(
-    (s) => s.globalMcpServers,
-  );
+  const mcpStatusByThread = useProviderSessionStore((s) => s.mcpStatusByThread);
+  const globalMcpServers = useProviderSessionStore((s) => s.globalMcpServers);
 
   // Aggregate MCP servers from all active threads, with global config as fallback
   const allServers = useMemo(() => {
@@ -83,8 +76,8 @@ export default function McpStatusPanel() {
           <h3 className="text-sm font-medium">MCP Servers</h3>
         </div>
         <p className="text-xs text-muted-foreground/60">
-          No MCP servers detected. Start a Claude Code session with MCP servers
-          configured to see their status here.
+          No MCP servers detected. Start a Claude Code session with MCP servers configured to see
+          their status here.
         </p>
       </div>
     );
@@ -108,17 +101,11 @@ export default function McpStatusPanel() {
               key={server.name}
               className="flex items-start gap-2 rounded-md border border-border/50 bg-secondary/50 px-3 py-2"
             >
-              <BadgeIcon
-                className={`mt-0.5 size-3.5 shrink-0 ${badge.className}`}
-              />
+              <BadgeIcon className={`mt-0.5 size-3.5 shrink-0 ${badge.className}`} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="truncate text-xs font-medium">
-                    {server.name}
-                  </span>
-                  <span className={`text-[10px] ${badge.className}`}>
-                    {badge.label}
-                  </span>
+                  <span className="truncate text-xs font-medium">{server.name}</span>
+                  <span className={`text-[10px] ${badge.className}`}>{badge.label}</span>
                 </div>
                 {server.tools && server.tools.length > 0 && (
                   <div className="mt-1 text-[10px] text-muted-foreground/60">
@@ -128,9 +115,7 @@ export default function McpStatusPanel() {
                       .slice(0, 5)
                       .map((t) => t.name)
                       .join(", ")}
-                    {server.tools.length > 5
-                      ? `, +${server.tools.length - 5} more`
-                      : ""}
+                    {server.tools.length > 5 ? `, +${server.tools.length - 5} more` : ""}
                   </div>
                 )}
               </div>

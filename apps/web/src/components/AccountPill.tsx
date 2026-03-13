@@ -22,8 +22,7 @@ function planColorClass(label: string): string {
   if (lower.includes("max")) return "bg-purple-500/15 text-purple-600 dark:text-purple-400";
   if (lower.includes("pro")) return "bg-blue-500/15 text-blue-600 dark:text-blue-400";
   if (lower.includes("team")) return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
-  if (lower.includes("enterprise"))
-    return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
+  if (lower.includes("enterprise")) return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
   return "bg-muted text-muted-foreground";
 }
 

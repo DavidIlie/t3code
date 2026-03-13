@@ -7,13 +7,8 @@ import {
 } from "@t3tools/shared/model";
 import { ChevronDownIcon } from "lucide-react";
 
-import {
-  getAppModelOptions,
-} from "../appSettings";
-import {
-  type ProviderPickerKind,
-  PROVIDER_OPTIONS,
-} from "../session-logic";
+import { getAppModelOptions } from "../appSettings";
+import { type ProviderPickerKind, PROVIDER_OPTIONS } from "../session-logic";
 import { cn } from "~/lib/utils";
 import { Button } from "./ui/button";
 import {
@@ -29,20 +24,11 @@ import {
   MenuSubTrigger,
   MenuTrigger,
 } from "./ui/menu";
-import {
-  ClaudeAI,
-  CursorIcon,
-  Gemini,
-  type Icon,
-  OpenAI,
-  OpenCodeIcon,
-} from "./Icons";
+import { ClaudeAI, CursorIcon, Gemini, type Icon, OpenAI, OpenCodeIcon } from "./Icons";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function isAvailableProviderOption(
-  option: (typeof PROVIDER_OPTIONS)[number],
-): option is {
+function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): option is {
   value: ProviderKind;
   label: string;
   available: true;
@@ -161,10 +147,7 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
         }
       >
         <span
-          className={cn(
-            "flex min-w-0 items-center gap-2",
-            props.compact ? "max-w-36" : undefined,
-          )}
+          className={cn("flex min-w-0 items-center gap-2", props.compact ? "max-w-36" : undefined)}
         >
           <ProviderIcon
             aria-hidden="true"

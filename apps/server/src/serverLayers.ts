@@ -85,9 +85,7 @@ export function makeServerRuntimeServicesLayer() {
       return false;
     }
   })();
-  const textGenerationLayer = hasCodexCli
-    ? CodexTextGenerationLive
-    : ClaudeTextGenerationLive;
+  const textGenerationLayer = hasCodexCli ? CodexTextGenerationLive : ClaudeTextGenerationLive;
 
   const orchestrationLayer = OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationProjectionPipelineLive),

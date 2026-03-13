@@ -121,9 +121,7 @@ function OutputSection({ result }: { result: { content: unknown; isError: boolea
   return (
     <div
       className={`mt-2 rounded-md border px-2 py-1.5 ${
-        result.isError
-          ? "border-rose-500/30 bg-rose-950/10"
-          : "border-border/70 bg-background/50"
+        result.isError ? "border-rose-500/30 bg-rose-950/10" : "border-border/70 bg-background/50"
       }`}
     >
       <div className="mb-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground/50">
@@ -305,8 +303,7 @@ function ToolBody({ block }: { block: ImportedToolUseBlock }) {
 
 export default function ToolCallCard({ block }: { block: ImportedToolUseBlock }) {
   const Icon = toolIcon(block.name);
-  const displayName =
-    block.name.startsWith("mcp__") ? formatMcpToolName(block.name) : block.name;
+  const displayName = block.name.startsWith("mcp__") ? formatMcpToolName(block.name) : block.name;
   const description = toolDescription(block);
 
   const isError = block.result?.isError ?? false;
@@ -314,9 +311,7 @@ export default function ToolCallCard({ block }: { block: ImportedToolUseBlock })
   return (
     <div
       className={`rounded-lg border px-3 py-2.5 ${
-        isError
-          ? "border-rose-500/30 bg-rose-950/10"
-          : "border-border/60 bg-card/30"
+        isError ? "border-rose-500/30 bg-rose-950/10" : "border-border/60 bg-card/30"
       }`}
     >
       <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground/70">

@@ -101,12 +101,19 @@ function parseRemoteNames(stdout: string): ReadonlyArray<string> {
 }
 
 function sanitizeRemoteName(value: string): string {
-  const sanitized = value.trim().replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  const sanitized = value
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   return sanitized.length > 0 ? sanitized : "fork";
 }
 
 function normalizeRemoteUrl(value: string): string {
-  return value.trim().replace(/\/+$/g, "").replace(/\.git$/i, "").toLowerCase();
+  return value
+    .trim()
+    .replace(/\/+$/g, "")
+    .replace(/\.git$/i, "")
+    .toLowerCase();
 }
 
 function parseRemoteFetchUrls(stdout: string): Map<string, string> {
@@ -1073,14 +1080,9 @@ const makeGitCore = Effect.gen(function* () {
         ? ["worktree", "add", "-b", input.newBranch, worktreePath, input.branch]
         : ["worktree", "add", worktreePath, input.branch];
 
-      yield* executeGit(
-        "GitCore.createWorktree",
-        input.cwd,
-        args,
-        {
-          fallbackErrorMessage: "git worktree add failed",
-        },
-      );
+      yield* executeGit("GitCore.createWorktree", input.cwd, args, {
+        fallbackErrorMessage: "git worktree add failed",
+      });
 
       return {
         worktree: {
@@ -1113,10 +1115,11 @@ const makeGitCore = Effect.gen(function* () {
     Effect.gen(function* () {
       const preferredName = sanitizeRemoteName(input.preferredName);
       const normalizedTargetUrl = normalizeRemoteUrl(input.url);
-      const remoteFetchUrls = yield* runGitStdout("GitCore.ensureRemote.listRemoteUrls", input.cwd, [
-        "remote",
-        "-v",
-      ]).pipe(Effect.map((stdout) => parseRemoteFetchUrls(stdout)));
+      const remoteFetchUrls = yield* runGitStdout(
+        "GitCore.ensureRemote.listRemoteUrls",
+        input.cwd,
+        ["remote", "-v"],
+      ).pipe(Effect.map((stdout) => parseRemoteFetchUrls(stdout)));
 
       for (const [remoteName, remoteUrl] of remoteFetchUrls.entries()) {
         if (normalizeRemoteUrl(remoteUrl) === normalizedTargetUrl) {
@@ -1131,7 +1134,12 @@ const makeGitCore = Effect.gen(function* () {
         suffix += 1;
       }
 
-      yield* runGit("GitCore.ensureRemote.add", input.cwd, ["remote", "add", remoteName, input.url]);
+      yield* runGit("GitCore.ensureRemote.add", input.cwd, [
+        "remote",
+        "add",
+        remoteName,
+        input.url,
+      ]);
       return remoteName;
     });
 

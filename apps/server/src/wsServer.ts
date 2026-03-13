@@ -198,8 +198,7 @@ function stripRequestTag<T extends { _tag: string }>(body: T) {
 
 function messageFromCause(cause: Cause.Cause<unknown>): string {
   const squashed = Cause.squash(cause);
-  const message =
-    squashed instanceof Error ? squashed.message.trim() : String(squashed).trim();
+  const message = squashed instanceof Error ? squashed.message.trim() : String(squashed).trim();
   return message.length > 0 ? message : Cause.pretty(cause);
 }
 
@@ -330,10 +329,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       } satisfies OrchestrationCommand;
     }
 
-    if (
-      input.command.type === "project.meta.update" &&
-      input.command.workspaceRoot !== undefined
-    ) {
+    if (input.command.type === "project.meta.update" && input.command.workspaceRoot !== undefined) {
       return {
         ...input.command,
         workspaceRoot: yield* normalizeProjectWorkspaceRoot(input.command.workspaceRoot),
@@ -929,9 +925,11 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         const trackedIds = yield* providerService.listTrackedClaudeSessionIds();
         const trackedSet = new Set(trackedIds);
 
-        const activeSessions = yield* providerService.listSessions().pipe(
-          Effect.catch(() => Effect.succeed([] as ReadonlyArray<{ resumeCursor?: unknown }>)),
-        );
+        const activeSessions = yield* providerService
+          .listSessions()
+          .pipe(
+            Effect.catch(() => Effect.succeed([] as ReadonlyArray<{ resumeCursor?: unknown }>)),
+          );
         for (const session of activeSessions) {
           const cursor = session.resumeCursor as { resume?: string } | null | undefined;
           if (cursor && typeof cursor.resume === "string") {
@@ -969,9 +967,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
 
             // First pass: extract all content blocks per message
             const parsed = messages.map((msg) => {
-              const message = msg.message as
-                | { content?: unknown | unknown[] }
-                | undefined;
+              const message = msg.message as { content?: unknown | unknown[] } | undefined;
               const contentArr = Array.isArray(message?.content)
                 ? (message!.content as ContentBlock[])
                 : typeof message?.content === "string"
@@ -1017,10 +1013,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
             });
 
             // Second pass: pair tool_result blocks with their tool_use blocks
-            const resultMap = new Map<
-              string,
-              { content: unknown; isError: boolean }
-            >();
+            const resultMap = new Map<string, { content: unknown; isError: boolean }>();
             for (const msg of parsed) {
               for (const block of msg.blocks) {
                 if (block.type === "tool_result") {
@@ -1076,13 +1069,17 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
           const homeDir = process.env.HOME || process.env.USERPROFILE || cwd;
 
           function addFromMcpServersRecord(
-            record: Record<string, { type?: string; command?: string; args?: string[]; url?: string }>,
+            record: Record<
+              string,
+              { type?: string; command?: string; args?: string[]; url?: string }
+            >,
             source: string,
           ) {
             for (const [name, config] of Object.entries(record)) {
               if (seen.has(name)) continue;
               seen.add(name);
-              const inferredType = config.type ?? (config.command ? "stdio" : config.url ? "sse" : "unknown");
+              const inferredType =
+                config.type ?? (config.command ? "stdio" : config.url ? "sse" : "unknown");
               servers.push({
                 name,
                 type: inferredType,
@@ -1105,7 +1102,10 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
             if (!exists) continue;
             const raw = yield* fileSystem.readFileString(configPath);
             const parsed = JSON.parse(raw) as {
-              mcpServers?: Record<string, { type?: string; command?: string; args?: string[]; url?: string }>;
+              mcpServers?: Record<
+                string,
+                { type?: string; command?: string; args?: string[]; url?: string }
+              >;
             };
             if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
               addFromMcpServersRecord(parsed.mcpServers, "project");
@@ -1118,7 +1118,10 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
           if (globalMcpExists) {
             const raw = yield* fileSystem.readFileString(globalMcpPath);
             const parsed = JSON.parse(raw) as {
-              mcpServers?: Record<string, { type?: string; command?: string; args?: string[]; url?: string }>;
+              mcpServers?: Record<
+                string,
+                { type?: string; command?: string; args?: string[]; url?: string }
+              >;
             };
             if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
               addFromMcpServersRecord(parsed.mcpServers, "global");
@@ -1132,16 +1135,30 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
             const raw = yield* fileSystem.readFileString(cursorMcpPath);
             try {
               const parsed = JSON.parse(raw) as {
-                mcpServers?: Record<string, { type?: string; command?: string; args?: string[]; url?: string }>;
-              } & Record<string, { type?: string; command?: string; args?: string[]; url?: string }>;
+                mcpServers?: Record<
+                  string,
+                  { type?: string; command?: string; args?: string[]; url?: string }
+                >;
+              } & Record<
+                string,
+                { type?: string; command?: string; args?: string[]; url?: string }
+              >;
               // Cursor uses { mcpServers: {...} } OR top-level { name: config }
               if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
                 addFromMcpServersRecord(parsed.mcpServers, "cursor");
               } else {
                 // Top-level keys are server names
-                const topLevel: Record<string, { type?: string; command?: string; args?: string[]; url?: string }> = {};
+                const topLevel: Record<
+                  string,
+                  { type?: string; command?: string; args?: string[]; url?: string }
+                > = {};
                 for (const [key, val] of Object.entries(parsed)) {
-                  if (key !== "mcpServers" && val && typeof val === "object" && ("command" in val || "url" in val)) {
+                  if (
+                    key !== "mcpServers" &&
+                    val &&
+                    typeof val === "object" &&
+                    ("command" in val || "url" in val)
+                  ) {
                     topLevel[key] = val;
                   }
                 }
@@ -1171,7 +1188,10 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
                 if (!pluginMcpExists) continue;
                 const raw = yield* fileSystem.readFileString(pluginMcp);
                 try {
-                  const parsed = JSON.parse(raw) as Record<string, { type?: string; command?: string; args?: string[]; url?: string }>;
+                  const parsed = JSON.parse(raw) as Record<
+                    string,
+                    { type?: string; command?: string; args?: string[]; url?: string }
+                  >;
                   for (const [name, config] of Object.entries(parsed)) {
                     if (seen.has(name)) continue;
                     seen.add(name);
@@ -1278,19 +1298,13 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
             return { ok: true };
           }
 
-          if (
-            typeof existing.mcpServers === "object" &&
-            existing.mcpServers !== null
-          ) {
+          if (typeof existing.mcpServers === "object" && existing.mcpServers !== null) {
             const mcpServers = { ...(existing.mcpServers as Record<string, unknown>) };
             delete mcpServers[body.name];
             existing = { ...existing, mcpServers };
           }
 
-          yield* fileSystem.writeFileString(
-            configPath,
-            JSON.stringify(existing, null, 2) + "\n",
-          );
+          yield* fileSystem.writeFileString(configPath, JSON.stringify(existing, null, 2) + "\n");
           return { ok: true };
         }).pipe(
           Effect.mapError(
@@ -1309,14 +1323,16 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
           relativePath: body.relativePath,
           path,
         });
-        yield* fileSystem.makeDirectory(path.dirname(target.absolutePath), { recursive: true }).pipe(
-          Effect.mapError(
-            (cause) =>
-              new RouteRequestError({
-                message: `Failed to prepare workspace path: ${String(cause)}`,
-              }),
-          ),
-        );
+        yield* fileSystem
+          .makeDirectory(path.dirname(target.absolutePath), { recursive: true })
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new RouteRequestError({
+                  message: `Failed to prepare workspace path: ${String(cause)}`,
+                }),
+            ),
+          );
         yield* fileSystem.writeFileString(target.absolutePath, body.contents).pipe(
           Effect.mapError(
             (cause) =>
@@ -1456,7 +1472,11 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
           }
         }
 
-        return { shells, defaultShell: process.env.SHELL ?? (process.platform === "win32" ? "cmd.exe" : "/bin/bash") };
+        return {
+          shells,
+          defaultShell:
+            process.env.SHELL ?? (process.platform === "win32" ? "cmd.exe" : "/bin/bash"),
+        };
       }
 
       case WS_METHODS.serverGetConfig:

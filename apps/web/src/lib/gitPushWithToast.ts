@@ -54,8 +54,7 @@ export async function gitPushWithToast(opts: {
     clearInterval(stageInterval);
 
     const nothingDone =
-      result.commit.status === "skipped_no_changes" &&
-      result.push.status === "skipped_up_to_date";
+      result.commit.status === "skipped_no_changes" && result.push.status === "skipped_up_to_date";
 
     if (nothingDone) {
       toastManager.update(toastId, {

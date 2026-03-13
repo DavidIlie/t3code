@@ -23,8 +23,10 @@ const BuildArch = Schema.Literals(["arm64", "x64", "universal"]);
 const RepoRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("..", import.meta.url))),
 );
-const ProductionMacIconSource = Effect.zipWith(RepoRoot, Effect.service(Path.Path), (repoRoot, path) =>
-  path.join(repoRoot, BRAND_ASSET_PATHS.productionMacIconPng),
+const ProductionMacIconSource = Effect.zipWith(
+  RepoRoot,
+  Effect.service(Path.Path),
+  (repoRoot, path) => path.join(repoRoot, BRAND_ASSET_PATHS.productionMacIconPng),
 );
 const ProductionLinuxIconSource = Effect.zipWith(
   RepoRoot,
@@ -453,9 +455,7 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     directories: {
       buildResources: "apps/desktop/resources",
     },
-    asarUnpack: [
-      "node_modules/@anthropic-ai/claude-agent-sdk/**",
-    ],
+    asarUnpack: ["node_modules/@anthropic-ai/claude-agent-sdk/**"],
   };
   const publishConfig = resolveGitHubPublishConfig();
   if (publishConfig) {

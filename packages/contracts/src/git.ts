@@ -5,7 +5,12 @@ const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 
 // Domain Types
 
-export const GitStackedAction = Schema.Literals(["commit", "commit_push", "commit_push_pr", "push"]);
+export const GitStackedAction = Schema.Literals([
+  "commit",
+  "commit_push",
+  "commit_push_pr",
+  "push",
+]);
 export type GitStackedAction = typeof GitStackedAction.Type;
 const GitCommitStepStatus = Schema.Literals(["created", "skipped_no_changes"]);
 const GitPushStepStatus = Schema.Literals([
@@ -14,11 +19,7 @@ const GitPushStepStatus = Schema.Literals([
   "skipped_up_to_date",
 ]);
 const GitBranchStepStatus = Schema.Literals(["created", "skipped_not_requested"]);
-const GitPrStepStatus = Schema.Literals([
-  "created",
-  "opened_existing",
-  "skipped_not_requested",
-]);
+const GitPrStepStatus = Schema.Literals(["created", "opened_existing", "skipped_not_requested"]);
 const GitStatusPrState = Schema.Literals(["open", "closed", "merged"]);
 const GitPullRequestReference = TrimmedNonEmptyStringSchema;
 const GitPullRequestState = Schema.Literals(["open", "closed", "merged"]);

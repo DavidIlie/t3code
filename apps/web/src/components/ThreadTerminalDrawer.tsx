@@ -1,5 +1,12 @@
 import { FitAddon } from "@xterm/addon-fit";
-import { ChevronDownIcon, Plus, SquareSplitHorizontal, TerminalSquareIcon, Trash2, XIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  Plus,
+  SquareSplitHorizontal,
+  TerminalSquareIcon,
+  Trash2,
+  XIcon,
+} from "lucide-react";
 import { type ThreadId } from "@t3tools/contracts";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import {
@@ -508,16 +515,21 @@ export default function ThreadTerminalDrawer({
   onCloseTerminal,
   onHeightChange,
 }: ThreadTerminalDrawerProps) {
-  const [availableShells, setAvailableShells] = useState<Array<{ path: string; label: string }>>([]);
+  const [availableShells, setAvailableShells] = useState<Array<{ path: string; label: string }>>(
+    [],
+  );
   const shellsFetchedRef = useRef(false);
   const fetchShells = useCallback(() => {
     if (shellsFetchedRef.current) return;
     shellsFetchedRef.current = true;
     const api = readNativeApi();
     if (!api) return;
-    void api.terminal.listShells().then((result) => {
-      setAvailableShells(result.shells);
-    }).catch(() => {});
+    void api.terminal
+      .listShells()
+      .then((result) => {
+        setAvailableShells(result.shells);
+      })
+      .catch(() => {});
   }, []);
 
   const [drawerHeight, setDrawerHeight] = useState(() => clampDrawerHeight(height));
@@ -780,14 +792,10 @@ export default function ThreadTerminalDrawer({
                 }`}
                 onClick={() => onActiveTerminalChange(terminalId)}
               >
-                {isActive && (
-                  <div className="absolute inset-x-0 top-0 h-px bg-primary" />
-                )}
+                {isActive && <div className="absolute inset-x-0 top-0 h-px bg-primary" />}
                 <TerminalSquareIcon className="size-3.5 shrink-0" />
                 <span className="truncate">{label}</span>
-                {isRunning && (
-                  <span className="size-1.5 shrink-0 rounded-full bg-green-500" />
-                )}
+                {isRunning && <span className="size-1.5 shrink-0 rounded-full bg-green-500" />}
                 {normalizedTerminalIds.length > 1 && (
                   <button
                     type="button"
@@ -820,7 +828,11 @@ export default function ThreadTerminalDrawer({
             >
               <Plus className="size-3.5" />
             </TerminalActionButton>
-            <Menu onOpenChange={(open) => { if (open) fetchShells(); }}>
+            <Menu
+              onOpenChange={(open) => {
+                if (open) fetchShells();
+              }}
+            >
               <MenuTrigger
                 render={
                   <button

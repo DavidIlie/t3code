@@ -15,7 +15,9 @@ const BUILT_IN_MODEL_SLUGS_BY_PROVIDER: Record<ProviderKind, ReadonlySet<string>
 const ProviderKindSchema = Schema.Literals(["codex", "claudeCode", "cursor"]);
 
 const AppSettingsSchema = Schema.Struct({
-  defaultProvider: ProviderKindSchema.pipe(Schema.withConstructorDefault(() => Option.some("codex"))),
+  defaultProvider: ProviderKindSchema.pipe(
+    Schema.withConstructorDefault(() => Option.some("codex")),
+  ),
   codexBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(
     Schema.withConstructorDefault(() => Option.some("")),
   ),
@@ -40,10 +42,13 @@ const AppSettingsSchema = Schema.Struct({
   pinnedProjectIds: Schema.Array(Schema.String).pipe(
     Schema.withConstructorDefault(() => Option.some([])),
   ),
-  projectIcons: Schema.Record(Schema.String, Schema.Struct({
-    type: Schema.Literals(["lucide", "emoji", "file", "favicon"]),
-    value: Schema.String,
-  })).pipe(Schema.withConstructorDefault(() => Option.some({}))),
+  projectIcons: Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      type: Schema.Literals(["lucide", "emoji", "file", "favicon"]),
+      value: Schema.String,
+    }),
+  ).pipe(Schema.withConstructorDefault(() => Option.some({}))),
 });
 export type AppSettings = typeof AppSettingsSchema.Type;
 export interface AppModelOption {

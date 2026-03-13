@@ -31,13 +31,7 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
 
 // ── Block renderer ──────────────────────────────────────────────────
 
-function AssistantBlock({
-  block,
-  cwd,
-}: {
-  block: ImportedContentBlock;
-  cwd: string | undefined;
-}) {
+function AssistantBlock({ block, cwd }: { block: ImportedContentBlock; cwd: string | undefined }) {
   switch (block.type) {
     case "text":
       return (

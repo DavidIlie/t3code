@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import type { ModelSlug, ProviderInteractionMode, ProviderKind, RuntimeMode } from "@t3tools/contracts";
+import type {
+  ModelSlug,
+  ProviderInteractionMode,
+  ProviderKind,
+  RuntimeMode,
+} from "@t3tools/contracts";
 import { PROVIDER_SEND_TURN_MAX_IMAGE_BYTES } from "@t3tools/contracts";
 import { getDefaultModel } from "@t3tools/shared/model";
 import { BotIcon, LockIcon, LockOpenIcon, SendIcon, TerminalIcon } from "lucide-react";
@@ -11,7 +16,9 @@ import { useComposerDraftStore, type ComposerImageAttachment } from "../composer
 import { useAppSettings } from "../appSettings";
 import { newThreadId } from "../lib/utils";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE } from "../types";
-import ProviderModelPicker, { getCustomModelOptionsByProvider } from "../components/ProviderModelPicker";
+import ProviderModelPicker, {
+  getCustomModelOptionsByProvider,
+} from "../components/ProviderModelPicker";
 import { SidebarTrigger } from "../components/ui/sidebar";
 import { useTerminalStateStore } from "../terminalStateStore";
 
@@ -26,7 +33,8 @@ function HomePage() {
     (settings.defaultModel as ModelSlug) || getDefaultModel(settings.defaultProvider),
   );
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>(DEFAULT_RUNTIME_MODE);
-  const [interactionMode, setInteractionMode] = useState<ProviderInteractionMode>(DEFAULT_INTERACTION_MODE);
+  const [interactionMode, setInteractionMode] =
+    useState<ProviderInteractionMode>(DEFAULT_INTERACTION_MODE);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const setProjectDraftThreadId = useComposerDraftStore((s) => s.setProjectDraftThreadId);
@@ -48,9 +56,7 @@ function HomePage() {
   const recentThreads = useMemo(
     () =>
       threads
-        .toSorted(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        )
+        .toSorted((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 10),
     [threads],
   );
@@ -104,7 +110,22 @@ function HomePage() {
         params: { threadId },
       });
     },
-    [homeProject, navigate, setProjectDraftThreadId, setComposerPrompt, setComposerDraftProvider, setComposerDraftModel, setComposerDraftRuntimeMode, setComposerDraftInteractionMode, addDraftImages, selectedProvider, selectedModel, runtimeMode, interactionMode, prompt],
+    [
+      homeProject,
+      navigate,
+      setProjectDraftThreadId,
+      setComposerPrompt,
+      setComposerDraftProvider,
+      setComposerDraftModel,
+      setComposerDraftRuntimeMode,
+      setComposerDraftInteractionMode,
+      addDraftImages,
+      selectedProvider,
+      selectedModel,
+      runtimeMode,
+      interactionMode,
+      prompt,
+    ],
   );
 
   const createThreadWithPrompt = useCallback(
@@ -134,7 +155,21 @@ function HomePage() {
         params: { threadId },
       });
     },
-    [homeProject, navigate, setProjectDraftThreadId, setComposerPrompt, setComposerDraftProvider, setComposerDraftModel, setComposerDraftRuntimeMode, setComposerDraftInteractionMode, markAutoSubmit, selectedProvider, selectedModel, runtimeMode, interactionMode],
+    [
+      homeProject,
+      navigate,
+      setProjectDraftThreadId,
+      setComposerPrompt,
+      setComposerDraftProvider,
+      setComposerDraftModel,
+      setComposerDraftRuntimeMode,
+      setComposerDraftInteractionMode,
+      markAutoSubmit,
+      selectedProvider,
+      selectedModel,
+      runtimeMode,
+      interactionMode,
+    ],
   );
 
   const handleSubmit = useCallback(
@@ -245,9 +280,7 @@ function HomePage() {
                     type="button"
                     className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
                     onClick={() =>
-                      setInteractionMode(
-                        interactionMode === "plan" ? "default" : "plan",
-                      )
+                      setInteractionMode(interactionMode === "plan" ? "default" : "plan")
                     }
                     title={
                       interactionMode === "plan"
@@ -295,9 +328,7 @@ function HomePage() {
               </div>
             </div>
           ) : (
-            <p className="text-center text-sm text-muted-foreground/40">
-              Loading...
-            </p>
+            <p className="text-center text-sm text-muted-foreground/40">Loading...</p>
           )}
 
           {/* Your projects */}

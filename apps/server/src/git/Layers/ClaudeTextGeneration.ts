@@ -104,10 +104,7 @@ function runClaudePrompt(
     catch: (error) =>
       new TextGenerationError({
         operation,
-        detail:
-          error instanceof Error
-            ? error.message
-            : "Unknown error running claude CLI",
+        detail: error instanceof Error ? error.message : "Unknown error running claude CLI",
         cause: error,
       }),
   });
@@ -203,9 +200,7 @@ const makeClaudeTextGeneration = (() => {
         return {
           subject: sanitizeCommitSubject(subject),
           body: body.trim(),
-          ...(wantsBranch && branch
-            ? { branch: sanitizeFeatureBranchName(branch) }
-            : {}),
+          ...(wantsBranch && branch ? { branch: sanitizeFeatureBranchName(branch) } : {}),
         } satisfies CommitMessageGenerationResult;
       }),
     );

@@ -1,16 +1,19 @@
 # Skill: Upstream Sync
 
 ## Overview
+
 Bring new commits from `pingdotgg/t3code` (upstream) into our fork (`DavidIlie/t3code`).
 Every commit is MANUALLY implemented — never cherry-picked. We read the upstream diff, understand
 it, and re-implement it carefully against our current codebase.
 
 ## Prerequisites
+
 - Remote `upstream` points to `pingdotgg/t3code`
 - Remote `origin` points to `DavidIlie/t3code`
 - `UPSTREAM.md` tracks the last synced commit hash
 
 ## Critical Rules
+
 1. **NEVER cherry-pick or git merge upstream commits.** Always manually implement changes.
 2. **NEVER push to GitHub** unless the user explicitly says to. All work stays local.
 3. **Take your time.** Thoroughness and correctness over speed. Hours are fine.
@@ -33,12 +36,14 @@ it, and re-implement it carefully against our current codebase.
 ## Workflow
 
 ### Step 1: Fetch and list pending commits
+
 ```bash
 git fetch upstream main
 git log --oneline <last-synced-hash>..upstream/main
 ```
 
 ### Step 2: Process each commit (oldest first)
+
 For each upstream commit hash:
 
 1. **Study the commit thoroughly**:
@@ -67,14 +72,17 @@ For each upstream commit hash:
 6. **Update UPSTREAM.md**: Move commit to Integrated or Skipped section with notes
 
 ### Step 3: After processing a batch of commits
+
 1. Run full verification: `bun typecheck && bun lint && bun run test`
 2. Update "Last Synced Commit" in UPSTREAM.md to the latest processed hash
 3. Commit UPSTREAM.md update
 4. **DO NOT push** — wait for user to say when
 
 ## Claude Code Adaptation Guide
+
 When encountering Codex-specific features, check these files to understand
 how to make equivalent functionality work for Claude:
+
 - `apps/server/src/provider/Layers/ClaudeCodeAdapter.ts` — Claude Code session lifecycle
 - `apps/server/src/provider/Services/ProviderService.ts` — Provider abstraction layer
 - `apps/server/src/provider/Services/ProviderSessionDirectory.ts` — Session bindings
