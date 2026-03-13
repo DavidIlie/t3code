@@ -21,6 +21,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { render } from "vitest-browser-react";
 
 import { useComposerDraftStore } from "../composerDraftStore";
+import { isMacPlatform } from "../lib/utils";
 import { getRouter } from "../router";
 import { useStore } from "../store";
 import { estimateTimelineMessageHeight } from "./timelineHeight";
@@ -87,6 +88,7 @@ interface MountedChatView {
   cleanup: () => Promise<void>;
   measureUserRow: (targetMessageId: MessageId) => Promise<UserRowMeasurement>;
   setViewport: (viewport: ViewportSpec) => Promise<void>;
+  router: ReturnType<typeof getRouter>;
 }
 
 function isoAt(offsetSeconds: number): string {
@@ -259,7 +261,8 @@ function createDraftOnlySnapshot(): OrchestrationReadModel {
   };
 }
 
-function resolveWsRpc(tag: string): unknown {
+function resolveWsRpc(body: WsRequestEnvelope["body"]): unknown {
+  const tag = body._tag;
   if (tag === ORCHESTRATION_WS_METHODS.getSnapshot) {
     return fixture.snapshot;
   }
@@ -301,6 +304,19 @@ function resolveWsRpc(tag: string): unknown {
       truncated: false,
     };
   }
+  if (tag === WS_METHODS.terminalOpen) {
+    return {
+      threadId: typeof body.threadId === "string" ? body.threadId : THREAD_ID,
+      terminalId: typeof body.terminalId === "string" ? body.terminalId : "default",
+      cwd: typeof body.cwd === "string" ? body.cwd : "/repo/project",
+      status: "running",
+      pid: 123,
+      history: "",
+      exitCode: null,
+      exitSignal: null,
+      updatedAt: NOW_ISO,
+    };
+  }
   return {};
 }
 
@@ -330,7 +346,7 @@ const worker = setupWorker(
       client.send(
         JSON.stringify({
           id: request.id,
-          result: resolveWsRpc(method),
+          result: resolveWsRpc(request.body),
         }),
       );
     });
@@ -543,6 +559,60 @@ async function mountChatView(options: {
       await setViewport(viewport);
       await waitForProductionStyles();
     },
+    router,
+  };
+}
+
+const UUID_ROUTE_RE = /^\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+async function waitForURL(
+  router: ReturnType<typeof getRouter>,
+  predicate: (path: string) => boolean,
+  errorMessage: string,
+): Promise<string> {
+  let matchedPath: string | null = null;
+  await vi.waitFor(
+    () => {
+      const currentPath = router.state.location.pathname;
+      if (predicate(currentPath)) {
+        matchedPath = currentPath;
+      }
+      expect(matchedPath, errorMessage).not.toBeNull();
+    },
+    { timeout: 8_000, interval: 16 },
+  );
+  return matchedPath!;
+}
+
+function addThreadToSnapshot(
+  snapshot: OrchestrationReadModel,
+  threadId: ThreadId,
+): OrchestrationReadModel {
+  const existingThread = snapshot.threads[0];
+  if (!existingThread) return snapshot;
+  return {
+    ...snapshot,
+    snapshotSequence: snapshot.snapshotSequence + 1,
+    threads: [
+      ...snapshot.threads,
+      {
+        ...existingThread,
+        id: threadId,
+        title: `Promoted thread ${threadId}`,
+        messages: [
+          {
+            id: `msg-promoted-${threadId}` as MessageId,
+            role: "user",
+            text: "promoted message",
+            turnId: null,
+            streaming: false,
+            createdAt: NOW_ISO,
+            updatedAt: NOW_ISO,
+          },
+        ],
+      },
+    ],
+    updatedAt: NOW_ISO,
   };
 }
 
@@ -880,6 +950,130 @@ describe("ChatView timeline estimator parity (full app)", () => {
         },
         { timeout: 8_000, interval: 16 },
       );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("creates a new thread from the global chat.new shortcut", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-chat-shortcut-test" as MessageId,
+        targetText: "chat shortcut test",
+      }),
+      configureFixture: (nextFixture) => {
+        nextFixture.serverConfig = {
+          ...nextFixture.serverConfig,
+          keybindings: [
+            {
+              command: "chat.new",
+              shortcut: {
+                key: "o",
+                metaKey: false,
+                ctrlKey: false,
+                shiftKey: true,
+                altKey: false,
+                modKey: true,
+              },
+              whenAst: {
+                type: "not",
+                node: { type: "identifier", name: "terminalFocus" },
+              },
+            },
+          ],
+        };
+      },
+    });
+
+    try {
+      const useMetaForMod = isMacPlatform(navigator.platform);
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "o",
+          shiftKey: true,
+          metaKey: useMetaForMod,
+          ctrlKey: !useMetaForMod,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should have changed to a new draft thread UUID from the shortcut.",
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("creates a fresh draft after the previous draft thread is promoted", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-promoted-draft-shortcut-test" as MessageId,
+        targetText: "promoted draft shortcut test",
+      }),
+      configureFixture: (nextFixture) => {
+        nextFixture.serverConfig = {
+          ...nextFixture.serverConfig,
+          keybindings: [
+            {
+              command: "chat.new",
+              shortcut: {
+                key: "o",
+                metaKey: false,
+                ctrlKey: false,
+                shiftKey: true,
+                altKey: false,
+                modKey: true,
+              },
+              whenAst: {
+                type: "not",
+                node: { type: "identifier", name: "terminalFocus" },
+              },
+            },
+          ],
+        };
+      },
+    });
+
+    try {
+      const newThreadButton = page.getByTestId("new-thread-button");
+      await expect.element(newThreadButton).toBeInTheDocument();
+      await newThreadButton.click();
+
+      const promotedThreadPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should have changed to a promoted draft thread UUID.",
+      );
+      const promotedThreadId = promotedThreadPath.slice(1) as ThreadId;
+
+      const { syncServerReadModel } = useStore.getState();
+      syncServerReadModel(addThreadToSnapshot(fixture.snapshot, promotedThreadId));
+      useComposerDraftStore.getState().clearDraftThread(promotedThreadId);
+
+      const useMetaForMod = isMacPlatform(navigator.platform);
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "o",
+          shiftKey: true,
+          metaKey: useMetaForMod,
+          ctrlKey: !useMetaForMod,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      const freshThreadPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path) && path !== promotedThreadPath,
+        "Shortcut should create a fresh draft instead of reusing the promoted thread.",
+      );
+      expect(freshThreadPath).not.toBe(promotedThreadPath);
     } finally {
       await mounted.cleanup();
     }

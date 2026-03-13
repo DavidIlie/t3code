@@ -30,8 +30,8 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  DEFAULT_RUNTIME_MODE,
   DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_RUNTIME_MODE,
   type DesktopUpdateState,
   ProjectId,
   ThreadId,
@@ -43,16 +43,17 @@ import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { useAppSettings } from "../appSettings";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
-import { isMacPlatform, newCommandId, newProjectId, newThreadId } from "../lib/utils";
+import { isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
 import { useStore } from "../store";
-import { isChatNewLocalShortcut, isChatNewShortcut, shortcutLabelForCommand } from "../keybindings";
+import { shortcutLabelForCommand } from "../keybindings";
 import { derivePendingApprovals, derivePendingUserInputs } from "../session-logic";
 import { gitRemoveWorktreeMutationOptions, gitStatusQueryOptions } from "../lib/gitReactQuery";
 import { gitPushWithToast } from "../lib/gitPushWithToast";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { readNativeApi } from "../nativeApi";
-import { type DraftThreadEnvMode, useComposerDraftStore } from "../composerDraftStore";
+import { useComposerDraftStore } from "../composerDraftStore";
+import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { toastManager } from "./ui/toast";
 import {
@@ -79,6 +80,7 @@ import {
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
 import {
+  resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
   shouldOpenProjectFolderPickerImmediately,
@@ -311,11 +313,8 @@ export default function Sidebar() {
   const getDraftThreadByProjectId = useComposerDraftStore(
     (store) => store.getDraftThreadByProjectId,
   );
-  const getDraftThread = useComposerDraftStore((store) => store.getDraftThread);
   const terminalStateByThreadId = useTerminalStateStore((state) => state.terminalStateByThreadId);
   const clearTerminalState = useTerminalStateStore((state) => state.clearTerminalState);
-  const setProjectDraftThreadId = useComposerDraftStore((store) => store.setProjectDraftThreadId);
-  const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const clearProjectDraftThreadId = useComposerDraftStore(
     (store) => store.clearProjectDraftThreadId,
   );
@@ -326,6 +325,7 @@ export default function Sidebar() {
   const isOnSettings = useLocation({ select: (loc) => loc.pathname === "/settings" });
   const isOnHome = useLocation({ select: (loc) => loc.pathname === "/" });
   const { settings: appSettings, updateSettings } = useAppSettings();
+  const { handleNewThread } = useHandleNewThread();
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
@@ -469,80 +469,6 @@ export default function Sidebar() {
       });
     });
   }, []);
-
-  const handleNewThread = useCallback(
-    (
-      projectId: ProjectId,
-      options?: {
-        branch?: string | null;
-        worktreePath?: string | null;
-        envMode?: DraftThreadEnvMode;
-      },
-    ): Promise<void> => {
-      const hasBranchOption = options?.branch !== undefined;
-      const hasWorktreePathOption = options?.worktreePath !== undefined;
-      const hasEnvModeOption = options?.envMode !== undefined;
-      const storedDraftThread = getDraftThreadByProjectId(projectId);
-      if (storedDraftThread) {
-        return (async () => {
-          if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
-            setDraftThreadContext(storedDraftThread.threadId, {
-              ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
-              ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
-              ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
-            });
-          }
-          setProjectDraftThreadId(projectId, storedDraftThread.threadId);
-          if (routeThreadId === storedDraftThread.threadId) {
-            return;
-          }
-          await navigate({
-            to: "/$threadId",
-            params: { threadId: storedDraftThread.threadId },
-          });
-        })();
-      }
-      clearProjectDraftThreadId(projectId);
-
-      const activeDraftThread = routeThreadId ? getDraftThread(routeThreadId) : null;
-      if (activeDraftThread && routeThreadId && activeDraftThread.projectId === projectId) {
-        if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
-          setDraftThreadContext(routeThreadId, {
-            ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
-            ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
-            ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
-          });
-        }
-        setProjectDraftThreadId(projectId, routeThreadId);
-        return Promise.resolve();
-      }
-      const threadId = newThreadId();
-      const createdAt = new Date().toISOString();
-      return (async () => {
-        setProjectDraftThreadId(projectId, threadId, {
-          createdAt,
-          branch: options?.branch ?? null,
-          worktreePath: options?.worktreePath ?? null,
-          envMode: options?.envMode ?? "local",
-          runtimeMode: DEFAULT_RUNTIME_MODE,
-        });
-
-        await navigate({
-          to: "/$threadId",
-          params: { threadId },
-        });
-      })();
-    },
-    [
-      clearProjectDraftThreadId,
-      getDraftThreadByProjectId,
-      navigate,
-      getDraftThread,
-      routeThreadId,
-      setDraftThreadContext,
-      setProjectDraftThreadId,
-    ],
-  );
 
   const focusMostRecentThreadForProject = useCallback(
     (projectId: ProjectId) => {
@@ -1277,37 +1203,6 @@ export default function Sidebar() {
   );
 
   useEffect(() => {
-    const onWindowKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && selectedThreadIds.size > 0) {
-        event.preventDefault();
-        clearSelection();
-        return;
-      }
-
-      const activeThread = routeThreadId
-        ? threads.find((thread) => thread.id === routeThreadId)
-        : undefined;
-      const activeDraftThread = routeThreadId ? getDraftThread(routeThreadId) : null;
-      if (isChatNewLocalShortcut(event, keybindings)) {
-        const projectId =
-          activeThread?.projectId ?? activeDraftThread?.projectId ?? projects[0]?.id;
-        if (!projectId) return;
-        event.preventDefault();
-        void handleNewThread(projectId);
-        return;
-      }
-
-      if (!isChatNewShortcut(event, keybindings)) return;
-      const projectId = activeThread?.projectId ?? activeDraftThread?.projectId ?? projects[0]?.id;
-      if (!projectId) return;
-      event.preventDefault();
-      void handleNewThread(projectId, {
-        branch: activeThread?.branch ?? activeDraftThread?.branch ?? null,
-        worktreePath: activeThread?.worktreePath ?? activeDraftThread?.worktreePath ?? null,
-        envMode: activeDraftThread?.envMode ?? (activeThread?.worktreePath ? "worktree" : "local"),
-      });
-    };
-
     const onMouseDown = (event: globalThis.MouseEvent) => {
       if (selectedThreadIds.size === 0) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -1315,22 +1210,11 @@ export default function Sidebar() {
       clearSelection();
     };
 
-    window.addEventListener("keydown", onWindowKeyDown);
     window.addEventListener("mousedown", onMouseDown);
     return () => {
-      window.removeEventListener("keydown", onWindowKeyDown);
       window.removeEventListener("mousedown", onMouseDown);
     };
-  }, [
-    clearSelection,
-    getDraftThread,
-    handleNewThread,
-    keybindings,
-    projects,
-    routeThreadId,
-    selectedThreadIds.size,
-    threads,
-  ]);
+  }, [clearSelection, selectedThreadIds.size]);
 
   useEffect(() => {
     if (!isElectron) return;
@@ -1884,13 +1768,10 @@ export default function Sidebar() {
                                         render={<div role="button" tabIndex={0} />}
                                         size="sm"
                                         isActive={isActive}
-                                        className={`h-7 w-full translate-x-0 cursor-default justify-start px-2 text-left select-none hover:bg-accent hover:text-foreground focus-visible:ring-0 ${
-                                          isSelected
-                                            ? "bg-primary/15 text-foreground dark:bg-primary/10"
-                                            : isActive
-                                              ? "bg-accent/85 text-foreground font-medium dark:bg-accent/55"
-                                              : "text-muted-foreground"
-                                        }`}
+                                        className={resolveThreadRowClassName({
+                                        isActive,
+                                        isSelected,
+                                      })}
                                         onClick={(event) => {
                                           handleThreadClick(
                                             event,
@@ -2028,7 +1909,7 @@ export default function Sidebar() {
                                           <span
                                             className={`text-[10px] ${
                                               isHighlighted
-                                                ? "text-foreground/65"
+                                                ? "text-foreground/72 dark:text-foreground/82"
                                                 : "text-muted-foreground/40"
                                             }`}
                                           >
