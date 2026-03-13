@@ -273,6 +273,7 @@ it.layer(TestLayer)("git integration", (it) => {
         const tmp = yield* makeTmpDir();
         const result = yield* listGitBranches({ cwd: tmp });
         expect(result.isRepo).toBe(false);
+        expect(result.hasOriginRemote).toBe(false);
         expect(result.branches).toEqual([]);
       }),
     );
@@ -402,6 +403,7 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* initRepoWithCommit(tmp);
         const result = yield* listGitBranches({ cwd: tmp });
         expect(result.branches.every((b) => b.isDefault === false)).toBe(true);
+        expect(result.hasOriginRemote).toBe(false);
       }),
     );
 
@@ -448,6 +450,7 @@ it.layer(TestLayer)("git integration", (it) => {
             (branch) => branch.name === "origin/feature/remote-only" && branch.isRemote,
           ),
         ).toBe(true);
+        expect(result.hasOriginRemote).toBe(true);
       }),
     );
 

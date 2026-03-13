@@ -730,6 +730,76 @@ describe("when: branch has no upstream configured", () => {
   });
 });
 
+describe("when: no origin remote exists", () => {
+  it("resolveQuickAction falls back to commit when no origin remote exists", () => {
+    const quick = resolveQuickAction(
+      status({ hasWorkingTreeChanges: true, hasUpstream: false }),
+      false,
+      false,
+      false,
+    );
+    assert.deepInclude(quick, {
+      kind: "run_action",
+      action: "commit",
+      label: "Commit",
+      disabled: false,
+    });
+  });
+
+  it("resolveQuickAction disables push-and-pr flows when no origin remote exists", () => {
+    const quick = resolveQuickAction(
+      status({
+        hasUpstream: false,
+        aheadCount: 2,
+        pr: null,
+      }),
+      false,
+      false,
+      false,
+    );
+    assert.deepEqual(quick, {
+      kind: "show_hint",
+      label: "Push",
+      disabled: true,
+      hint: 'Add an "origin" remote before pushing or creating a PR.',
+    });
+  });
+
+  it("buildMenuItems disables push and create PR when no origin remote exists", () => {
+    const items = buildMenuItems(
+      status({ hasUpstream: false, pr: null, aheadCount: 2 }),
+      false,
+      false,
+    );
+    assert.deepEqual(items, [
+      {
+        id: "commit",
+        label: "Commit",
+        disabled: true,
+        icon: "commit",
+        kind: "open_dialog",
+        dialogAction: "commit",
+      },
+      {
+        id: "push",
+        label: "Push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "push",
+      },
+      {
+        id: "pr",
+        label: "Create PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_pr",
+      },
+    ]);
+  });
+});
+
 describe("requiresDefaultBranchConfirmation", () => {
   it("requires confirmation for push actions on default branch", () => {
     assert.isFalse(requiresDefaultBranchConfirmation("commit", true));
