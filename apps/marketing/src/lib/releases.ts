@@ -3,7 +3,6 @@ const REPO = "DavidIlie/t3code";
 export const RELEASES_URL = `https://github.com/${REPO}/releases`;
 
 const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
-const CACHE_KEY = "t3code-gurt-latest-release";
 
 export interface ReleaseAsset {
   name: string;
@@ -17,14 +16,8 @@ export interface Release {
 }
 
 export async function fetchLatestRelease(): Promise<Release> {
-  const cached = sessionStorage.getItem(CACHE_KEY);
-  if (cached) return JSON.parse(cached);
-
+  // Always fetch fresh — the GitHub API is fast and we don't want stale
+  // cached versions persisting across releases.
   const data = await fetch(API_URL).then((r) => r.json());
-
-  if (data?.assets) {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
-  }
-
   return data;
 }
