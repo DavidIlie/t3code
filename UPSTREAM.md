@@ -5,11 +5,11 @@ Fork: https://github.com/DavidIlie/t3code
 
 ## Last Synced Commit
 
-`767de271` — Use Effect UUID generator as randomUUID fallback (2026-03-09)
+`223c3dc8` — chore(ci): add and apply fmt:check script (2026-03-10)
 
 ## Pending Upstream Commits
 
-<!-- Updated by running: git log --oneline 1f47cc6f..upstream/main -->
+<!-- Updated by running: git log --oneline 223c3dc8..upstream/main -->
 <!-- Each commit gets moved to Integrated or Skipped after processing -->
 
 ## Integrated
@@ -53,6 +53,10 @@ Fork: https://github.com/DavidIlie/t3code
 - `dcccca3f` — Fix UI overflow for commit/push PR label
 - `9d2c2cae` — Polyfill crypto.randomUUID for non-secure HTTP contexts
 - `767de271` — Use Effect UUID generator as randomUUID fallback
+- `3d358680`..`d28ced8f` — PR checkout/worktree workflow (13 commits: PR checkout UI, branch picker enhancements, fork PR handling, worktree integration, Effect Schema decoders, branch collision avoidance, dialog migration)
+- `9309edf4` — rm test (cleanup removed checkout-pr test)
+- `afb6e89b` — Shift-click multi-select for sidebar threads
+- `223c3dc8` — Add and apply fmt:check script
 
 ## Skipped
 
