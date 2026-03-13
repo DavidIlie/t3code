@@ -32,6 +32,7 @@ const {
       <nav class="nav">
         <a href="/" class="nav-brand">
           <img src="/icon.png" alt="T3" class="nav-icon" />
+          <span class="nav-label">Gurt</span>
         </a>
         <a
           href="https://github.com/DavidIlie/t3code"
@@ -150,12 +151,21 @@ const {
   .nav-brand {
     display: flex;
     align-items: center;
+    gap: 0.6rem;
   }
 
   .nav-icon {
     width: 28px;
     height: 28px;
     border-radius: 6px;
+  }
+
+  .nav-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--fg-muted);
   }
 
   .nav-github {
