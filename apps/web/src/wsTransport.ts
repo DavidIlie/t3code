@@ -186,8 +186,8 @@ export class WsTransport {
       this.scheduleReconnect();
     });
 
-    ws.addEventListener("error", () => {
-      // close will follow
+    ws.addEventListener("error", (event) => {
+      console.warn("WebSocket error", event);
     });
   }
 
