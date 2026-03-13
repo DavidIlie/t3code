@@ -71,6 +71,8 @@ export type DesktopUpdateStatus =
 
 export type DesktopRuntimeArch = "arm64" | "x64" | "other";
 
+export type DesktopTheme = "light" | "dark" | "system";
+
 export interface DesktopRuntimeInfo {
   hostArch: DesktopRuntimeArch;
   appArch: DesktopRuntimeArch;
@@ -103,6 +105,7 @@ export interface DesktopBridge {
   getWsUrl: () => string | null;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
+  setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },
