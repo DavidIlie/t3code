@@ -21,21 +21,13 @@ jobs:
         uses: actions/checkout@v4
 
       - id: version
-        name: Resolve next version
-        env:
-          GH_TOKEN: ${{ github.token }}
+        name: Resolve version from package.json
         shell: bash
         run: |
-          latest=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "")
-          if [[ -z "$latest" ]]; then
-            latest="v0.0.0"
-          fi
-          version="${latest#v}"
-          IFS='.' read -r major minor patch <<< "$version"
-          new_version="$major.$minor.$((patch + 1))"
-          echo "version=$new_version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$new_version" >> "$GITHUB_OUTPUT"
-          echo "Resolved version: $new_version (previous: $latest)"
+          version=$(node -p "require('./apps/server/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $version"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
