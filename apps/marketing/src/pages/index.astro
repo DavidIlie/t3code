@@ -6,7 +6,7 @@ import Layout from "../layouts/Layout.astro";
   <h1 class="tagline">The best way to code with Claude.</h1>
 
   <p class="subtitle">
-    A fork of <a href="https://github.com/pingdotgg/t3code" target="_blank" rel="noopener noreferrer" class="subtle-link">T3 Code</a> with full Claude Code support, Codex support, and unsigned builds on every push.
+    A fork of <a href="https://github.com/pingdotgg/t3code" target="_blank" rel="noopener noreferrer" class="subtle-link">T3 Code</a> with full Claude Code and Codex support. Available for macOS, Windows, and Linux.
   </p>
 
   <a
@@ -23,8 +23,28 @@ import Layout from "../layouts/Layout.astro";
   <a href="/download" class="other-platforms">Other platforms</a>
 
   <div class="screenshot-wrap">
-    <img src="/screenshot-home.png" alt="T3 Code (Gurt)" class="screenshot" />
+    <img src="/screenshot-home.png" alt="T3 Code (Gurt) — Home" class="screenshot" />
   </div>
+
+  <section class="features">
+    <div class="feature-grid">
+      <div class="feature-card">
+        <img src="/screenshot-project.png" alt="Project view with quick actions" class="feature-img" />
+        <h3 class="feature-title">Project Dashboard</h3>
+        <p class="feature-desc">Quick actions, recent threads, git integration, and multi-project management at a glance.</p>
+      </div>
+      <div class="feature-card">
+        <img src="/screenshot-conversation.png" alt="Conversation with diff viewer" class="feature-img" />
+        <h3 class="feature-title">Conversations & Diffs</h3>
+        <p class="feature-desc">Chat with Claude Code or Codex and review code changes inline with the built-in diff viewer.</p>
+      </div>
+      <div class="feature-card feature-card--wide">
+        <img src="/screenshot-terminal.png" alt="Integrated terminal" class="feature-img" />
+        <h3 class="feature-title">Integrated Terminal</h3>
+        <p class="feature-desc">Full terminal access within each project workspace. Split terminals, run commands, and watch your agent work.</p>
+      </div>
+    </div>
+  </section>
 </Layout>
 
 <script>
@@ -206,7 +226,6 @@ import Layout from "../layouts/Layout.astro";
 
   .screenshot-wrap {
     width: min(92vw, 1200px);
-    margin-bottom: -8vh;
     opacity: 0;
     transform: scale(0.97) translateY(12px);
     animation: screenshot-in 1s ease-out 0.4s forwards;
@@ -219,9 +238,6 @@ import Layout from "../layouts/Layout.astro";
     box-shadow:
       0 40px 80px -20px rgba(0, 0, 0, 0.6),
       0 0 0 1px rgba(255, 255, 255, 0.03);
-    mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
-    pointer-events: none;
   }
 
   @keyframes screenshot-in {
@@ -233,6 +249,57 @@ import Layout from "../layouts/Layout.astro";
       opacity: 1;
       transform: scale(1) translateY(0);
     }
+  }
+
+  /* ── Features ── */
+
+  .features {
+    width: min(92vw, 1100px);
+    margin: 4rem 0;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .feature-card {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.015);
+    transition: border-color 0.3s ease, background 0.3s ease;
+    opacity: 0;
+    animation: fade-in 0.8s ease-out 0.5s forwards;
+  }
+
+  .feature-card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .feature-card--wide {
+    grid-column: 1 / -1;
+  }
+
+  .feature-img {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    margin-bottom: 0.85rem;
+  }
+
+  .feature-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+  }
+
+  .feature-desc {
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    line-height: 1.55;
   }
 
   /* ── Mobile ── */
@@ -248,6 +315,10 @@ import Layout from "../layouts/Layout.astro";
 
     .screenshot-wrap {
       width: 95vw;
+    }
+
+    .feature-grid {
+      grid-template-columns: 1fr;
     }
   }
 </style>
