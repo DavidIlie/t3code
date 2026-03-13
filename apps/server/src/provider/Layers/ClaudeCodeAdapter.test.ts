@@ -926,7 +926,9 @@ describe("ClaudeCodeAdapterLive", () => {
         true,
       );
       assert.equal(
-        nativeEvents.some((record) => String(record.event?.providerThreadId) === "sdk-session-native-log"),
+        nativeEvents.some(
+          (record) => String(record.event?.providerThreadId) === "sdk-session-native-log",
+        ),
         true,
       );
       assert.equal(

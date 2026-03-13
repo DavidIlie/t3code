@@ -207,7 +207,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     [gitStatusForActions, isGitActionRunning, hasOriginRemote],
   );
   const quickAction = useMemo(
-    () => resolveQuickAction(gitStatusForActions, isGitActionRunning, isDefaultBranch, hasOriginRemote),
+    () =>
+      resolveQuickAction(gitStatusForActions, isGitActionRunning, isDefaultBranch, hasOriginRemote),
     [gitStatusForActions, isDefaultBranch, isGitActionRunning, hasOriginRemote],
   );
   const quickActionDisabledReason = quickAction.disabled

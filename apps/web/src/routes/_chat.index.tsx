@@ -147,10 +147,7 @@ function HomePage() {
 
   const homeProject = useMemo(() => projects.find((p) => p.name === "Home"), [projects]);
 
-  const nonHomeProjects = useMemo(
-    () => projects.filter((p) => p.name !== "Home"),
-    [projects],
-  );
+  const nonHomeProjects = useMemo(() => projects.filter((p) => p.name !== "Home"), [projects]);
 
   const recentThreads = useMemo(
     () =>
@@ -252,21 +249,18 @@ function HomePage() {
     setHighlightedIndex(0);
   }, [menuItems.length, menuPhase]);
 
-  const selectMenuItem = useCallback(
-    (item: AutocompleteItem) => {
-      setPrompt(item.insertText);
-      // Focus textarea and place cursor at end
-      requestAnimationFrame(() => {
-        const ta = textareaRef.current;
-        if (ta) {
-          ta.focus();
-          ta.selectionStart = item.insertText.length;
-          ta.selectionEnd = item.insertText.length;
-        }
-      });
-    },
-    [],
-  );
+  const selectMenuItem = useCallback((item: AutocompleteItem) => {
+    setPrompt(item.insertText);
+    // Focus textarea and place cursor at end
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.focus();
+        ta.selectionStart = item.insertText.length;
+        ta.selectionEnd = item.insertText.length;
+      }
+    });
+  }, []);
 
   const handlePasteImages = useCallback(
     async (files: File[]) => {
@@ -574,8 +568,7 @@ function HomePage() {
                   <div className="absolute -top-7 left-0 flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
                     <FolderOpenIcon className="size-3" />
                     <span>
-                      Scoping to{" "}
-                      <span className="font-mono text-foreground/80">{scopePath}</span>
+                      Scoping to <span className="font-mono text-foreground/80">{scopePath}</span>
                     </span>
                   </div>
                 )}

@@ -1091,9 +1091,7 @@ export default function Sidebar() {
         return;
       }
 
-      const confirmed = await api.dialogs.confirm(
-        `Remove project "${project.name}"?`,
-      );
+      const confirmed = await api.dialogs.confirm(`Remove project "${project.name}"?`);
       if (!confirmed) return;
 
       try {
@@ -1769,9 +1767,9 @@ export default function Sidebar() {
                                         size="sm"
                                         isActive={isActive}
                                         className={resolveThreadRowClassName({
-                                        isActive,
-                                        isSelected,
-                                      })}
+                                          isActive,
+                                          isSelected,
+                                        })}
                                         onClick={(event) => {
                                           handleThreadClick(
                                             event,

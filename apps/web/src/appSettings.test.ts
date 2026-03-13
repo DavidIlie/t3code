@@ -76,4 +76,3 @@ describe("resolveAppModelSelection", () => {
     expect(resolveAppModelSelection("codex", [], "")).toBe("gpt-5.4");
   });
 });
-

@@ -13,10 +13,10 @@ An opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code) by [Ping](
 
 ## Screenshots
 
-| | |
-|---|---|
+|                                               |                                                    |
+| --------------------------------------------- | -------------------------------------------------- |
 | ![Project view](docs/screenshots/project.png) | ![Conversation](docs/screenshots/conversation.png) |
-| ![Terminal](docs/screenshots/terminal.png) | |
+| ![Terminal](docs/screenshots/terminal.png)    |                                                    |
 
 ## Upstream
 

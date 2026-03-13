@@ -890,32 +890,24 @@ describe("WebSocket Server", () => {
     await waitForMessage(ws);
 
     fs.writeFileSync(keybindingsPath, "{ not-json", "utf8");
-    const malformedPush = await waitForPush(
-      ws,
-      WS_CHANNELS.serverConfigUpdated,
-      (push) => {
-        const data = push.data as unknown as { issues?: Array<{ kind: string }> };
-        return (
-          Array.isArray(data.issues) &&
-          Boolean(data.issues[0]) &&
-          data.issues[0]!.kind === "keybindings.malformed-config"
-        );
-      },
-    );
+    const malformedPush = await waitForPush(ws, WS_CHANNELS.serverConfigUpdated, (push) => {
+      const data = push.data as unknown as { issues?: Array<{ kind: string }> };
+      return (
+        Array.isArray(data.issues) &&
+        Boolean(data.issues[0]) &&
+        data.issues[0]!.kind === "keybindings.malformed-config"
+      );
+    });
     expect(malformedPush.data).toEqual({
       issues: [{ kind: "keybindings.malformed-config", message: expect.any(String) }],
       providers: defaultProviderStatuses,
     });
 
     fs.writeFileSync(keybindingsPath, "[]", "utf8");
-    const successPush = await waitForPush(
-      ws,
-      WS_CHANNELS.serverConfigUpdated,
-      (push) => {
-        const data = push.data as unknown as { issues?: unknown[] };
-        return Array.isArray(data.issues) && data.issues.length === 0;
-      },
-    );
+    const successPush = await waitForPush(ws, WS_CHANNELS.serverConfigUpdated, (push) => {
+      const data = push.data as unknown as { issues?: unknown[] };
+      return Array.isArray(data.issues) && data.issues.length === 0;
+    });
     expect(successPush.data).toEqual({ issues: [], providers: defaultProviderStatuses });
   });
 
