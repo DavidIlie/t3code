@@ -5,15 +5,14 @@ Fork: https://github.com/DavidIlie/t3code
 
 ## Last Synced Commit
 
-`1e276573` — feat: add fuzzy workspace entry search (2026-03-12)
+`dcd2e5c3` — fix: don't restart the app on normal exits in dev runner (2026-03-12)
 
 ## Pending Upstream Commits
 
-<!-- Updated by running: git log --oneline 1e276573..upstream/main -->
+<!-- Updated by running: git log --oneline dcd2e5c3..upstream/main -->
 <!-- Each commit gets moved to Integrated or Skipped after processing -->
 
-- `db17ff33` — fix syntax errors from bad merge (already correct in our codebase)
-- `dcd2e5c3` — fix: don't restart the app on normal exits in dev runner
+None — fully synced with upstream/main.
 
 ## Integrated
 
@@ -93,6 +92,7 @@ Fork: https://github.com/DavidIlie/t3code
 - `724f54c2` — fix: clean up timeout in PlanSidebar to prevent memory leaks
 - `b496ae83` — fix: add error logging for code highlighting failures
 - `1e276573` — feat: add fuzzy workspace entry search
+- `dcd2e5c3` — fix: don't restart the app on normal exits in dev runner (already implemented)
 
 ## Skipped
 
