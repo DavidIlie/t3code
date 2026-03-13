@@ -30,7 +30,7 @@ import { isTerminalClearShortcut, terminalNavigationShortcutData } from "../keyb
 import {
   DEFAULT_THREAD_TERMINAL_HEIGHT,
   DEFAULT_THREAD_TERMINAL_ID,
-  MAX_THREAD_TERMINAL_COUNT,
+  MAX_TERMINALS_PER_GROUP,
   type ThreadTerminalGroup,
 } from "../types";
 import { readNativeApi } from "~/nativeApi";
@@ -632,7 +632,7 @@ export default function ThreadTerminalDrawer({
     resolvedActiveTerminalId,
   ];
   const isSplitView = visibleTerminalIds.length > 1;
-  const hasReachedTerminalLimit = normalizedTerminalIds.length >= MAX_THREAD_TERMINAL_COUNT;
+  const hasReachedSplitLimit = visibleTerminalIds.length >= MAX_TERMINALS_PER_GROUP;
   const terminalLabelById = useMemo(
     () =>
       new Map(
@@ -640,27 +640,24 @@ export default function ThreadTerminalDrawer({
       ),
     [normalizedTerminalIds],
   );
-  const splitTerminalActionLabel = hasReachedTerminalLimit
-    ? `Split Terminal (max ${MAX_THREAD_TERMINAL_COUNT})`
+  const splitTerminalActionLabel = hasReachedSplitLimit
+    ? `Split Terminal (max ${MAX_TERMINALS_PER_GROUP} per group)`
     : splitShortcutLabel
       ? `Split Terminal (${splitShortcutLabel})`
       : "Split Terminal";
-  const newTerminalActionLabel = hasReachedTerminalLimit
-    ? `New Terminal (max ${MAX_THREAD_TERMINAL_COUNT})`
-    : newShortcutLabel
-      ? `New Terminal (${newShortcutLabel})`
-      : "New Terminal";
+  const newTerminalActionLabel = newShortcutLabel
+    ? `New Terminal (${newShortcutLabel})`
+    : "New Terminal";
   const closeTerminalActionLabel = closeShortcutLabel
     ? `Close Terminal (${closeShortcutLabel})`
     : "Close Terminal";
   const onSplitTerminalAction = useCallback(() => {
-    if (hasReachedTerminalLimit) return;
+    if (hasReachedSplitLimit) return;
     onSplitTerminal();
-  }, [hasReachedTerminalLimit, onSplitTerminal]);
+  }, [hasReachedSplitLimit, onSplitTerminal]);
   const onNewTerminalAction = useCallback(() => {
-    if (hasReachedTerminalLimit) return;
     onNewTerminal();
-  }, [hasReachedTerminalLimit, onNewTerminal]);
+  }, [onNewTerminal]);
 
   useEffect(() => {
     onHeightChangeRef.current = onHeightChange;
@@ -818,11 +815,7 @@ export default function ThreadTerminalDrawer({
         <div className="flex items-center gap-px px-1.5">
           <div className="flex items-stretch">
             <TerminalActionButton
-              className={`rounded-l-sm p-1 text-muted-foreground transition-colors ${
-                hasReachedTerminalLimit
-                  ? "cursor-not-allowed opacity-40"
-                  : "hover:bg-accent hover:text-foreground"
-              }`}
+              className="rounded-l-sm p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={onNewTerminalAction}
               label={newTerminalActionLabel}
             >
@@ -837,12 +830,7 @@ export default function ThreadTerminalDrawer({
                 render={
                   <button
                     type="button"
-                    className={`rounded-r-sm px-0.5 py-1 text-muted-foreground transition-colors ${
-                      hasReachedTerminalLimit
-                        ? "cursor-not-allowed opacity-40"
-                        : "hover:bg-accent hover:text-foreground"
-                    }`}
-                    disabled={hasReachedTerminalLimit}
+                    className="rounded-r-sm px-0.5 py-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     aria-label="Select shell"
                   />
                 }
@@ -871,7 +859,7 @@ export default function ThreadTerminalDrawer({
           </div>
           <TerminalActionButton
             className={`rounded-sm p-1 text-muted-foreground transition-colors ${
-              hasReachedTerminalLimit
+              hasReachedSplitLimit
                 ? "cursor-not-allowed opacity-40"
                 : "hover:bg-accent hover:text-foreground"
             }`}
