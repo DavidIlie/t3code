@@ -1,0 +1,38 @@
+#!/bin/sh
+# Shell command for T3 Gurt — opens the desktop app, optionally with a project path.
+# Usage: gurt [path]
+
+APP_NAME="T3 Gurt"
+
+if [ "$(uname)" = "Darwin" ]; then
+  APP_PATH="/Applications/${APP_NAME}.app"
+  if [ ! -d "$APP_PATH" ]; then
+    echo "Error: ${APP_NAME} not found at ${APP_PATH}" >&2
+    exit 1
+  fi
+
+  if [ $# -eq 0 ]; then
+    open -a "$APP_PATH"
+  else
+    # Resolve to absolute path
+    TARGET="$(cd "$1" 2>/dev/null && pwd || echo "$1")"
+    open -a "$APP_PATH" --args --open-project "$TARGET"
+  fi
+elif [ "$(uname)" = "Linux" ]; then
+  # On Linux, the AppImage or installed binary is expected on PATH as "t3-gurt"
+  BINARY="$(command -v t3-gurt 2>/dev/null || echo "")"
+  if [ -z "$BINARY" ]; then
+    echo "Error: ${APP_NAME} binary not found on PATH" >&2
+    exit 1
+  fi
+
+  if [ $# -eq 0 ]; then
+    "$BINARY" &
+  else
+    TARGET="$(cd "$1" 2>/dev/null && pwd || echo "$1")"
+    "$BINARY" --open-project "$TARGET" &
+  fi
+else
+  echo "Error: Unsupported platform" >&2
+  exit 1
+fi
