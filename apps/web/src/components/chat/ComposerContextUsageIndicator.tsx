@@ -86,7 +86,7 @@ export const ComposerContextUsageIndicator = memo(function ComposerContextUsageI
       <MenuPopup side="top" align="start" className="max-w-72">
         <MenuGroup>
           <div className="px-2 pt-1.5 pb-0.5 text-muted-foreground text-xs">
-            Context window:
+            Usage:
           </div>
           <div className="px-2 pb-0.5 font-medium text-foreground text-sm leading-tight">
             {viewModel.summaryLine}

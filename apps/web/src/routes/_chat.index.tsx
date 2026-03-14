@@ -21,6 +21,7 @@ import {
   TerminalIcon,
 } from "lucide-react";
 
+import { ProjectFavicon } from "../components/Sidebar";
 import { isElectron } from "../env";
 import { readNativeApi } from "../nativeApi";
 import { useStore } from "../store";
@@ -742,7 +743,7 @@ function HomePage() {
                       textareaRef.current?.focus();
                     }}
                   >
-                    <FolderOpenIcon className="size-3 shrink-0 text-muted-foreground/40 group-hover:text-foreground/60" />
+                    <ProjectFavicon cwd={project.cwd} projectId={project.id} size="sm" />
                     <span className="min-w-0 truncate text-foreground/80">{project.name}</span>
                   </button>
                 ))}

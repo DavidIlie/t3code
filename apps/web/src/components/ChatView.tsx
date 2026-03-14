@@ -65,6 +65,7 @@ import {
   hasToolActivityForTurn,
   isLatestTurnSettled,
   formatElapsed,
+  type ThreadContextUsageSnapshot,
 } from "../session-logic";
 import { isScrollContainerNearBottom } from "../chat-scroll";
 import {
@@ -529,6 +530,24 @@ export default function ChatView({ threadId }: ChatViewProps) {
     ? (sessionProvider ?? selectedProviderByThreadId ?? null)
     : null;
   const selectedProvider: ProviderKind = lockedProvider ?? selectedProviderByThreadId ?? "codex";
+  const providerUsageSnapshot = useProviderSessionStore(
+    (state) => state.usageByProvider[selectedProvider] ?? null,
+  );
+  const composerUsageSnapshot = useMemo((): ThreadContextUsageSnapshot | null => {
+    const tiers = providerUsageSnapshot?.tiers;
+    if (!tiers || tiers.length === 0) return null;
+    // Use the most critical (highest percentUsed) tier as the ring indicator
+    let highestPercent = 0;
+    for (const t of tiers) {
+      if (t.percentUsed > highestPercent) highestPercent = t.percentUsed;
+    }
+    return {
+      usedTokens: null,
+      maxTokens: null,
+      percentUsed: highestPercent,
+      recentlyCompacted: false,
+    };
+  }, [providerUsageSnapshot]);
   const cursorModelSelectionLockedReason =
     hasThreadStarted && selectedProvider === "cursor"
       ? "Cursor currently does not support changing models after the first message in a thread."
@@ -3731,7 +3750,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         />
                       )}
 
-                      <ComposerContextUsageIndicator snapshot={null} />
+                      <ComposerContextUsageIndicator snapshot={composerUsageSnapshot} />
 
                       {isComposerFooterCompact ? (
                         <CompactComposerControlsMenu
