@@ -4,6 +4,13 @@
 
 - Both `bun lint` and `bun typecheck` must pass before considering tasks completed.
 - NEVER run `bun test`. Always use `bun run test` (runs Vitest).
+- **NEVER skip failing tests.** If you see test failures, fix every single one. Do not mark a task as done while tests are broken.
+
+## Git Safety
+
+- **Commit frequently.** After completing each discrete feature or fix, create a commit immediately. Do not accumulate large amounts of uncommitted work.
+- **NEVER run `git checkout -- .` or `git restore .`** on a dirty working tree. These commands destroy all uncommitted changes permanently with no recovery. If you need to undo a cherry-pick or merge, use `git reset HEAD` (unstage only) and handle files individually.
+- Before any git operation that could affect the working tree (cherry-pick, merge, rebase, checkout), ensure all work is committed first.
 
 ## Project Snapshot
 

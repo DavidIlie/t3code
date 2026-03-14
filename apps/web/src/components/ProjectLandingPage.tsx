@@ -19,6 +19,7 @@ import {
   SendIcon,
   TerminalIcon,
   CloudUploadIcon,
+  HistoryIcon,
   LockIcon,
   LockOpenIcon,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { isElectron } from "../env";
 import { gitStatusQueryOptions } from "../lib/gitReactQuery";
 import { gitPushWithToast } from "../lib/gitPushWithToast";
 import ProviderModelPicker, { getCustomModelOptionsByProvider } from "./ProviderModelPicker";
+import { ProjectFavicon } from "./Sidebar";
 import { SidebarTrigger } from "./ui/sidebar";
 import { useTerminalStateStore } from "../terminalStateStore";
 
@@ -62,7 +64,13 @@ const QUICK_ACTIONS = [
   },
 ] as const;
 
-export default function ProjectLandingPage() {
+export default function ProjectLandingPage({
+  historyOpen,
+  onToggleHistory,
+}: {
+  historyOpen?: boolean;
+  onToggleHistory?: () => void;
+}) {
   const { projectId } = useParams({ from: "/_chat/project/$projectId" });
   const navigate = useNavigate();
   const projects = useStore((s) => s.projects);
@@ -90,7 +98,10 @@ export default function ProjectLandingPage() {
   const markAutoSubmit = useComposerDraftStore((s) => s.markAutoSubmit);
   const addDraftImages = useComposerDraftStore((s) => s.addImages);
 
-  const { data: gitStatus } = useQuery(gitStatusQueryOptions(project?.cwd ?? null));
+  const { data: gitStatus, isLoading: isGitLoading } = useQuery(
+    gitStatusQueryOptions(project?.cwd ?? null),
+  );
+  const showGitActions = gitStatus != null || isGitLoading;
   const hasGitChanges = gitStatus?.hasWorkingTreeChanges || (gitStatus?.aheadCount ?? 0) > 0;
   const [isPushing, setIsPushing] = useState(false);
 
@@ -276,22 +287,103 @@ export default function ProjectLandingPage() {
         <header className="border-b border-border px-3 py-2 md:hidden">
           <div className="flex items-center gap-2">
             <SidebarTrigger className="size-7 shrink-0" />
-            <span className="text-sm font-medium">{project.name}</span>
+            <ProjectFavicon cwd={project.cwd} projectId={project.id} size="sm" />
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">{project.name}</span>
+            {showGitActions && (
+              <div className="flex items-center gap-1">
+                {isGitLoading && !gitStatus ? (
+                  <>
+                    <div className="size-7 animate-pulse rounded-md bg-muted/40" />
+                    <div className="size-7 animate-pulse rounded-md bg-muted/40" />
+                  </>
+                ) : (
+                  <>
+                    {onToggleHistory && (
+                      <button
+                        type="button"
+                        className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+                        onClick={onToggleHistory}
+                        aria-pressed={historyOpen}
+                        title="Git History"
+                      >
+                        <HistoryIcon className="size-4" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                      disabled={!hasGitChanges || isPushing}
+                      onClick={() => void handlePush()}
+                      title="Click to push · Shift-click for commit dialog"
+                    >
+                      <CloudUploadIcon className="size-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </header>
       )}
 
       {isElectron && (
-        <div className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5">
-          <span className="text-xs text-muted-foreground/50">{project.name}</span>
+        <div className="drag-region flex h-[52px] shrink-0 items-center justify-between border-b border-border px-5">
+          <div className="flex items-center gap-1.5">
+            <ProjectFavicon cwd={project.cwd} projectId={project.id} size="sm" />
+            <span className="text-xs text-muted-foreground/50">{project.name}</span>
+          </div>
+          {showGitActions && (
+            <div className="flex items-center gap-1 [-webkit-app-region:no-drag]">
+              {isGitLoading && !gitStatus ? (
+                <>
+                  <div className="h-4 w-14 animate-pulse rounded bg-muted/30" />
+                  <div className="size-7 animate-pulse rounded-md bg-muted/30" />
+                  <div className="size-7 animate-pulse rounded-md bg-muted/30" />
+                </>
+              ) : (
+                <>
+                  {gitStatus?.branch && (
+                    <span className="mr-1 text-[10px] text-muted-foreground/40">
+                      {gitStatus.branch}
+                      {gitStatus.hasWorkingTreeChanges ? " *" : ""}
+                      {gitStatus.aheadCount > 0 ? ` +${gitStatus.aheadCount}` : ""}
+                    </span>
+                  )}
+                  {onToggleHistory && (
+                    <button
+                      type="button"
+                      className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+                      onClick={onToggleHistory}
+                      aria-pressed={historyOpen}
+                      title="Git History"
+                    >
+                      <HistoryIcon className="size-4" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                    disabled={!hasGitChanges || isPushing}
+                    onClick={() => void handlePush()}
+                    title="Click to push · Shift-click for commit dialog"
+                  >
+                    <CloudUploadIcon className="size-4" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       <div className="flex flex-1 items-center justify-center overflow-y-auto px-4">
         <div className="w-full max-w-2xl space-y-8 my-12">
           {/* Header */}
-          <div className="text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
+          <div className="flex flex-col items-center text-center">
+            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+              <ProjectFavicon cwd={project.cwd} projectId={project.id} size="md" />
+              {project.name}
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground/60 font-mono">{project.cwd}</p>
           </div>
 
@@ -414,33 +506,6 @@ export default function ProjectLandingPage() {
               ))}
             </div>
           </div>
-
-          {/* Git actions */}
-          {gitStatus && (
-            <div>
-              <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/50">
-                Git
-              </h2>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="flex items-center gap-2 rounded-lg border border-border/50 bg-secondary/50 px-3 py-2.5 text-xs text-foreground/80 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:pointer-events-none"
-                  disabled={!hasGitChanges || isPushing}
-                  onClick={() => void handlePush()}
-                >
-                  <CloudUploadIcon className="size-4 shrink-0 text-muted-foreground/70" />
-                  <span>{isPushing ? "Pushing..." : "Push to GitHub"}</span>
-                </button>
-                {gitStatus.branch && (
-                  <span className="text-[10px] text-muted-foreground/50">
-                    {gitStatus.branch}
-                    {gitStatus.hasWorkingTreeChanges && " (uncommitted changes)"}
-                    {gitStatus.aheadCount > 0 && ` (${gitStatus.aheadCount} ahead)`}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Recent threads */}
           {projectThreads.length > 0 && (

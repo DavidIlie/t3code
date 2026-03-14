@@ -50,8 +50,16 @@ const AppSettingsSchema = Schema.Struct({
       value: Schema.String,
     }),
   ).pipe(Schema.withConstructorDefault(() => Option.some({}))),
+  showUsageBars: Schema.Boolean.pipe(Schema.withConstructorDefault(() => Option.some(true))),
+  groupToolCalls: Schema.Boolean.pipe(Schema.withConstructorDefault(() => Option.some(true))),
+  debugMode: Schema.Boolean.pipe(Schema.withConstructorDefault(() => Option.some(false))),
+  timestampFormat: Schema.Literals(["locale", "12-hour", "24-hour"]).pipe(
+    Schema.withConstructorDefault(() => Option.some("locale")),
+  ),
 });
 export type AppSettings = typeof AppSettingsSchema.Type;
+export type TimestampFormat = AppSettings["timestampFormat"];
+export const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
 export interface AppModelOption {
   slug: string;
   name: string;

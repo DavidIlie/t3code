@@ -1330,6 +1330,16 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return yield* git.initRepo(body);
       }
 
+      case WS_METHODS.gitLog: {
+        const body = stripRequestTag(request.body);
+        return yield* git.log(body);
+      }
+
+      case WS_METHODS.gitShowCommitDiff: {
+        const body = stripRequestTag(request.body);
+        return yield* git.showCommitDiff(body);
+      }
+
       case WS_METHODS.terminalOpen: {
         const body = stripRequestTag(request.body);
         return yield* terminalManager.open(body);

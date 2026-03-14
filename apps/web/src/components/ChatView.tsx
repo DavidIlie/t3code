@@ -41,7 +41,11 @@ import { gitBranchesQueryOptions, gitCreateWorktreeMutationOptions } from "~/lib
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { serverConfigQueryOptions, serverQueryKeys } from "~/lib/serverReactQuery";
 import { isElectron } from "../env";
-import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import {
+  parseDiffRouteSearch,
+  stripDiffSearchParams,
+  stripHistorySearchParams,
+} from "../diffRouteSearch";
 import {
   type ComposerTrigger,
   detectComposerTrigger,
@@ -390,6 +394,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
+  const historyOpen = rawSearch.history === "1";
   const activeThreadId = activeThread?.id ?? null;
   const providerCommands = useProviderSessionStore(
     (state) =>
@@ -1115,6 +1120,19 @@ export default function ChatView({ threadId }: ChatViewProps) {
       },
     });
   }, [diffOpen, navigate, threadId]);
+  const onToggleHistory = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      replace: true,
+      search: (previous) => {
+        const rest = stripDiffSearchParams(previous);
+        return historyOpen
+          ? stripHistorySearchParams(rest)
+          : { ...rest, history: "1" };
+      },
+    });
+  }, [historyOpen, navigate, threadId]);
 
   const envLocked = Boolean(
     activeThread &&
@@ -3375,6 +3393,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
           activeThreadId={activeThread.id}
           activeThreadTitle={activeThread.title}
           activeProjectName={activeProject?.name}
+          activeProjectCwd={activeProject?.cwd}
+          activeProjectId={activeProject?.id}
           isGitRepo={isGitRepo}
           openInCwd={activeThread.worktreePath ?? activeProject?.cwd ?? null}
           activeProjectScripts={activeProject?.scripts}
@@ -3386,6 +3406,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
           diffOpen={diffOpen}
+          historyOpen={historyOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
           }}
@@ -3393,6 +3414,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           onUpdateProjectScript={updateProjectScript}
           onDeleteProjectScript={deleteProjectScript}
           onToggleDiff={onToggleDiff}
+          onToggleHistory={onToggleHistory}
         />
       </header>
 

@@ -224,7 +224,7 @@ function getServerHttpOrigin(): string {
 
 const serverHttpOrigin = getServerHttpOrigin();
 
-function ProjectFavicon({
+export function ProjectFavicon({
   cwd,
   projectId,
   size = "sm",

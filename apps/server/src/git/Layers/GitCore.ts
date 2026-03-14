@@ -1401,6 +1401,92 @@ const makeGitCore = Effect.gen(function* () {
       ),
     );
 
+  const LOG_FORMAT = "%H%x00%h%x00%s%x00%an%x00%aI";
+  const DEFAULT_LOG_LIMIT = 50;
+
+  const log: GitCoreShape["log"] = (input) =>
+    Effect.gen(function* () {
+      const limit = input.limit ?? DEFAULT_LOG_LIMIT;
+      const fetchCount = limit + 1;
+      const args = ["log", `--format=${LOG_FORMAT}`, `-n`, `${fetchCount}`];
+      if (input.skip !== undefined && input.skip > 0) {
+        args.push(`--skip=${input.skip}`);
+      }
+      if (input.search !== undefined && input.search.length > 0) {
+        args.push(`--grep=${input.search}`, "--regexp-ignore-case");
+      }
+      if (input.author !== undefined && input.author.length > 0) {
+        args.push(`--author=${input.author}`);
+      }
+      if (input.since !== undefined && input.since.length > 0) {
+        args.push(`--since=${input.since}`);
+      }
+      if (input.until !== undefined && input.until.length > 0) {
+        args.push(`--until=${input.until}`);
+      }
+      if (input.branch !== undefined) {
+        args.push(input.branch);
+      }
+      const stdout = yield* runGitStdout("GitCore.log", input.cwd, args);
+      const lines = stdout.split("\n").filter((line) => line.length > 0);
+      const hasMore = lines.length > limit;
+      const commitLines = hasMore ? lines.slice(0, limit) : lines;
+      const commits = commitLines.map((line) => {
+        const [hash, abbreviatedHash, subject, authorName, authorDate] = line.split("\0");
+        return {
+          hash: hash!,
+          abbreviatedHash: abbreviatedHash!,
+          subject: subject!,
+          authorName: authorName!,
+          authorDate: authorDate!,
+        };
+      });
+      return { commits, hasMore };
+    });
+
+  const showCommitDiff: GitCoreShape["showCommitDiff"] = (input) =>
+    Effect.gen(function* () {
+      const [patch, commitStdout, bodyStdout] = yield* Effect.all(
+        [
+          runGitStdout("GitCore.showCommitDiff.patch", input.cwd, [
+            "diff-tree",
+            "-p",
+            "--minimal",
+            "-r",
+            input.commitHash,
+          ]),
+          runGitStdout("GitCore.showCommitDiff.meta", input.cwd, [
+            "log",
+            `--format=${LOG_FORMAT}`,
+            "-n",
+            "1",
+            input.commitHash,
+          ]),
+          runGitStdout("GitCore.showCommitDiff.body", input.cwd, [
+            "log",
+            "--format=%b",
+            "-n",
+            "1",
+            input.commitHash,
+          ]),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const line = commitStdout.split("\n").find((l) => l.length > 0)!;
+      const [hash, abbreviatedHash, subject, authorName, authorDate] = line.split("\0");
+      return {
+        patch,
+        commit: {
+          hash: hash!,
+          abbreviatedHash: abbreviatedHash!,
+          subject: subject!,
+          authorName: authorName!,
+          authorDate: authorDate!,
+        },
+        body: bodyStdout.trim(),
+      };
+    });
+
   return {
     status,
     statusDetails,
@@ -1422,6 +1508,8 @@ const makeGitCore = Effect.gen(function* () {
     checkoutBranch,
     initRepo,
     listLocalBranchNames,
+    log,
+    showCommitDiff,
   } satisfies GitCoreShape;
 });
 

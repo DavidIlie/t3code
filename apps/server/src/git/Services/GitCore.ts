@@ -16,8 +16,12 @@ import type {
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitLogInput,
+  GitLogResult,
   GitPullResult,
   GitRemoveWorktreeInput,
+  GitShowCommitDiffInput,
+  GitShowCommitDiffResult,
   GitStatusInput,
   GitStatusResult,
 } from "@t3tools/contracts";
@@ -215,6 +219,18 @@ export interface GitCoreShape {
    * List local branch names (short format).
    */
   readonly listLocalBranchNames: (cwd: string) => Effect.Effect<string[], GitCommandError>;
+
+  /**
+   * Read commit log for a repository.
+   */
+  readonly log: (input: GitLogInput) => Effect.Effect<GitLogResult, GitCommandError>;
+
+  /**
+   * Show the diff patch for a single commit.
+   */
+  readonly showCommitDiff: (
+    input: GitShowCommitDiffInput,
+  ) => Effect.Effect<GitShowCommitDiffResult, GitCommandError>;
 }
 
 /**

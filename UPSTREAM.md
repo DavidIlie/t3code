@@ -5,11 +5,11 @@ Fork: https://github.com/DavidIlie/t3code
 
 ## Last Synced Commit
 
-`dcd2e5c3` — fix: don't restart the app on normal exits in dev runner (2026-03-12)
+`46ea594f` — Actions dialog: autofocus script-name field (#912) (2026-03-13)
 
 ## Pending Upstream Commits
 
-<!-- Updated by running: git log --oneline dcd2e5c3..upstream/main -->
+<!-- Updated by running: git log --oneline 46ea594f..upstream/main -->
 <!-- Each commit gets moved to Integrated or Skipped after processing -->
 
 None — fully synced with upstream/main.
@@ -93,6 +93,17 @@ None — fully synced with upstream/main.
 - `b496ae83` — fix: add error logging for code highlighting failures
 - `1e276573` — feat: add fuzzy workspace entry search
 - `dcd2e5c3` — fix: don't restart the app on normal exits in dev runner (already implemented)
+- `727c0cfc` — feat: Allow Overriding Timestamp Format in Settings
+- `5c03fb62` — Add Antigravity to supported editors
+- `71a7473a` — fix: composer @file autocomplete cursor and spacing bugs
+- `a14debc8` — fix: block image uploads during plan mode questions
+- `36473f7d` — feat: replace worktree toggle with discoverable Select dropdown
+- `64dc07a8` — Add compact Codex tool-call icons and details to the chat timeline
+- `d0ae0adc` — fix(web): add default thread env mode setting
+- `ac0d1f52` — fix(web): defer diff worker startup until diff opens
+- `876bbd71` — Extract reusable clipboard hook and standardize media queries
+- `89ffcf42` — Upgrade oxfmt and oxlint tooling versions
+- `46ea594f` — Actions dialog: autofocus script-name field (#912)
 
 ## Skipped
 
@@ -109,3 +120,7 @@ None — fully synced with upstream/main.
 - `581d2429` — remove triggers (upstream CI)
 - `d9d0216e` — fix pr size workflow (upstream CI)
 - `db17ff33` — fix syntax errors from bad merge (already correct in our codebase)
+- `ae4ae997` — chore: update @vitejs/plugin-react to 6.0.0 (dep version bump)
+- `995a2666` — chore: Upgrade marketing app to Astro 6 (marketing only)
+- `dfd62cfb` — fix(desktop): show dialog after "Check for Updates" menu action (already have our own update flow)
+- `790fda1a` — feat(github): add issue templates for automatic triage (upstream CI/github)

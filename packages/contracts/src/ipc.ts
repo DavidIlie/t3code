@@ -1,6 +1,8 @@
 import type {
   GitCheckoutInput,
   GitCreateBranchInput,
+  GitLogInput,
+  GitLogResult,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullRequestRefInput,
@@ -15,6 +17,8 @@ import type {
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
+  GitShowCommitDiffInput,
+  GitShowCommitDiffResult,
   GitStatusInput,
   GitStatusResult,
 } from "./git";
@@ -167,6 +171,8 @@ export interface NativeApi {
     pull: (input: GitPullInput) => Promise<GitPullResult>;
     status: (input: GitStatusInput) => Promise<GitStatusResult>;
     runStackedAction: (input: GitRunStackedActionInput) => Promise<GitRunStackedActionResult>;
+    log: (input: GitLogInput) => Promise<GitLogResult>;
+    showCommitDiff: (input: GitShowCommitDiffInput) => Promise<GitShowCommitDiffResult>;
   };
   contextMenu: {
     show: <T extends string>(

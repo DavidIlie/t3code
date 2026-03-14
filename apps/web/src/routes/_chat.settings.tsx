@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ProviderKind } from "@t3tools/contracts";
 import { getDefaultModel, getModelOptions, normalizeModelSlug } from "@t3tools/shared/model";
-import { TerminalIcon } from "lucide-react";
+import { SearchIcon, TerminalIcon, XIcon } from "lucide-react";
 
 import { MAX_CUSTOM_MODEL_LENGTH, useAppSettings } from "../appSettings";
 import { AVAILABLE_PROVIDER_OPTIONS } from "../components/ProviderModelPicker";
@@ -24,6 +24,7 @@ import {
 import { Switch } from "../components/ui/switch";
 import { APP_VERSION } from "../branding";
 import { SidebarInset } from "~/components/ui/sidebar";
+import { toastManager } from "../components/ui/toast";
 import McpStatusPanel from "../components/McpStatusPanel";
 
 const THEME_OPTIONS = [
@@ -43,6 +44,63 @@ const THEME_OPTIONS = [
     description: "Always use the dark theme.",
   },
 ] as const;
+
+function ThemePreviewPane({ isDark }: { isDark: boolean }) {
+  const bg = isDark ? "bg-[#1a1a2e]" : "bg-[#f5f5f7]";
+  const sidebar = isDark ? "bg-[#12121f]" : "bg-[#e8e8ec]";
+  const titleBar = isDark ? "bg-[#252540]" : "bg-[#dcdce0]";
+  const content = isDark ? "bg-[#20203a]" : "bg-[#ffffff]";
+  const accent = "bg-primary";
+  const dot1 = isDark ? "bg-red-400" : "bg-red-500";
+  const dot2 = isDark ? "bg-amber-400" : "bg-amber-500";
+  const dot3 = isDark ? "bg-emerald-400" : "bg-emerald-500";
+
+  return (
+    <div className={`h-full w-full overflow-hidden rounded-md ${bg}`}>
+      <div className="flex h-full">
+        {/* Sidebar */}
+        <div className={`w-[28%] ${sidebar} p-1`}>
+          <div className="flex gap-[2px] mb-1">
+            <span className={`size-[3px] rounded-full ${dot1}`} />
+            <span className={`size-[3px] rounded-full ${dot2}`} />
+            <span className={`size-[3px] rounded-full ${dot3}`} />
+          </div>
+          <div className={`mb-0.5 h-[3px] w-[70%] rounded-sm ${titleBar}`} />
+          <div className={`mb-0.5 h-[3px] w-[50%] rounded-sm ${titleBar} opacity-50`} />
+          <div className={`h-[3px] w-[60%] rounded-sm ${titleBar} opacity-30`} />
+        </div>
+        {/* Main content */}
+        <div className="flex-1 p-1">
+          <div className={`mb-1 h-[5px] w-full rounded-sm ${titleBar}`} />
+          <div className={`mb-0.5 h-[3px] w-[80%] rounded-sm ${content}`} />
+          <div className={`mb-0.5 h-[3px] w-[60%] rounded-sm ${content}`} />
+          <div className={`mt-1 h-[5px] w-[40%] rounded-sm ${accent}`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ThemePreview({ variant }: { variant: string }) {
+  if (variant === "system") {
+    return (
+      <div className="flex h-16 w-24 overflow-hidden rounded-lg border border-border">
+        <div className="w-1/2">
+          <ThemePreviewPane isDark={false} />
+        </div>
+        <div className="w-1/2">
+          <ThemePreviewPane isDark={true} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-16 w-24 overflow-hidden rounded-lg border border-border">
+      <ThemePreviewPane isDark={variant === "dark"} />
+    </div>
+  );
+}
 
 const MODEL_PROVIDER_SETTINGS: Array<{
   provider: ProviderKind;
@@ -202,12 +260,80 @@ function TerminalSettingsSection({
   );
 }
 
+/** Searchable section keywords -- lowercase. */
+const SECTION_SEARCH_DATA: Record<string, string[]> = {
+  appearance: ["appearance", "theme", "light", "dark", "system", "timestamp", "format"],
+  usage: ["usage", "sidebar", "bars", "rate limit", "tiers"],
+  codex: ["codex", "binary", "path", "home", "app server"],
+  models: ["models", "model", "slug", "provider", "default", "codex", "claude"],
+  responses: ["responses", "stream", "streaming", "assistant"],
+  developer: ["developer", "debug", "tool calls", "group"],
+  terminal: ["terminal", "shell", "default shell"],
+  notifications: ["notifications", "permission", "os", "alert"],
+  keybindings: ["keybindings", "keyboard", "shortcuts", "json"],
+  shell_command: ["shell", "command", "gurt", "install", "symlink", "path"],
+  safety: ["safety", "confirm", "delete", "worktree", "thread"],
+  commit_messages: ["commit", "message", "instructions", "conventional"],
+  tray: ["tray", "icon", "system tray", "menu"],
+  about: ["about", "version", "source", "david"],
+  mcp: ["mcp", "servers", "model context protocol", "status"],
+};
+
+function sectionMatchesSearch(sectionId: string, query: string): boolean {
+  if (!query) return true;
+  const lower = query.toLowerCase();
+  const keywords = SECTION_SEARCH_DATA[sectionId];
+  if (!keywords) return true;
+  return keywords.some((kw) => kw.includes(lower));
+}
+
 function SettingsRouteView() {
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const { settings, defaults, updateSettings } = useAppSettings();
+  const { settings, defaults, updateSettings: rawUpdateSettings } = useAppSettings();
+  const saveToastTimeout = useRef<ReturnType<typeof setTimeout>>(null);
+  const updateSettings = useCallback(
+    (patch: Partial<typeof settings>) => {
+      rawUpdateSettings(patch);
+      if (saveToastTimeout.current) clearTimeout(saveToastTimeout.current);
+      saveToastTimeout.current = setTimeout(() => {
+        toastManager.add({
+          type: "success",
+          title: "Settings saved",
+        });
+      }, 300);
+    },
+    [rawUpdateSettings],
+  );
   const serverConfigQuery = useQuery(serverConfigQueryOptions());
   const [isOpeningKeybindings, setIsOpeningKeybindings] = useState(false);
   const [openKeybindingsError, setOpenKeybindingsError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Cmd/Ctrl+F focuses the search bar
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  const show = useMemo(() => {
+    const q = searchQuery.trim();
+    const result: Record<string, boolean> = {};
+    for (const key of Object.keys(SECTION_SEARCH_DATA)) {
+      result[key] = sectionMatchesSearch(key, q);
+    }
+    return result;
+  }, [searchQuery]);
+
   const [customModelInputByProvider, setCustomModelInputByProvider] = useState<
     Record<ProviderKind, string>
   >({
@@ -322,16 +448,38 @@ function SettingsRouteView() {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-            <header className="space-y-1">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
-              <p className="text-sm text-muted-foreground">
-                Configure app-level preferences for this device. Changes save automatically.
-              </p>
+            <header className="space-y-3">
+              <div className="space-y-1">
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
+                <p className="text-sm text-muted-foreground">
+                  Configure app-level preferences for this device. Changes save automatically.
+                </p>
+              </div>
+              <div className="relative">
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
+                <Input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search settings... (⌘F)"
+                  className="pl-9 pr-8"
+                  spellCheck={false}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/50 hover:text-foreground"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                )}
+              </div>
             </header>
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            {show.appearance && <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Appearance</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -339,42 +487,80 @@ function SettingsRouteView() {
                 </p>
               </div>
 
-              <div className="space-y-2" role="radiogroup" aria-label="Theme preference">
-                {THEME_OPTIONS.map((option) => {
-                  const selected = theme === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      className={`flex w-full items-start justify-between rounded-lg border px-3 py-2 text-left transition-colors ${
-                        selected
-                          ? "border-primary/60 bg-primary/8 text-foreground"
-                          : "border-border bg-background text-muted-foreground hover:bg-accent"
-                      }`}
-                      onClick={() => setTheme(option.value)}
-                    >
-                      <span className="flex flex-col">
-                        <span className="text-sm font-medium">{option.label}</span>
-                        <span className="text-xs">{option.description}</span>
-                      </span>
-                      {selected ? (
-                        <span className="rounded bg-primary/14 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
-                          Selected
+              <div className="space-y-4">
+                <div className="flex gap-3" role="radiogroup" aria-label="Theme preference">
+                  {THEME_OPTIONS.map((option) => {
+                    const selected = theme === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        className={`group flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition-all ${
+                          selected
+                            ? "border-primary bg-primary/5"
+                            : "border-transparent hover:border-border"
+                        }`}
+                        onClick={() => setTheme(option.value)}
+                      >
+                        <ThemePreview variant={option.value} />
+                        <span
+                          className={`text-xs ${selected ? "font-semibold text-foreground" : "text-muted-foreground"}`}
+                        >
+                          {option.label}
                         </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>}
+
+            {show.usage && <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="mb-4">
+                <h2 className="text-sm font-medium text-foreground">Usage</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Control how API usage and rate limit information is displayed.
+                </p>
               </div>
 
-              <p className="mt-4 text-xs text-muted-foreground">
-                Active theme: <span className="font-medium text-foreground">{resolvedTheme}</span>
-              </p>
-            </section>
+              <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Sidebar usage bars</p>
+                  <p className="text-xs text-muted-foreground">
+                    Show usage tier bars in the sidebar footer for at-a-glance rate limit visibility.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.showUsageBars}
+                  onCheckedChange={(checked) =>
+                    updateSettings({
+                      showUsageBars: Boolean(checked),
+                    })
+                  }
+                  aria-label="Show sidebar usage bars"
+                />
+              </div>
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+              {settings.showUsageBars !== defaults.showUsageBars ? (
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() =>
+                      updateSettings({
+                        showUsageBars: defaults.showUsageBars,
+                      })
+                    }
+                  >
+                    Restore default
+                  </Button>
+                </div>
+              ) : null}
+            </section>}
+
+            {show.codex && <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Codex App Server</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -433,9 +619,9 @@ function SettingsRouteView() {
                   </Button>
                 </div>
               </div>
-            </section>
+            </section>}
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            {show.models && <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Models</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -626,9 +812,9 @@ function SettingsRouteView() {
                   );
                 })}
               </div>
-            </section>
+            </section>}
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            {show.responses && <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Responses</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -669,15 +855,63 @@ function SettingsRouteView() {
                   </Button>
                 </div>
               ) : null}
-            </section>
+            </section>}
 
-            <TerminalSettingsSection
+            {show.developer && <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="mb-4">
+                <h2 className="text-sm font-medium text-foreground">Developer</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Debug tools and developer-facing options.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Debug mode</p>
+                  <p className="text-xs text-muted-foreground">
+                    Show a debug overlay with session, turn, and usage details. Toggle with{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-[10px]">/debug</code> in any
+                    chat.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.debugMode}
+                  onCheckedChange={(checked) =>
+                    updateSettings({
+                      debugMode: Boolean(checked),
+                    })
+                  }
+                  aria-label="Enable debug mode"
+                />
+              </div>
+
+              <div className="mt-3 flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Group tool calls</p>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, all tool calls in a turn are grouped into a single card. When
+                    disabled, tool calls are shown chronologically between text messages.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.groupToolCalls}
+                  onCheckedChange={(checked) =>
+                    updateSettings({
+                      groupToolCalls: Boolean(checked),
+                    })
+                  }
+                  aria-label="Group tool calls"
+                />
+              </div>
+            </section>}
+
+            {show.terminal && <TerminalSettingsSection
               settings={settings}
               updateSettings={updateSettings}
               defaults={defaults}
-            />
+            />}
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            {show.keybindings && <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Keybindings</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -711,9 +945,9 @@ function SettingsRouteView() {
                   <p className="text-xs text-destructive">{openKeybindingsError}</p>
                 ) : null}
               </div>
-            </section>
+            </section>}
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            {show.safety && <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Safety</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -754,9 +988,9 @@ function SettingsRouteView() {
                   </Button>
                 </div>
               ) : null}
-            </section>
+            </section>}
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            {show.about && <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">About</h2>
               </div>
@@ -809,9 +1043,9 @@ function SettingsRouteView() {
                   </a>
                 </div>
               </div>
-            </section>
+            </section>}
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            {show.mcp && <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">MCP Servers</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -819,7 +1053,7 @@ function SettingsRouteView() {
                 </p>
               </div>
               <McpStatusPanel />
-            </section>
+            </section>}
           </div>
         </div>
       </div>

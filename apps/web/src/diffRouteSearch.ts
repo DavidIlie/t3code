@@ -4,6 +4,8 @@ export interface DiffRouteSearch {
   diff?: "1" | undefined;
   diffTurnId?: TurnId | undefined;
   diffFilePath?: string | undefined;
+  history?: "1" | undefined;
+  historyCommit?: string | undefined;
 }
 
 function isDiffOpenValue(value: unknown): boolean {
@@ -20,9 +22,23 @@ function normalizeSearchString(value: unknown): string | undefined {
 
 export function stripDiffSearchParams<T extends Record<string, unknown>>(
   params: T,
-): Omit<T, "diff" | "diffTurnId" | "diffFilePath"> {
-  const { diff: _diff, diffTurnId: _diffTurnId, diffFilePath: _diffFilePath, ...rest } = params;
-  return rest as Omit<T, "diff" | "diffTurnId" | "diffFilePath">;
+): Omit<T, "diff" | "diffTurnId" | "diffFilePath" | "history" | "historyCommit"> {
+  const {
+    diff: _diff,
+    diffTurnId: _diffTurnId,
+    diffFilePath: _diffFilePath,
+    history: _history,
+    historyCommit: _historyCommit,
+    ...rest
+  } = params;
+  return rest as Omit<T, "diff" | "diffTurnId" | "diffFilePath" | "history" | "historyCommit">;
+}
+
+export function stripHistorySearchParams<T extends Record<string, unknown>>(
+  params: T,
+): Omit<T, "history" | "historyCommit"> {
+  const { history: _history, historyCommit: _historyCommit, ...rest } = params;
+  return rest as Omit<T, "history" | "historyCommit">;
 }
 
 export function parseDiffRouteSearch(search: Record<string, unknown>): DiffRouteSearch {
@@ -30,10 +46,14 @@ export function parseDiffRouteSearch(search: Record<string, unknown>): DiffRoute
   const diffTurnIdRaw = diff ? normalizeSearchString(search.diffTurnId) : undefined;
   const diffTurnId = diffTurnIdRaw ? TurnId.makeUnsafe(diffTurnIdRaw) : undefined;
   const diffFilePath = diff && diffTurnId ? normalizeSearchString(search.diffFilePath) : undefined;
+  const history = isDiffOpenValue(search.history) ? "1" : undefined;
+  const historyCommit = history ? normalizeSearchString(search.historyCommit) : undefined;
 
   return {
     ...(diff ? { diff } : {}),
     ...(diffTurnId ? { diffTurnId } : {}),
     ...(diffFilePath ? { diffFilePath } : {}),
+    ...(history ? { history } : {}),
+    ...(historyCommit ? { historyCommit } : {}),
   };
 }

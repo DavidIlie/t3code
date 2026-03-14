@@ -212,3 +212,45 @@ export const GitPullResult = Schema.Struct({
   upstreamBranch: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
 });
 export type GitPullResult = typeof GitPullResult.Type;
+
+// ── Git History ───────────────────────────────────────────────────
+
+export const GitLogInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  limit: Schema.optional(PositiveInt),
+  skip: Schema.optional(NonNegativeInt),
+  branch: Schema.optional(TrimmedNonEmptyStringSchema),
+  search: Schema.optional(Schema.String),
+  author: Schema.optional(Schema.String),
+  since: Schema.optional(Schema.String),
+  until: Schema.optional(Schema.String),
+});
+export type GitLogInput = typeof GitLogInput.Type;
+
+export const GitLogEntry = Schema.Struct({
+  hash: TrimmedNonEmptyStringSchema,
+  abbreviatedHash: TrimmedNonEmptyStringSchema,
+  subject: TrimmedNonEmptyStringSchema,
+  authorName: TrimmedNonEmptyStringSchema,
+  authorDate: TrimmedNonEmptyStringSchema,
+});
+export type GitLogEntry = typeof GitLogEntry.Type;
+
+export const GitLogResult = Schema.Struct({
+  commits: Schema.Array(GitLogEntry),
+  hasMore: Schema.Boolean,
+});
+export type GitLogResult = typeof GitLogResult.Type;
+
+export const GitShowCommitDiffInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  commitHash: TrimmedNonEmptyStringSchema,
+});
+export type GitShowCommitDiffInput = typeof GitShowCommitDiffInput.Type;
+
+export const GitShowCommitDiffResult = Schema.Struct({
+  patch: Schema.String,
+  commit: GitLogEntry,
+  body: Schema.optional(Schema.String),
+});
+export type GitShowCommitDiffResult = typeof GitShowCommitDiffResult.Type;

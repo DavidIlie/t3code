@@ -163,6 +163,8 @@ export function createWsNativeApi(): NativeApi {
       resolvePullRequest: (input) => transport.request(WS_METHODS.gitResolvePullRequest, input),
       preparePullRequestThread: (input) =>
         transport.request(WS_METHODS.gitPreparePullRequestThread, input),
+      log: (input) => transport.request(WS_METHODS.gitLog, input),
+      showCommitDiff: (input) => transport.request(WS_METHODS.gitShowCommitDiff, input),
     },
     contextMenu: {
       show: async <T extends string>(
