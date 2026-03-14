@@ -53,6 +53,7 @@ const AppSettingsSchema = Schema.Struct({
   showUsageBars: Schema.Boolean.pipe(Schema.withConstructorDefault(() => Option.some(true))),
   groupToolCalls: Schema.Boolean.pipe(Schema.withConstructorDefault(() => Option.some(true))),
   debugMode: Schema.Boolean.pipe(Schema.withConstructorDefault(() => Option.some(false))),
+  showTrayIcon: Schema.Boolean.pipe(Schema.withConstructorDefault(() => Option.some(false))),
   timestampFormat: Schema.Literals(["locale", "12-hour", "24-hour"]).pipe(
     Schema.withConstructorDefault(() => Option.some("locale")),
   ),

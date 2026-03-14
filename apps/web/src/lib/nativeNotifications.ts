@@ -38,6 +38,7 @@ export function showNativeNotification(input: {
   title: string;
   body?: string;
   tag?: string;
+  onClick?: () => void;
 }): boolean {
   if (!canShowNativeNotification()) return false;
   try {
@@ -49,7 +50,13 @@ export function showNativeNotification(input: {
       options.tag = input.tag;
     }
     const notification = new Notification(input.title, options);
-    void notification;
+    if (input.onClick) {
+      const handler = input.onClick;
+      notification.addEventListener("click", () => {
+        window.focus();
+        handler();
+      });
+    }
     return true;
   } catch {
     return false;

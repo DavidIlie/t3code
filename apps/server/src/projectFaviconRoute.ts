@@ -2,12 +2,17 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
-const FAVICON_MIME_TYPES: Record<string, string> = {
+const IMAGE_MIME_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
 };
+
+const FAVICON_MIME_TYPES = IMAGE_MIME_TYPES;
 
 const FALLBACK_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#6b728080" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-fallback="project-favicon"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>`;
 
@@ -167,5 +172,52 @@ export function tryHandleProjectFaviconRequest(url: URL, res: http.ServerRespons
   };
 
   tryCandidates(0);
+  return true;
+}
+
+/**
+ * Serve a local image file by absolute path.
+ * Used for custom project icons set via the Image tab in project settings.
+ */
+export function tryHandleProjectIconRequest(url: URL, res: http.ServerResponse): boolean {
+  if (url.pathname !== "/api/project-icon") {
+    return false;
+  }
+
+  const filePath = url.searchParams.get("path");
+  if (!filePath || !path.isAbsolute(filePath)) {
+    res.writeHead(400, { "Content-Type": "text/plain" });
+    res.end("Missing or invalid path parameter");
+    return true;
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType = IMAGE_MIME_TYPES[ext];
+  if (!contentType) {
+    res.writeHead(400, { "Content-Type": "text/plain" });
+    res.end("Unsupported image type");
+    return true;
+  }
+
+  fs.stat(filePath, (err, stats) => {
+    if (err || !stats?.isFile()) {
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("File not found");
+      return;
+    }
+    fs.readFile(filePath, (readErr, data) => {
+      if (readErr) {
+        res.writeHead(500, { "Content-Type": "text/plain" });
+        res.end("Read error");
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=60",
+      });
+      res.end(data);
+    });
+  });
+
   return true;
 }

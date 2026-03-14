@@ -11,7 +11,7 @@ import { GitService, type GitServiceShape } from "../Services/GitService.ts";
 import { GitCoreLive } from "./GitCore.ts";
 import { GitCore, type GitCoreShape } from "../Services/GitCore.ts";
 import { GitCommandError } from "../Errors.ts";
-import { type ProcessRunResult, runProcess } from "../../processRunner.ts";
+import { runProcess } from "../../processRunner.ts";
 
 // ── Helpers ──
 
@@ -57,31 +57,6 @@ function git(
       timeoutMs: 10_000,
     });
     return result.stdout.trim();
-  });
-}
-
-function runShellCommand(input: {
-  command: string;
-  cwd: string;
-  timeoutMs?: number;
-  maxOutputBytes?: number;
-}): Effect.Effect<ProcessRunResult, Error> {
-  return Effect.promise(() => {
-    const shellPath =
-      process.platform === "win32"
-        ? (process.env.ComSpec ?? "cmd.exe")
-        : (process.env.SHELL ?? "/bin/sh");
-
-    const args =
-      process.platform === "win32" ? ["/d", "/s", "/c", input.command] : ["-lc", input.command];
-
-    return runProcess(shellPath, args, {
-      cwd: input.cwd,
-      timeoutMs: input.timeoutMs ?? 30_000,
-      allowNonZeroExit: true,
-      maxBufferBytes: input.maxOutputBytes ?? 1_000_000,
-      outputMode: "truncate",
-    });
   });
 }
 

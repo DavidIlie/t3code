@@ -38,6 +38,8 @@ import {
 } from "lucide-react";
 
 import { useAppSettings } from "../appSettings";
+import { isElectron } from "../env";
+import { serverHttpOrigin } from "../lib/serverOrigin";
 import { readNativeApi } from "../nativeApi";
 import {
   Dialog,
@@ -272,14 +274,23 @@ export default function ProjectSettingsDialog({
   const currentIcon = settings.projectIcons[projectId];
 
   // ── Icon state ──
-  const [iconTab, setIconTab] = useState<"favicon" | "lucide" | "emoji">(
-    currentIcon?.type === "lucide" ? "lucide" : currentIcon?.type === "emoji" ? "emoji" : "favicon",
+  const [iconTab, setIconTab] = useState<"favicon" | "lucide" | "emoji" | "file">(
+    currentIcon?.type === "lucide"
+      ? "lucide"
+      : currentIcon?.type === "emoji"
+        ? "emoji"
+        : currentIcon?.type === "file"
+          ? "file"
+          : "favicon",
   );
   const [emojiInput, setEmojiInput] = useState(
     currentIcon?.type === "emoji" ? currentIcon.value : "",
   );
   const [selectedLucideIcon, setSelectedLucideIcon] = useState(
     currentIcon?.type === "lucide" ? currentIcon.value : "",
+  );
+  const [filePathInput, setFilePathInput] = useState(
+    currentIcon?.type === "file" ? currentIcon.value : "",
   );
 
   const saveIcon = useCallback(() => {
@@ -290,9 +301,11 @@ export default function ProjectSettingsDialog({
       nextIcons[projectId] = { type: "lucide", value: selectedLucideIcon };
     } else if (iconTab === "emoji" && emojiInput.trim()) {
       nextIcons[projectId] = { type: "emoji", value: emojiInput.trim() };
+    } else if (iconTab === "file" && filePathInput.trim()) {
+      nextIcons[projectId] = { type: "file", value: filePathInput.trim() };
     }
     updateSettings({ projectIcons: nextIcons });
-  }, [iconTab, selectedLucideIcon, emojiInput, projectId, settings.projectIcons, updateSettings]);
+  }, [iconTab, selectedLucideIcon, emojiInput, filePathInput, projectId, settings.projectIcons, updateSettings]);
 
   // ── MCP state ──
   const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
@@ -398,7 +411,7 @@ export default function ProjectSettingsDialog({
                 Project Icon
               </h3>
               <div className="flex gap-2 mb-3">
-                {(["favicon", "lucide", "emoji"] as const).map((tab) => (
+                {(["favicon", "lucide", "emoji", "file"] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -409,7 +422,7 @@ export default function ProjectSettingsDialog({
                     }`}
                     onClick={() => setIconTab(tab)}
                   >
-                    {tab === "favicon" ? "Auto (Favicon)" : tab === "lucide" ? "Icon" : "Emoji"}
+                    {tab === "favicon" ? "Auto (Favicon)" : tab === "lucide" ? "Icon" : tab === "emoji" ? "Emoji" : "Image"}
                   </button>
                 ))}
               </div>
@@ -459,6 +472,59 @@ export default function ProjectSettingsDialog({
                   >
                     Save
                   </button>
+                </div>
+              )}
+
+              {iconTab === "file" && (
+                <div className="space-y-2">
+                  {isElectron && (
+                    <button
+                      type="button"
+                      className="w-full rounded-md border border-dashed border-border bg-secondary/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      onClick={async () => {
+                        const api = readNativeApi();
+                        if (!api) return;
+                        const picked = await api.dialogs.pickFile();
+                        if (picked) {
+                          setFilePathInput(picked);
+                          const nextIcons = { ...settings.projectIcons };
+                          nextIcons[projectId] = { type: "file", value: picked };
+                          updateSettings({ projectIcons: nextIcons });
+                        }
+                      }}
+                    >
+                      Browse for image...
+                    </button>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:border-ring focus:outline-none"
+                      placeholder="/path/to/icon.png"
+                      value={filePathInput}
+                      onChange={(e) => setFilePathInput(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+                      disabled={!filePathInput.trim()}
+                      onClick={saveIcon}
+                    >
+                      Save
+                    </button>
+                  </div>
+                  {filePathInput.trim() && (
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={`${serverHttpOrigin}/api/project-icon?path=${encodeURIComponent(filePathInput)}`}
+                        alt="Preview"
+                        className="size-8 rounded-md object-contain bg-secondary/50"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                      <span className="text-[10px] text-muted-foreground/50">Preview</span>
+                    </div>
+                  )}
                 </div>
               )}
 

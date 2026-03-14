@@ -5,7 +5,7 @@ import { type ProviderKind } from "@t3tools/contracts";
 import { getDefaultModel, getModelOptions, normalizeModelSlug } from "@t3tools/shared/model";
 import { SearchIcon, TerminalIcon, XIcon } from "lucide-react";
 
-import { MAX_CUSTOM_MODEL_LENGTH, useAppSettings } from "../appSettings";
+import { type AppSettings, MAX_CUSTOM_MODEL_LENGTH, useAppSettings } from "../appSettings";
 import { AVAILABLE_PROVIDER_OPTIONS } from "../components/ProviderModelPicker";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { isElectron } from "../env";
@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
+import { Textarea } from "../components/ui/textarea";
 import { APP_VERSION } from "../branding";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { toastManager } from "../components/ui/toast";
@@ -260,6 +261,76 @@ function TerminalSettingsSection({
   );
 }
 
+function ShellCommandSection() {
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    void window.desktopBridge?.isShellCommandInstalled?.().then(setInstalled).catch(() => {});
+  }, []);
+
+  const toggle = useCallback(() => {
+    setLoading(true);
+    const action = installed
+      ? window.desktopBridge?.uninstallShellCommand?.()
+      : window.desktopBridge?.installShellCommand?.();
+    void action
+      ?.then(() => {
+        setInstalled((prev) => !prev);
+        toastManager.add({
+          type: "success",
+          title: installed ? "Shell command uninstalled" : "Shell command installed",
+        });
+      })
+      .catch(() => {
+        toastManager.add({
+          type: "error",
+          title: installed ? "Failed to uninstall shell command" : "Failed to install shell command",
+        });
+      })
+      .finally(() => setLoading(false));
+  }, [installed]);
+
+  const methodsAvailable = !!window.desktopBridge?.isShellCommandInstalled;
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <div className="mb-4">
+        <h2 className="text-sm font-medium text-foreground">Shell Command</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Install or uninstall the <code className="rounded bg-muted px-1 py-0.5 text-[10px]">gurt</code> CLI
+          command so you can launch T3 Gurt from any terminal.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+        <div>
+          <p className="text-sm font-medium text-foreground">
+            <code className="rounded bg-muted px-1 py-0.5 text-[10px]">gurt</code> command
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {!methodsAvailable
+              ? "Not available in this build."
+              : installed === null
+                ? "Checking..."
+                : installed
+                  ? "Currently installed."
+                  : "Not installed."}
+          </p>
+        </div>
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={!methodsAvailable || installed === null || loading}
+          onClick={toggle}
+        >
+          {loading ? "Working..." : installed ? "Uninstall" : "Install"}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 /** Searchable section keywords -- lowercase. */
 const SECTION_SEARCH_DATA: Record<string, string[]> = {
   appearance: ["appearance", "theme", "light", "dark", "system", "timestamp", "format"],
@@ -288,7 +359,7 @@ function sectionMatchesSearch(sectionId: string, query: string): boolean {
 }
 
 function SettingsRouteView() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const { settings, defaults, updateSettings: rawUpdateSettings } = useAppSettings();
   const saveToastTimeout = useRef<ReturnType<typeof setTimeout>>(null);
   const updateSettings = useCallback(
@@ -513,6 +584,32 @@ function SettingsRouteView() {
                       </button>
                     );
                   })}
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Timestamp format</p>
+                    <p className="text-xs text-muted-foreground">
+                      How timestamps are displayed in the chat timeline.
+                    </p>
+                  </div>
+                  <Select
+                    value={settings.timestampFormat}
+                    onValueChange={(value) =>
+                      updateSettings({
+                        timestampFormat: value as AppSettings["timestampFormat"],
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-32" aria-label="Timestamp format">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectPopup>
+                      <SelectItem value="locale">System</SelectItem>
+                      <SelectItem value="12-hour">12-hour</SelectItem>
+                      <SelectItem value="24-hour">24-hour</SelectItem>
+                    </SelectPopup>
+                  </Select>
                 </div>
               </div>
             </section>}
@@ -989,6 +1086,88 @@ function SettingsRouteView() {
                 </div>
               ) : null}
             </section>}
+
+            {show.commit_messages && <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="mb-4">
+                <h2 className="text-sm font-medium text-foreground">Commit Message Instructions</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Custom instructions for AI-generated commit messages.
+                </p>
+              </div>
+
+              <label className="block space-y-1">
+                <Textarea
+                  value={settings.commitMessageInstructions}
+                  onChange={(e) =>
+                    updateSettings({ commitMessageInstructions: e.target.value })
+                  }
+                  placeholder="e.g. Use conventional commits format, keep subject under 72 characters..."
+                  spellCheck={false}
+                  rows={3}
+                />
+              </label>
+
+              {settings.commitMessageInstructions !== defaults.commitMessageInstructions ? (
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() =>
+                      updateSettings({
+                        commitMessageInstructions: defaults.commitMessageInstructions,
+                      })
+                    }
+                  >
+                    Restore default
+                  </Button>
+                </div>
+              ) : null}
+            </section>}
+
+            {show.tray && isElectron && <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="mb-4">
+                <h2 className="text-sm font-medium text-foreground">Tray</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Control the system tray icon behavior.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Show tray icon</p>
+                  <p className="text-xs text-muted-foreground">
+                    Show T3 Gurt in the system tray for quick access.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.showTrayIcon}
+                  onCheckedChange={(checked) =>
+                    updateSettings({
+                      showTrayIcon: Boolean(checked),
+                    })
+                  }
+                  aria-label="Show tray icon"
+                />
+              </div>
+
+              {settings.showTrayIcon !== defaults.showTrayIcon ? (
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() =>
+                      updateSettings({
+                        showTrayIcon: defaults.showTrayIcon,
+                      })
+                    }
+                  >
+                    Restore default
+                  </Button>
+                </div>
+              ) : null}
+            </section>}
+
+            {show.shell_command && isElectron && <ShellCommandSection />}
 
             {show.about && <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">

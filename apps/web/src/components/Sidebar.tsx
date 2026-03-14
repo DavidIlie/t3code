@@ -42,7 +42,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { useAppSettings } from "../appSettings";
 import { isElectron } from "../env";
-import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
+import { APP_VERSION } from "../branding";
 import { isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
 import { useStore } from "../store";
 import { shortcutLabelForCommand } from "../keybindings";
@@ -50,7 +50,7 @@ import { derivePendingApprovals, derivePendingUserInputs } from "../session-logi
 import { gitRemoveWorktreeMutationOptions, gitStatusQueryOptions } from "../lib/gitReactQuery";
 import { gitPushWithToast } from "../lib/gitPushWithToast";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
-import { useMediaQuery } from "../hooks/useMediaQuery";
+import { serverHttpOrigin } from "../lib/serverOrigin";
 import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
@@ -66,6 +66,7 @@ import {
 } from "./ui/dialog";
 import ProjectSettingsDialog, { getProjectIconComponent } from "./ProjectSettingsDialog";
 import AccountPill from "./AccountPill";
+import { SidebarUsageBars, UsageCard } from "./UsageCard";
 import {
   getArm64IntelBuildWarningDescription,
   getDesktopUpdateActionError,
@@ -83,7 +84,6 @@ import {
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
-  shouldOpenProjectFolderPickerImmediately,
 } from "./Sidebar.logic";
 import { Collapsible, CollapsibleContent } from "./ui/collapsible";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
@@ -200,30 +200,6 @@ function T3Wordmark() {
   );
 }
 
-/**
- * Derives the server's HTTP origin (scheme + host + port) from the same
- * sources WsTransport uses, converting ws(s) to http(s).
- */
-function getServerHttpOrigin(): string {
-  const bridgeUrl = window.desktopBridge?.getWsUrl();
-  const envUrl = import.meta.env.VITE_WS_URL as string | undefined;
-  const wsUrl =
-    bridgeUrl && bridgeUrl.length > 0
-      ? bridgeUrl
-      : envUrl && envUrl.length > 0
-        ? envUrl
-        : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:${window.location.port}`;
-  // Parse to extract just the origin, dropping path/query (e.g. ?token=…)
-  const httpUrl = wsUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:");
-  try {
-    return new URL(httpUrl).origin;
-  } catch {
-    return httpUrl;
-  }
-}
-
-const serverHttpOrigin = getServerHttpOrigin();
-
 export function ProjectFavicon({
   cwd,
   projectId,
@@ -252,6 +228,20 @@ export function ProjectFavicon({
       <span className={`${size === "md" ? "text-base" : "text-sm"} shrink-0 leading-none`}>
         {customIcon.value}
       </span>
+    );
+  }
+
+  if (customIcon?.type === "file") {
+    const iconSrc = `${serverHttpOrigin}/api/project-icon?path=${encodeURIComponent(customIcon.value)}`;
+    return (
+      <img
+        src={iconSrc}
+        alt=""
+        className={`${sizeClass} shrink-0 rounded-sm object-contain`}
+        onError={(e) => {
+          (e.target as HTMLImageElement).style.display = "none";
+        }}
+      />
     );
   }
 
@@ -302,7 +292,6 @@ function SortableProjectItem({
 }
 
 export default function Sidebar() {
-  const isMobile = useMediaQuery("(max-width: 767px)");
   const projects = useStore((store) => store.projects);
   const threads = useStore((store) => store.threads);
   const markThreadUnread = useStore((store) => store.markThreadUnread);
@@ -363,10 +352,6 @@ export default function Sidebar() {
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
   const removeFromSelection = useThreadSelectionStore((s) => s.removeFromSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
-  const shouldBrowseForProjectImmediately = shouldOpenProjectFolderPickerImmediately({
-    isElectron,
-    isMobile,
-  });
   const [searchQuery, setSearchQuery] = useState("");
   const preSearchExpandedRef = useRef<Map<string, boolean> | null>(null);
 
@@ -563,15 +548,7 @@ export default function Sidebar() {
         const description =
           error instanceof Error ? error.message : "An error occurred while adding the project.";
         setIsAddingProject(false);
-        if (shouldBrowseForProjectImmediately) {
-          toastManager.add({
-            type: "error",
-            title: "Failed to add project",
-            description,
-          });
-        } else {
-          setAddProjectError(description);
-        }
+        setAddProjectError(description);
         return;
       }
       finishAddingProject();
@@ -581,7 +558,6 @@ export default function Sidebar() {
       handleNewThread,
       isAddingProject,
       projects,
-      shouldBrowseForProjectImmediately,
     ],
   );
 
@@ -603,7 +579,7 @@ export default function Sidebar() {
     }
     if (pickedPath) {
       await addProjectFromPath(pickedPath);
-    } else if (!shouldBrowseForProjectImmediately) {
+    } else {
       addProjectInputRef.current?.focus();
     }
     setIsPickingFolder(false);
@@ -1120,7 +1096,6 @@ export default function Sidebar() {
       clearComposerDraftForThread,
       clearProjectDraftThreadId,
       getDraftThreadByProjectId,
-      navigate,
       projects,
       queryClient,
       syncClaudeCodeSessions,
@@ -1169,7 +1144,7 @@ export default function Sidebar() {
     suppressProjectClickAfterDragRef.current = false;
   }, []);
 
-  const handleProjectTitleClick = useCallback((event: React.MouseEvent, projectId: ProjectId) => {
+  const handleProjectTitleClick = useCallback((event: React.MouseEvent, _projectId: ProjectId) => {
     if (dragInProgressRef.current) {
       event.preventDefault();
       event.stopPropagation();
@@ -1366,10 +1341,7 @@ export default function Sidebar() {
             <div className="flex min-w-0 flex-1 items-center gap-1 ml-1 cursor-pointer">
               <T3Wordmark />
               <span className="truncate text-sm font-medium tracking-tight text-muted-foreground">
-                Code
-              </span>
-              <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
-                {APP_STAGE_LABEL}
+                Gurt
               </span>
             </div>
           }
@@ -1592,10 +1564,6 @@ export default function Sidebar() {
                     className="inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
                     onClick={() => {
                       setAddProjectError(null);
-                      if (shouldBrowseForProjectImmediately) {
-                        void handlePickFolder();
-                        return;
-                      }
                       setShowAddProjectDialog(true);
                     }}
                   />
@@ -1971,6 +1939,7 @@ export default function Sidebar() {
       <SidebarSeparator />
       <SidebarFooter className="p-2">
         <AccountPill />
+        {appSettings.showUsageBars && <SidebarUsageBars />}
         <SidebarMenu>
           <SidebarMenuItem>
             {isOnSettings ? (
@@ -1992,6 +1961,9 @@ export default function Sidebar() {
                 <span className="text-xs">Settings</span>
               </SidebarMenuButton>
             )}
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <UsageCard />
           </SidebarMenuItem>
         </SidebarMenu>
         <p className="px-2 text-[10px] text-muted-foreground/40">

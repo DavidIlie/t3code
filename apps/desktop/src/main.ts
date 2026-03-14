@@ -43,10 +43,12 @@ import {
   reduceDesktopUpdateStateOnUpdateAvailable,
 } from "./updateMachine";
 import { isArm64HostRunningIntelBuild, resolveDesktopRuntimeInfo } from "./runtimeArch";
+import { setupTrayIpcHandlers, setTrayEnabled } from "./tray";
 
 fixPath();
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
+const PICK_FILE_CHANNEL = "desktop:pick-file";
 const CONFIRM_CHANNEL = "desktop:confirm";
 const SET_THEME_CHANNEL = "desktop:set-theme";
 const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
@@ -56,6 +58,12 @@ const UPDATE_STATE_CHANNEL = "desktop:update-state";
 const UPDATE_GET_STATE_CHANNEL = "desktop:update-get-state";
 const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
+const SHELL_COMMAND_CHECK_CHANNEL = "desktop:shell-command-check";
+const SHELL_COMMAND_INSTALL_CHANNEL = "desktop:shell-command-install";
+const SHELL_COMMAND_UNINSTALL_CHANNEL = "desktop:shell-command-uninstall";
+const OPEN_PROJECT_CHANNEL = "desktop:open-project";
+const SHELL_COMMAND_NAME = "gurt";
+const SHELL_COMMAND_SYMLINK_DIR = "/usr/local/bin";
 const STATE_DIR =
   process.env.T3CODE_STATE_DIR?.trim() || Path.join(OS.homedir(), ".t3", "userdata");
 const DESKTOP_SCHEME = "t3";
@@ -374,6 +382,29 @@ function resolveBackendCwd(): string {
     return resolveAppRoot();
   }
   return OS.homedir();
+}
+
+function resolveShellCommandSourcePath(): string {
+  if (app.isPackaged) {
+    return Path.join(process.resourcesPath, "gurt");
+  }
+  return Path.join(ROOT_DIR, "apps/desktop/resources/gurt");
+}
+
+/** Parse --open-project <path> from process.argv. */
+function parseCLIProjectPath(): string | null {
+  const args = process.argv;
+  for (let i = 0; i < args.length; i++) {
+    const next = args[i + 1];
+    if (args[i] === "--open-project" && next) return next;
+  }
+  return null;
+}
+
+/** Send a project path to the renderer to be opened/created. */
+function sendOpenProjectToRenderer(projectPath: string): void {
+  if (!mainWindow) return;
+  mainWindow.webContents.send(OPEN_PROJECT_CHANNEL, projectPath);
 }
 
 function resolveDesktopStaticDir(): string | null {
@@ -1042,6 +1073,13 @@ async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void> {
   });
 }
 
+function getSafeTheme(rawTheme: unknown): DesktopTheme | null {
+  if (rawTheme === "light" || rawTheme === "dark" || rawTheme === "system") {
+    return rawTheme;
+  }
+  return null;
+}
+
 function registerIpcHandlers(): void {
   ipcMain.removeHandler(PICK_FOLDER_CHANNEL);
   ipcMain.handle(PICK_FOLDER_CHANNEL, async () => {
@@ -1057,6 +1095,21 @@ function registerIpcHandlers(): void {
     return result.filePaths[0] ?? null;
   });
 
+  ipcMain.removeHandler(PICK_FILE_CHANNEL);
+  ipcMain.handle(PICK_FILE_CHANNEL, async (_event, filters?: unknown) => {
+    const owner = BrowserWindow.getFocusedWindow() ?? mainWindow;
+    const fileFilters =
+      Array.isArray(filters) && filters.length > 0
+        ? (filters as Array<{ name: string; extensions: string[] }>)
+        : [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "svg", "ico", "webp"] }];
+    const opts = { properties: ["openFile" as const], filters: fileFilters };
+    const result = owner
+      ? await dialog.showOpenDialog(owner, opts)
+      : await dialog.showOpenDialog(opts);
+    if (result.canceled) return null;
+    return result.filePaths[0] ?? null;
+  });
+
   ipcMain.removeHandler(CONFIRM_CHANNEL);
   ipcMain.handle(CONFIRM_CHANNEL, async (_event, message: unknown) => {
     if (typeof message !== "string") {
@@ -1066,13 +1119,6 @@ function registerIpcHandlers(): void {
     const owner = BrowserWindow.getFocusedWindow() ?? mainWindow;
     return showDesktopConfirmDialog(message, owner);
   });
-
-  const getSafeTheme = (rawTheme: unknown): DesktopTheme | null => {
-    if (rawTheme === "light" || rawTheme === "dark" || rawTheme === "system") {
-      return rawTheme;
-    }
-    return null;
-  };
 
   ipcMain.removeHandler(SET_THEME_CHANNEL);
   ipcMain.handle(SET_THEME_CHANNEL, (_event, rawTheme: unknown) => {
@@ -1186,6 +1232,83 @@ function registerIpcHandlers(): void {
       completed: result.completed,
       state: updateState,
     } satisfies DesktopUpdateActionResult;
+  });
+
+  // ── Shell command handlers ───────────────────────────────────────
+  const shellCommandSourcePath = resolveShellCommandSourcePath();
+  const shellCommandSymlinkPath = Path.join(SHELL_COMMAND_SYMLINK_DIR, SHELL_COMMAND_NAME);
+
+  ipcMain.removeHandler(SHELL_COMMAND_CHECK_CHANNEL);
+  ipcMain.handle(SHELL_COMMAND_CHECK_CHANNEL, async () => {
+    try {
+      if (!FS.lstatSync(shellCommandSymlinkPath).isSymbolicLink()) return false;
+      return FS.readlinkSync(shellCommandSymlinkPath) === shellCommandSourcePath;
+    } catch {
+      return false;
+    }
+  });
+
+  ipcMain.removeHandler(SHELL_COMMAND_INSTALL_CHANNEL);
+  ipcMain.handle(SHELL_COMMAND_INSTALL_CHANNEL, async () => {
+    try {
+      if (!shellCommandSourcePath || !FS.existsSync(shellCommandSourcePath)) {
+        return { success: false, error: "Shell script not found in app bundle." };
+      }
+      if (!FS.existsSync(SHELL_COMMAND_SYMLINK_DIR)) {
+        FS.mkdirSync(SHELL_COMMAND_SYMLINK_DIR, { recursive: true });
+      }
+      try {
+        FS.unlinkSync(shellCommandSymlinkPath);
+      } catch {
+        // Symlink may not exist yet — ignore
+      }
+      FS.symlinkSync(shellCommandSourcePath, shellCommandSymlinkPath);
+      return { success: true };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      if (message.includes("EACCES") || message.includes("permission")) {
+        if (process.platform === "darwin") {
+          try {
+            ChildProcess.execSync(
+              `osascript -e 'do shell script "ln -sf \\"${shellCommandSourcePath}\\" \\"${shellCommandSymlinkPath}\\"" with administrator privileges'`,
+            );
+            return { success: true };
+          } catch (sudoErr: unknown) {
+            return {
+              success: false,
+              error: sudoErr instanceof Error ? sudoErr.message : "Permission denied",
+            };
+          }
+        }
+      }
+      return { success: false, error: message };
+    }
+  });
+
+  ipcMain.removeHandler(SHELL_COMMAND_UNINSTALL_CHANNEL);
+  ipcMain.handle(SHELL_COMMAND_UNINSTALL_CHANNEL, async () => {
+    try {
+      FS.unlinkSync(shellCommandSymlinkPath);
+      return { success: true };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      if (message.includes("EACCES") || message.includes("permission")) {
+        if (process.platform === "darwin") {
+          try {
+            ChildProcess.execSync(
+              `osascript -e 'do shell script "rm -f \\"${shellCommandSymlinkPath}\\"" with administrator privileges'`,
+            );
+            return { success: true };
+          } catch (sudoErr: unknown) {
+            return {
+              success: false,
+              error: sudoErr instanceof Error ? sudoErr.message : "Permission denied",
+            };
+          }
+        }
+      }
+      return { success: false, error: message };
+    }
   });
 }
 
@@ -1306,6 +1429,17 @@ async function bootstrap(): Promise<void> {
   writeDesktopLogHeader("bootstrap backend start requested");
   mainWindow = createWindow();
   writeDesktopLogHeader("bootstrap main window created");
+
+  setupTrayIpcHandlers(() => mainWindow);
+  writeDesktopLogHeader("bootstrap tray ipc handlers registered");
+
+  const cliProjectPath = parseCLIProjectPath();
+  if (cliProjectPath) {
+    writeDesktopLogHeader(`bootstrap cli project path=${cliProjectPath}`);
+    mainWindow.webContents.once("did-finish-load", () => {
+      setTimeout(() => sendOpenProjectToRenderer(cliProjectPath), 500);
+    });
+  }
 }
 
 app.on("before-quit", () => {
@@ -1313,6 +1447,7 @@ app.on("before-quit", () => {
   writeDesktopLogHeader("before-quit received");
   clearUpdatePollTimer();
   stopBackend();
+  setTrayEnabled(false);
   restoreStdIoCapture?.();
 });
 

@@ -1,4 +1,8 @@
-import { type ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import {
+  DEFAULT_MODEL_BY_PROVIDER,
+  type ProjectId,
+  type ResolvedKeybindingsConfig,
+} from "@t3tools/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
@@ -7,10 +11,13 @@ import { DiffWorkerPoolProvider } from "../components/DiffWorkerPoolProvider";
 import ThreadSidebar from "../components/Sidebar";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { isTerminalFocused } from "../lib/terminalFocus";
+import { newCommandId, newProjectId } from "../lib/utils";
+import { readNativeApi } from "../nativeApi";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { resolveShortcutCommand } from "../keybindings";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
+import { useStore } from "../store";
 import { Sidebar, SidebarProvider } from "~/components/ui/sidebar";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
@@ -85,6 +92,8 @@ function ChatRouteGlobalShortcuts() {
 
 function ChatRouteLayout() {
   const navigate = useNavigate();
+  const projects = useStore((store) => store.projects);
+  const setProjectExpanded = useStore((store) => store.setProjectExpanded);
 
   useEffect(() => {
     const onMenuAction = window.desktopBridge?.onMenuAction;
@@ -101,6 +110,51 @@ function ChatRouteLayout() {
       unsubscribe?.();
     };
   }, [navigate]);
+
+  useEffect(() => {
+    const onOpenProject = window.desktopBridge?.onOpenProject;
+    if (typeof onOpenProject !== "function") return;
+
+    const unsubscribe = onOpenProject((projectPath: string) => {
+      const existing = projects.find((p) => p.cwd === projectPath);
+      if (existing) {
+        setProjectExpanded(existing.id, true);
+        void navigate({
+          to: "/project/$projectId",
+          params: { projectId: existing.id },
+        });
+        return;
+      }
+
+      const api = readNativeApi();
+      if (!api) return;
+
+      const projectId = newProjectId() as ProjectId;
+      const title = projectPath.split(/[/\\]/).pop() ?? projectPath;
+      void api.orchestration
+        .dispatchCommand({
+          type: "project.create",
+          commandId: newCommandId(),
+          projectId,
+          title,
+          workspaceRoot: projectPath,
+          defaultModel: DEFAULT_MODEL_BY_PROVIDER.codex,
+          createdAt: new Date().toISOString(),
+        })
+        .then(() => {
+          setProjectExpanded(projectId, true);
+          void navigate({
+            to: "/project/$projectId",
+            params: { projectId },
+          });
+        })
+        .catch(() => undefined);
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [navigate, projects, setProjectExpanded]);
 
   return (
     <SidebarProvider defaultOpen>

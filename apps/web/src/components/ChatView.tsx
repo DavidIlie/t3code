@@ -65,7 +65,6 @@ import {
   hasToolActivityForTurn,
   isLatestTurnSettled,
   formatElapsed,
-  formatTimestamp,
 } from "../session-logic";
 import { isScrollContainerNearBottom } from "../chat-scroll";
 import {
@@ -127,7 +126,6 @@ import {
   MenuTrigger,
 } from "./ui/menu";
 import { cn, randomUUID } from "~/lib/utils";
-import { Badge } from "./ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { toastManager } from "./ui/toast";
 import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
@@ -152,16 +150,20 @@ import {
   useComposerThreadDraft,
 } from "../composerDraftStore";
 import { shouldUseCompactComposerFooter } from "./composerFooterLayout";
+import { appendDiffContextCommentsToPrompt } from "../lib/diffContextComments";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "./ComposerPromptEditor";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
+import { DebugPanel } from "./chat/DebugPanel";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./chat/ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./chat/ComposerPendingApprovalActions";
 import { CodexTraitsPicker } from "./chat/CodexTraitsPicker";
 import { CompactComposerControlsMenu } from "./chat/CompactComposerControlsMenu";
+import { ComposerContextUsageIndicator } from "./chat/ComposerContextUsageIndicator";
+import { ComposerPendingDiffComments } from "./chat/ComposerPendingDiffComments";
 import { ComposerPendingApprovalPanel } from "./chat/ComposerPendingApprovalPanel";
 import { ComposerPendingUserInputPanel } from "./chat/ComposerPendingUserInputPanel";
 import { ComposerPlanFollowUpBanner } from "./chat/ComposerPlanFollowUpBanner";
@@ -224,6 +226,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const composerDraft = useComposerThreadDraft(threadId);
   const prompt = composerDraft.prompt;
   const composerImages = composerDraft.images;
+  const composerDiffContextComments = composerDraft.diffContextComments;
   const nonPersistedComposerImageIds = composerDraft.nonPersistedImageIds;
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const setComposerDraftProvider = useComposerDraftStore((store) => store.setProvider);
@@ -244,6 +247,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     (store) => store.syncPersistedAttachments,
   );
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
+  const removeDiffContextComment = useComposerDraftStore((store) => store.removeDiffContextComment);
   const clearDraftThread = useComposerDraftStore((store) => store.clearDraftThread);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const getDraftThreadByProjectId = useComposerDraftStore(
@@ -281,6 +285,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     useState<Record<string, number>>({});
   const [expandedWorkGroups, setExpandedWorkGroups] = useState<Record<string, boolean>>({});
   const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
+  const [debugPanelOpen, setDebugPanelOpen] = useState(true);
   const [isComposerFooterCompact, setIsComposerFooterCompact] = useState(false);
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
@@ -2309,6 +2314,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
     if (!trimmed && composerImages.length === 0) return;
     if (!activeProject) return;
+    const textWithDiffComments = appendDiffContextCommentsToPrompt(
+      trimmed,
+      composerDiffContextComments,
+    );
     const threadIdForSend = activeThread.id;
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
     const baseBranchForWorktree =
@@ -2356,7 +2365,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       {
         id: messageIdForSend,
         role: "user",
-        text: trimmed,
+        text: textWithDiffComments,
         ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
         createdAt: messageCreatedAt,
         streaming: false,
@@ -2494,7 +2503,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         message: {
           messageId: messageIdForSend,
           role: "user",
-          text: trimmed || IMAGE_ONLY_BOOTSTRAP_PROMPT,
+          text: textWithDiffComments || IMAGE_ONLY_BOOTSTRAP_PROMPT,
           attachments: turnAttachments,
         },
         model: selectedModel || undefined,
@@ -2743,6 +2752,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
         return;
       }
 
+      const textWithDiffComments = appendDiffContextCommentsToPrompt(
+        trimmed,
+        composerDiffContextComments,
+      );
       const threadIdForSend = activeThread.id;
       const messageIdForSend = newMessageId();
       const messageCreatedAt = new Date().toISOString();
@@ -2755,7 +2768,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         {
           id: messageIdForSend,
           role: "user",
-          text: trimmed,
+          text: textWithDiffComments,
           createdAt: messageCreatedAt,
           streaming: false,
         },
@@ -2783,7 +2796,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           message: {
             messageId: messageIdForSend,
             role: "user",
-            text: trimmed,
+            text: textWithDiffComments,
             attachments: [],
           },
           provider: selectedProvider,
@@ -2823,6 +2836,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     [
       activeThread,
       beginSendPhase,
+      composerDiffContextComments,
       forceStickToBottom,
       isConnecting,
       isSendBusy,
@@ -3407,6 +3421,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           gitCwd={gitCwd}
           diffOpen={diffOpen}
           historyOpen={historyOpen}
+          debugPanelOpen={debugPanelOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
           }}
@@ -3415,8 +3430,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
           onDeleteProjectScript={deleteProjectScript}
           onToggleDiff={onToggleDiff}
           onToggleHistory={onToggleHistory}
+          onToggleDebugPanel={() => setDebugPanelOpen((prev) => !prev)}
         />
       </header>
+
+      {/* Debug panel overlay */}
+      {debugPanelOpen && (
+        <DebugPanel thread={activeThread} onClose={() => setDebugPanelOpen(false)} />
+      )}
 
       {/* Error banner */}
       <ProviderHealthBanner status={activeProviderStatus} />
@@ -3465,6 +3486,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
               markdownCwd={gitCwd ?? undefined}
               resolvedTheme={resolvedTheme}
               workspaceRoot={activeProject?.cwd ?? undefined}
+              timestampFormat={settings.timestampFormat}
+              groupToolCalls={settings.groupToolCalls}
             />
           </div>
 
@@ -3602,6 +3625,20 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         ))}
                       </div>
                     )}
+                  {!isComposerApprovalState &&
+                    pendingUserInputs.length === 0 &&
+                    composerDiffContextComments.length > 0 && (
+                      <div className="mb-2">
+                        <ComposerPendingDiffComments
+                          comments={composerDiffContextComments}
+                          onClearAll={() => {
+                            for (const comment of composerDiffContextComments) {
+                              removeDiffContextComment(threadId, comment.id);
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
                   <ComposerPromptEditor
                     ref={composerEditorRef}
                     value={
@@ -3693,6 +3730,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
                           onProviderModelChange={onProviderModelSelect}
                         />
                       )}
+
+                      <ComposerContextUsageIndicator snapshot={null} />
 
                       {isComposerFooterCompact ? (
                         <CompactComposerControlsMenu
@@ -4170,54 +4209,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
   );
 }
 
-interface PlanModePanelProps {
-  activePlan: ReturnType<typeof deriveActivePlanState>;
-}
-
-const PlanModePanel = memo(function PlanModePanel({ activePlan }: PlanModePanelProps) {
-  if (!activePlan) return null;
-
-  return (
-    <div className="pt-3 mx-auto max-w-3xl">
-      <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary">Plan</Badge>
-          <span className="text-xs text-muted-foreground">
-            Updated {formatTimestamp(activePlan.createdAt)}
-          </span>
-        </div>
-        {activePlan.explanation ? (
-          <p className="mt-2 text-sm text-muted-foreground">{activePlan.explanation}</p>
-        ) : null}
-        <div className="mt-3 space-y-2">
-          {activePlan.steps.map((step) => (
-            <div
-              key={`${step.status}:${step.step}`}
-              className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/80 px-3 py-2"
-            >
-              <Badge
-                variant={
-                  step.status === "completed"
-                    ? "default"
-                    : step.status === "inProgress"
-                      ? "secondary"
-                      : "outline"
-                }
-              >
-                {step.status === "inProgress"
-                  ? "In progress"
-                  : step.status === "completed"
-                    ? "Done"
-                    : "Pending"}
-              </Badge>
-              <div className="min-w-0 flex-1 text-sm">{step.step}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-});
 
 const ProviderModelPicker = ProviderModelPickerComponent;
 

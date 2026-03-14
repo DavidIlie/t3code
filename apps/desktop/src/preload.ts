@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopBridge } from "@t3tools/contracts";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
+const PICK_FILE_CHANNEL = "desktop:pick-file";
 const CONFIRM_CHANNEL = "desktop:confirm";
 const SET_THEME_CHANNEL = "desktop:set-theme";
 const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
@@ -11,11 +12,20 @@ const UPDATE_STATE_CHANNEL = "desktop:update-state";
 const UPDATE_GET_STATE_CHANNEL = "desktop:update-get-state";
 const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
+const SET_TRAY_ENABLED_CHANNEL = "desktop:set-tray-enabled";
+const GET_TRAY_STATE_CHANNEL = "desktop:get-tray-state";
+const SET_TRAY_STATE_CHANNEL = "desktop:set-tray-state";
+const TRAY_MESSAGE_CHANNEL = "desktop:tray-message";
+const SHELL_COMMAND_CHECK_CHANNEL = "desktop:shell-command-check";
+const SHELL_COMMAND_INSTALL_CHANNEL = "desktop:shell-command-install";
+const SHELL_COMMAND_UNINSTALL_CHANNEL = "desktop:shell-command-uninstall";
+const OPEN_PROJECT_CHANNEL = "desktop:open-project";
 const wsUrl = process.env.T3CODE_DESKTOP_WS_URL ?? null;
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getWsUrl: () => wsUrl,
   pickFolder: () => ipcRenderer.invoke(PICK_FOLDER_CHANNEL),
+  pickFile: (filters) => ipcRenderer.invoke(PICK_FILE_CHANNEL, filters),
   confirm: (message) => ipcRenderer.invoke(CONFIRM_CHANNEL, message),
   setTheme: (theme) => ipcRenderer.invoke(SET_THEME_CHANNEL, theme),
   showContextMenu: (items, position) => ipcRenderer.invoke(CONTEXT_MENU_CHANNEL, items, position),
@@ -43,6 +53,44 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.on(UPDATE_STATE_CHANNEL, wrappedListener);
     return () => {
       ipcRenderer.removeListener(UPDATE_STATE_CHANNEL, wrappedListener);
+    };
+  },
+  isShellCommandInstalled: () => ipcRenderer.invoke(SHELL_COMMAND_CHECK_CHANNEL),
+  installShellCommand: async () => {
+    const result = await ipcRenderer.invoke(SHELL_COMMAND_INSTALL_CHANNEL);
+    if (result && typeof result === "object" && !result.success) {
+      throw new Error(result.error ?? "Install failed");
+    }
+  },
+  uninstallShellCommand: async () => {
+    const result = await ipcRenderer.invoke(SHELL_COMMAND_UNINSTALL_CHANNEL);
+    if (result && typeof result === "object" && !result.success) {
+      throw new Error(result.error ?? "Uninstall failed");
+    }
+  },
+  setTrayEnabled: (enabled) => ipcRenderer.invoke(SET_TRAY_ENABLED_CHANNEL, enabled),
+  getTrayState: () => ipcRenderer.invoke(GET_TRAY_STATE_CHANNEL),
+  setTrayState: (state) => ipcRenderer.invoke(SET_TRAY_STATE_CHANNEL, state),
+  onTrayMessage: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, message: unknown) => {
+      if (typeof message !== "object" || message === null) return;
+      listener(message as Parameters<typeof listener>[0]);
+    };
+
+    ipcRenderer.on(TRAY_MESSAGE_CHANNEL, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(TRAY_MESSAGE_CHANNEL, wrappedListener);
+    };
+  },
+  onOpenProject: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, projectPath: unknown) => {
+      if (typeof projectPath !== "string") return;
+      listener(projectPath);
+    };
+
+    ipcRenderer.on(OPEN_PROJECT_CHANNEL, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(OPEN_PROJECT_CHANNEL, wrappedListener);
     };
   },
 } satisfies DesktopBridge);

@@ -258,8 +258,8 @@ export function CommandBar(props: { open: boolean; onOpenChange: (open: boolean)
     }
 
     // ── Recent Threads ────────────────────────────────────
-    const recentThreads = [...threads]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    const recentThreads = threads
+      .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 8);
 
     for (const thread of recentThreads) {

@@ -1,4 +1,4 @@
-import { ThreadId } from "@t3tools/contracts";
+import { ThreadId, type DesktopTrayState, type OrchestrationEvent } from "@t3tools/contracts";
 import {
   Outlet,
   createRootRouteWithContext,
@@ -11,19 +11,31 @@ import { QueryClient, useQueryClient } from "@tanstack/react-query";
 import { Throttler } from "@tanstack/react-pacer";
 
 import { APP_DISPLAY_NAME } from "../branding";
+import { useAppSettings } from "../appSettings";
 import { Button } from "../components/ui/button";
+import { CommandBar, useCommandBar } from "../components/CommandBar";
+import { hasUnseenCompletion } from "../components/Sidebar.logic";
 import { AnchoredToastProvider, ToastProvider, toastManager } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { serverConfigQueryOptions, serverQueryKeys } from "../lib/serverReactQuery";
+import {
+  canShowNativeNotification,
+  isAppBackgrounded,
+  requestNotificationPermission,
+  showNativeNotification,
+} from "../lib/nativeNotifications";
 import { readNativeApi } from "../nativeApi";
 import { clearPromotedDraftThreads, useComposerDraftStore } from "../composerDraftStore";
 import { useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { terminalRunningSubprocessFromEvent } from "../terminalActivity";
 import { onServerConfigUpdated, onServerWelcome } from "../wsNativeApi";
+import { useProviderSessionStore } from "../providerSessionStore";
+import { parseRateLimitPayload } from "../components/UsageCard";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
+import type { Thread } from "../types";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -52,11 +64,18 @@ function RootRouteView() {
     <ToastProvider>
       <AnchoredToastProvider>
         <EventRouter />
+        <DesktopTrayBridge />
         <DesktopProjectBootstrap />
+        <CommandBarHost />
         <Outlet />
       </AnchoredToastProvider>
     </ToastProvider>
   );
+}
+
+function CommandBarHost() {
+  const { open, setOpen } = useCommandBar();
+  return <CommandBar open={open} onOpenChange={setOpen} />;
 }
 
 function RootRouteErrorView({ error, reset }: ErrorComponentProps) {
@@ -130,6 +149,23 @@ function errorDetails(error: unknown): string {
   }
 }
 
+function notifyTurnCompleted(
+  event: Extract<OrchestrationEvent, { type: "thread.turn-diff-completed" }>,
+): void {
+  if (!isAppBackgrounded() || !canShowNativeNotification()) return;
+  const thread = useStore.getState().threads.find((t) => t.id === event.payload.threadId);
+  const title = thread?.title ?? "Thread";
+  const threadId = event.payload.threadId;
+  showNativeNotification({
+    title: `Turn completed — ${title}`,
+    body: `Status: ${event.payload.status}`,
+    tag: `turn-completed-${threadId}`,
+    onClick: () => {
+      window.location.assign(`/${encodeURIComponent(threadId)}`);
+    },
+  });
+}
+
 function EventRouter() {
   const syncServerReadModel = useStore((store) => store.syncServerReadModel);
   const setProjectExpanded = useStore((store) => store.setProjectExpanded);
@@ -147,6 +183,7 @@ function EventRouter() {
   useEffect(() => {
     const api = readNativeApi();
     if (!api) return;
+    void requestNotificationPermission();
     let disposed = false;
     let latestSequence = 0;
     let syncing = false;
@@ -214,7 +251,17 @@ function EventRouter() {
       if (event.type === "thread.turn-diff-completed" || event.type === "thread.reverted") {
         needsProviderInvalidation = true;
       }
+      if (event.type === "thread.turn-diff-completed") {
+        notifyTurnCompleted(event);
+      }
       domainEventFlushThrottler.maybeExecute();
+    });
+    const unsubProviderAccount = api.provider.onAccountUpdated((payload) => {
+      const provider = payload.provider;
+      if (provider === "claudeCode" || provider === "codex" || provider === "cursor") {
+        const snapshot = parseRateLimitPayload(provider, payload.data);
+        useProviderSessionStore.getState().setProviderUsage(provider, snapshot);
+      }
     });
     const unsubTerminalEvent = api.terminal.onEvent((event) => {
       const hasRunningSubprocess = terminalRunningSubprocessFromEvent(event);
@@ -306,6 +353,7 @@ function EventRouter() {
       needsProviderInvalidation = false;
       domainEventFlushThrottler.cancel();
       unsubDomainEvent();
+      unsubProviderAccount();
       unsubTerminalEvent();
       unsubWelcome();
       unsubServerConfigUpdated();
@@ -317,6 +365,53 @@ function EventRouter() {
     setProjectExpanded,
     syncServerReadModel,
   ]);
+
+  return null;
+}
+
+function buildTrayState(threads: Thread[]): DesktopTrayState {
+  return {
+    threads: threads.map((thread) => ({
+      id: thread.id,
+      name: thread.title,
+      needsAttention: hasUnseenCompletion(thread),
+      lastUpdated: Date.parse(
+        thread.latestTurn?.completedAt ?? thread.createdAt,
+      ),
+    })),
+  };
+}
+
+function DesktopTrayBridge() {
+  const { settings } = useAppSettings();
+  const threads = useStore((store) => store.threads);
+  const navigate = useNavigate();
+
+  // Fix 1: Sync showTrayIcon setting to the desktop shell.
+  useEffect(() => {
+    window.desktopBridge?.setTrayEnabled?.(settings.showTrayIcon);
+  }, [settings.showTrayIcon]);
+
+  // Fix 2: Push thread state to the system tray whenever threads change.
+  useEffect(() => {
+    if (!window.desktopBridge?.setTrayState) return;
+    window.desktopBridge.setTrayState(buildTrayState(threads));
+  }, [threads]);
+
+  // Fix 3: Handle tray thread-click messages by navigating to the thread.
+  useEffect(() => {
+    const unsub = window.desktopBridge?.onTrayMessage?.((message) => {
+      if (message.type === "thread-click") {
+        void navigate({
+          to: "/$threadId",
+          params: { threadId: message.threadId },
+        });
+      }
+    });
+    return () => {
+      unsub?.();
+    };
+  }, [navigate]);
 
   return null;
 }

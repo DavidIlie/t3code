@@ -36,7 +36,7 @@ function extractUsageFromActivities(
     ? activities.filter((a) => a.turnId === latestTurnId)
     : activities;
 
-  for (const activity of [...turnActivities].reverse()) {
+  for (const activity of turnActivities.toReversed()) {
     const payload = activity.payload as Record<string, unknown> | null;
     if (!payload) continue;
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIcon, ChevronDownIcon, ChevronUpIcon, ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 import type { ProviderKind } from "@t3tools/contracts";
 import {
@@ -105,6 +105,30 @@ export function parseRateLimitPayload(
   if (raw && typeof raw === "object") {
     const data = raw as Record<string, unknown>;
     plan = typeof data.plan === "string" ? data.plan : null;
+
+    // Server periodic push format: { available, plan, tiers: [{key, label, utilization, resetsAt}], extraUsage, error }
+    if (Array.isArray(data.tiers)) {
+      for (const t of data.tiers) {
+        if (t && typeof t === "object") {
+          const tier = t as Record<string, unknown>;
+          const pct = typeof tier.utilization === "number" ? tier.utilization : 0;
+          tiers.push({
+            label: typeof tier.label === "string" ? tier.label : String(tier.key ?? "unknown"),
+            percentUsed: pct,
+            resetAt: typeof tier.resetsAt === "string" ? tier.resetsAt : null,
+            status: severityFromPercent(pct),
+          });
+        }
+      }
+      if (data.extraUsage && typeof data.extraUsage === "object") {
+        const e = data.extraUsage as Record<string, unknown>;
+        extraUsage = {
+          spent: typeof e.spent === "number" ? e.spent : 0,
+          limit: typeof e.limit === "number" ? e.limit : 0,
+        };
+      }
+      return { provider, plan, tiers, extraUsage, updatedAt: now, raw };
+    }
 
     // Claude SDK rate_limit_event: { type: "rate_limit_event", rate_limit_info: { utilization, rateLimitType, resetsAt, status } }
     const rateLimitInfo = data.rate_limit_info;
@@ -307,14 +331,12 @@ export function UsageCard() {
     return () => clearInterval(id);
   }, [open]);
 
-  // Manual refresh (triggers server to re-fetch and push)
-  const handleRefresh = useCallback(async () => {
+  // Core fetch — stores the result without touching spinner state
+  const fetchUsage = useCallback(async () => {
     const api = readNativeApi();
     if (!api) return;
-    setRefreshing(true);
     try {
       const result = await api.provider.getUsage();
-      // Store immediately for instant feedback
       const store = useProviderSessionStore.getState();
       if (result.claudeCode.available || result.claudeCode.tiers.length > 0) {
         store.setProviderUsage("claudeCode", {
@@ -335,10 +357,25 @@ export function UsageCard() {
       }
     } catch {
       // Non-critical
+    }
+  }, []);
+
+  // Manual refresh (shows spinner)
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchUsage();
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [fetchUsage]);
+
+  // Auto-fetch on mount and every 2 minutes
+  useEffect(() => {
+    void fetchUsage();
+    const id = setInterval(() => void fetchUsage(), 120_000);
+    return () => clearInterval(id);
+  }, [fetchUsage]);
 
   const currentSnapshot = usageByProvider[activeProvider];
   const plan = currentSnapshot?.plan ?? null;
@@ -488,20 +525,35 @@ function CompactTierBar({ tier }: { tier: UsageTier }) {
 
 export function SidebarUsageBars() {
   const usageByProvider = useProviderSessionStore((s) => s.usageByProvider);
-  const snapshot = usageByProvider.claudeCode;
+  const lastTiersRef = useRef<UsageTier[]>([]);
 
-  if (!snapshot || snapshot.tiers.length === 0) {
-    return null;
+  const allTiers: UsageTier[] = [];
+  const claude = usageByProvider.claudeCode;
+  if (claude) {
+    for (const t of claude.tiers) {
+      if (PRIMARY_TIER_LABELS.has(t.label)) allTiers.push(t);
+    }
+  }
+  const codex = usageByProvider.codex;
+  if (codex) {
+    for (const t of codex.tiers) {
+      allTiers.push({ ...t, label: `Codex ${t.label}` });
+    }
   }
 
-  const primaryTiers = snapshot.tiers.filter((t) => PRIMARY_TIER_LABELS.has(t.label));
-  if (primaryTiers.length === 0) {
+  // Keep last-known tiers visible to prevent layout flashing when data resets momentarily.
+  const displayTiers = allTiers.length > 0 ? allTiers : lastTiersRef.current;
+  if (allTiers.length > 0) {
+    lastTiersRef.current = allTiers;
+  }
+
+  if (displayTiers.length === 0) {
     return null;
   }
 
   return (
     <div className="space-y-1.5 px-2 py-1.5">
-      {primaryTiers.map((tier) => (
+      {displayTiers.map((tier) => (
         <CompactTierBar key={tier.label} tier={tier} />
       ))}
     </div>

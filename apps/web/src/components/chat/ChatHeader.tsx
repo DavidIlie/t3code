@@ -6,7 +6,7 @@ import {
 } from "@t3tools/contracts";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
-import { DiffIcon, HistoryIcon } from "lucide-react";
+import { BugIcon, DiffIcon, HistoryIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
@@ -31,12 +31,14 @@ interface ChatHeaderProps {
   gitCwd: string | null;
   diffOpen: boolean;
   historyOpen: boolean;
+  debugPanelOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
   onToggleDiff: () => void;
   onToggleHistory: () => void;
+  onToggleDebugPanel: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -55,12 +57,14 @@ export const ChatHeader = memo(function ChatHeader({
   gitCwd,
   diffOpen,
   historyOpen,
+  debugPanelOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
   onDeleteProjectScript,
   onToggleDiff,
   onToggleHistory,
+  onToggleDebugPanel,
 }: ChatHeaderProps) {
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -106,6 +110,23 @@ export const ChatHeader = memo(function ChatHeader({
           />
         )}
         {activeProjectName && <GitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} />}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className="shrink-0"
+                pressed={debugPanelOpen}
+                onPressedChange={onToggleDebugPanel}
+                aria-label="Toggle debug panel"
+                variant="outline"
+                size="xs"
+              >
+                <BugIcon className="size-3" />
+              </Toggle>
+            }
+          />
+          <TooltipPopup side="bottom">Toggle debug panel</TooltipPopup>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={

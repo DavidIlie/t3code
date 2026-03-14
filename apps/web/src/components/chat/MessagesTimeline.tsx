@@ -5,7 +5,9 @@ import {
   type VirtualItem,
   useVirtualizer,
 } from "@tanstack/react-virtual";
-import { deriveTimelineEntries, formatElapsed, formatTimestamp } from "../../session-logic";
+import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
+import { type TimestampFormat } from "../../appSettings";
+import { formatTimestamp } from "../../timestampFormat";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../chat-scroll";
 import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
@@ -21,6 +23,8 @@ import { ChangedFilesTree } from "./ChangedFilesTree";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { MessageCopyButton } from "./MessageCopyButton";
 import { computeMessageDurationStart } from "./MessagesTimeline.logic";
+import { extractTrailingDiffContextComments } from "../../lib/diffContextComments";
+import { DiffContextCommentsAttachment } from "./DiffContextCommentsAttachment";
 
 function ThinkingBlock({ thinking, streaming }: { thinking: string; streaming?: boolean }) {
   return (
@@ -65,6 +69,8 @@ interface MessagesTimelineProps {
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
   workspaceRoot: string | undefined;
+  timestampFormat: TimestampFormat;
+  groupToolCalls: boolean;
 }
 
 export const MessagesTimeline = memo(function MessagesTimeline({
@@ -88,6 +94,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   markdownCwd,
   resolvedTheme,
   workspaceRoot,
+  timestampFormat,
+  groupToolCalls,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
   const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);
@@ -131,12 +139,15 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
       if (timelineEntry.kind === "work") {
         const groupedEntries = [timelineEntry.entry];
-        let cursor = index + 1;
-        while (cursor < timelineEntries.length) {
-          const nextEntry = timelineEntries[cursor];
-          if (!nextEntry || nextEntry.kind !== "work") break;
-          groupedEntries.push(nextEntry.entry);
-          cursor += 1;
+        if (groupToolCalls) {
+          let cursor = index + 1;
+          while (cursor < timelineEntries.length) {
+            const nextEntry = timelineEntries[cursor];
+            if (!nextEntry || nextEntry.kind !== "work") break;
+            groupedEntries.push(nextEntry.entry);
+            cursor += 1;
+          }
+          index = cursor - 1;
         }
         nextRows.push({
           kind: "work",
@@ -144,7 +155,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           createdAt: timelineEntry.createdAt,
           groupedEntries,
         });
-        index = cursor - 1;
         continue;
       }
 
@@ -180,7 +190,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }
 
     return nextRows;
-  }, [timelineEntries, completionDividerBeforeEntryId, isWorking, activeTurnStartedAt]);
+  }, [timelineEntries, completionDividerBeforeEntryId, isWorking, activeTurnStartedAt, groupToolCalls]);
 
   const firstUnvirtualizedRowIndex = useMemo(() => {
     const firstTailRowIndex = Math.max(rows.length - ALWAYS_UNVIRTUALIZED_TAIL_ROWS, 0);
@@ -422,11 +432,25 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                     )}
                   </div>
                 )}
-                {row.message.text && (
-                  <pre className="whitespace-pre-wrap wrap-break-word font-mono text-sm leading-relaxed text-foreground">
-                    {row.message.text}
-                  </pre>
-                )}
+                {row.message.text &&
+                  (() => {
+                    const extracted = extractTrailingDiffContextComments(row.message.text);
+                    return (
+                      <>
+                        <pre className="whitespace-pre-wrap wrap-break-word font-mono text-sm leading-relaxed text-foreground">
+                          {extracted.promptText}
+                        </pre>
+                        {extracted.commentCount > 0 && (
+                          <div className="mt-2">
+                            <DiffContextCommentsAttachment
+                              commentCount={extracted.commentCount}
+                              previewTitle={extracted.previewTitle}
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 <div className="mt-1.5 flex items-center justify-end gap-2">
                   <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
                     {row.message.text && <MessageCopyButton text={row.message.text} />}
@@ -444,7 +468,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                     )}
                   </div>
                   <p className="text-right text-[10px] text-muted-foreground/30">
-                    {formatTimestamp(row.message.createdAt)}
+                    {formatTimestamp(row.message.createdAt, timestampFormat)}
                   </p>
                 </div>
               </div>
@@ -541,6 +565,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                     row.message.streaming
                       ? formatElapsed(row.durationStart, nowIso)
                       : formatElapsed(row.durationStart, row.message.completedAt),
+                    timestampFormat,
                   )}
                 </p>
               </div>
@@ -676,9 +701,9 @@ function formatWorkingTimer(startIso: string, endIso: string): string | null {
   return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
-function formatMessageMeta(createdAt: string, duration: string | null): string {
-  if (!duration) return formatTimestamp(createdAt);
-  return `${formatTimestamp(createdAt)} • ${duration}`;
+function formatMessageMeta(createdAt: string, duration: string | null, tsFormat: TimestampFormat): string {
+  if (!duration) return formatTimestamp(createdAt, tsFormat);
+  return `${formatTimestamp(createdAt, tsFormat)} • ${duration}`;
 }
 
 function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {

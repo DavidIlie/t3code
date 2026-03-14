@@ -1249,6 +1249,7 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
               ...state.draftsByThreadId,
               [threadId]: {
                 ...current,
+                // oxlint-disable-next-line no-map-spread -- immutable update required for Zustand
                 diffContextComments: current.diffContextComments.map((c) =>
                   c.id === commentId ? { ...c, ...update } : c,
                 ),

@@ -1,4 +1,4 @@
-import { parsePatchFiles } from "@pierre/diffs";
+import { type DiffLineAnnotation, parsePatchFiles } from "@pierre/diffs";
 import { FileDiff, type FileDiffMetadata, Virtualizer } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
@@ -26,6 +26,15 @@ import { resolveDiffThemeName } from "../lib/diffRendering";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { useStore } from "../store";
 import { ToggleGroup, Toggle } from "./ui/toggle-group";
+import {
+  DiffContextCommentDraft as DiffContextCommentDraftCard,
+  DiffContextCommentPreview,
+} from "./DiffContextCommentDraft";
+import {
+  buildFileDiffRenderKey as buildCommentFileKey,
+  type DiffCommentAnnotationMetadata,
+  useDiffContextCommentDrafts,
+} from "./DiffPanel.logic";
 
 type DiffRenderMode = "stacked" | "split";
 type DiffThemeType = "light" | "dark";
@@ -296,6 +305,93 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
       }),
     );
   }, [renderablePatch]);
+
+  const {
+    editingCommentBody,
+    editingCommentError,
+    lineAnnotationsByFileKey,
+    manualCommentBody,
+    manualCommentError,
+    selectedLinesForFileKey,
+    visiblePendingDiffContextComments,
+    beginEditingComment,
+    cancelEditingComment,
+    clearManualCommentSelection,
+    deleteEditingComment,
+    handleManualCommentSelectionChange,
+    saveEditingComment,
+    setEditingCommentBody,
+    setManualCommentBody,
+    submitManualComment,
+  } = useDiffContextCommentDrafts({
+    activeThreadId,
+    selectedTurnId,
+    renderableFiles,
+  });
+
+  const renderDraftAnnotation = useCallback(
+    (annotation: DiffLineAnnotation<DiffCommentAnnotationMetadata>) => {
+      const { metadata } = annotation;
+      if (metadata.kind === "draft-comment") {
+        return (
+          <DiffContextCommentDraftCard
+            filePath={metadata.filePath}
+            lineStart={metadata.lineStart}
+            lineEnd={metadata.lineEnd}
+            body={manualCommentBody}
+            error={manualCommentError}
+            onBodyChange={setManualCommentBody}
+            onCancel={clearManualCommentSelection}
+            onSubmit={submitManualComment}
+          />
+        );
+      }
+
+      const comment = visiblePendingDiffContextComments.find(
+        (entry: { id: string }) => entry.id === metadata.commentId,
+      );
+      if (!comment) return null;
+
+      if (metadata.isEditing) {
+        return (
+          <DiffContextCommentDraftCard
+            filePath={comment.filePath}
+            lineStart={comment.lineStart}
+            lineEnd={comment.lineEnd}
+            body={editingCommentBody}
+            error={editingCommentError}
+            onBodyChange={setEditingCommentBody}
+            onCancel={cancelEditingComment}
+            onDelete={deleteEditingComment}
+            onSubmit={saveEditingComment}
+            submitLabel="Save"
+          />
+        );
+      }
+
+      return (
+        <DiffContextCommentPreview
+          body={comment.body}
+          onEdit={() => beginEditingComment(comment)}
+        />
+      );
+    },
+    [
+      beginEditingComment,
+      cancelEditingComment,
+      clearManualCommentSelection,
+      deleteEditingComment,
+      editingCommentBody,
+      editingCommentError,
+      manualCommentBody,
+      manualCommentError,
+      saveEditingComment,
+      setEditingCommentBody,
+      setManualCommentBody,
+      submitManualComment,
+      visiblePendingDiffContextComments,
+    ],
+  );
 
   useEffect(() => {
     if (!selectedFilePath || !patchViewportRef.current) {
@@ -598,6 +694,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
                 {renderableFiles.map((fileDiff) => {
                   const filePath = resolveFileDiffPath(fileDiff);
                   const fileKey = buildFileDiffRenderKey(fileDiff);
+                  const commentFileKey = buildCommentFileKey(fileDiff);
                   const themedFileKey = `${fileKey}:${resolvedTheme}`;
                   return (
                     <div
@@ -617,9 +714,30 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
                     >
                       <FileDiff
                         fileDiff={fileDiff}
+                        lineAnnotations={lineAnnotationsByFileKey[commentFileKey] ?? []}
+                        selectedLines={
+                          selectedLinesForFileKey?.fileKey === commentFileKey
+                            ? selectedLinesForFileKey.range
+                            : null
+                        }
+                        renderAnnotation={renderDraftAnnotation}
                         options={{
                           diffStyle: diffRenderMode === "split" ? "split" : "unified",
                           lineDiffType: "none",
+                          enableGutterUtility: true,
+                          enableLineSelection: true,
+                          onGutterUtilityClick: (range) =>
+                            handleManualCommentSelectionChange({
+                              file: fileDiff,
+                              fileKey: commentFileKey,
+                              range,
+                            }),
+                          onLineSelected: (range) =>
+                            handleManualCommentSelectionChange({
+                              file: fileDiff,
+                              fileKey: commentFileKey,
+                              range,
+                            }),
                           theme: resolveDiffThemeName(resolvedTheme),
                           themeType: resolvedTheme as DiffThemeType,
                           unsafeCSS: DIFF_PANEL_UNSAFE_CSS,

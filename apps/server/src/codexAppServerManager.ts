@@ -602,6 +602,22 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         console.log("codex account/read failed", error);
       }
 
+      // Proactively fetch rate limits so the client gets Codex usage on session start
+      try {
+        const rateLimitsResponse = await this.sendRequest(context, "account/rateLimits/read", {});
+        this.emitEvent({
+          id: EventId.makeUnsafe(randomUUID()),
+          kind: "notification",
+          provider: "codex",
+          threadId: context.session.threadId,
+          createdAt: new Date().toISOString(),
+          method: "account/rateLimits/updated",
+          payload: rateLimitsResponse,
+        });
+      } catch (error) {
+        console.log("codex account/rateLimits/read failed", error);
+      }
+
       const normalizedModel = resolveCodexModelForAccount(
         normalizeCodexModelSlug(input.model),
         context.account,

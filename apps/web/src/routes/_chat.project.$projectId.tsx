@@ -107,6 +107,12 @@ function ProjectRouteView() {
     });
   }, [navigate, projectId]);
 
+  useEffect(() => {
+    if (!projectExists) {
+      void navigate({ to: "/", replace: true });
+    }
+  }, [projectExists, navigate]);
+
   if (!projectExists) {
     return null;
   }
