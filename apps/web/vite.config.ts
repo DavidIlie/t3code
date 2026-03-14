@@ -18,6 +18,7 @@ export default defineConfig({
   plugins: [
     tanstackRouter(),
     react({
+      // @ts-expect-error — @vitejs/plugin-react v6 dropped babel from Options types but still accepts it at runtime
       babel: {
         plugins: [["babel-plugin-react-compiler", { target: "19" }]],
       },

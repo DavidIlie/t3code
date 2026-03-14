@@ -231,12 +231,15 @@ it.layer(TestLayer)("git integration", (it) => {
   describe("shell process execution", () => {
     it.effect("caps captured output when maxOutputBytes is exceeded", () =>
       Effect.gen(function* () {
-        const result = yield* runShellCommand({
-          command: `node -e "process.stdout.write('x'.repeat(2000))"`,
-          cwd: process.cwd(),
-          timeoutMs: 10_000,
-          maxOutputBytes: 128,
-        });
+        const result = yield* Effect.promise(() =>
+          runProcess("node", ["-e", "process.stdout.write('x'.repeat(2000))"], {
+            cwd: process.cwd(),
+            timeoutMs: 10_000,
+            allowNonZeroExit: true,
+            maxBufferBytes: 128,
+            outputMode: "truncate",
+          }),
+        );
 
         expect(result.code).toBe(0);
         expect(result.stdout.length).toBeLessThanOrEqual(128);

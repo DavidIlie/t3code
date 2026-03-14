@@ -656,3 +656,23 @@ export function derivePhase(session: ThreadSession | null): SessionPhase {
   if (session.status === "running") return "running";
   return "ready";
 }
+
+// ── Context usage ─────────────────────────────────────────────────
+
+export interface ThreadContextUsageSnapshot {
+  usedTokens: number | null;
+  maxTokens: number | null;
+  percentUsed: number | null;
+  recentlyCompacted: boolean;
+}
+
+export type ThreadContextUsageSeverity = "ok" | "warning" | "danger";
+
+export function deriveContextUsageSeverity(
+  percentUsed: number | null,
+): ThreadContextUsageSeverity {
+  if (percentUsed === null) return "ok";
+  if (percentUsed >= 90) return "danger";
+  if (percentUsed >= 70) return "warning";
+  return "ok";
+}

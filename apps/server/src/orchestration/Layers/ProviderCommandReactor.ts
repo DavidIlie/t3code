@@ -272,7 +272,12 @@ const make = Effect.gen(function* () {
       const modelChanged = options?.model !== undefined && options.model !== activeSession?.model;
       const shouldRestartForModelChange = modelChanged && sessionModelSwitch === "restart-session";
 
-      if (!runtimeModeChanged && !providerChanged && !shouldRestartForModelChange) {
+      if (
+        activeSession !== undefined &&
+        !runtimeModeChanged &&
+        !providerChanged &&
+        !shouldRestartForModelChange
+      ) {
         return existingSessionThreadId;
       }
 
