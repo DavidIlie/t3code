@@ -1,4 +1,4 @@
-# T3 Code (Gurt)
+# T3 Gurt
 
 An opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code) by [Ping](https://ping.gg). No hate, no bans pls — just for my personal use.
 
@@ -7,7 +7,7 @@ An opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code) by [Ping](
 ## What's different
 
 - **Claude Code support** alongside Codex
-- **Rebranded** from "Alpha" to "Gurt"
+- **Rebranded** to "T3 Gurt"
 - **Automated unsigned releases** on every push to main
 - Imported session rendering, bug fixes, and other QOL improvements
 

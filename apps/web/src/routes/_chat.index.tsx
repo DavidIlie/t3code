@@ -549,7 +549,7 @@ function HomePage() {
               <HomeIcon className="size-3" />
               <span>~/</span>
             </div>
-            <h1 className="text-2xl font-semibold">T3 Code</h1>
+            <h1 className="text-2xl font-semibold">T3 Gurt</h1>
             <p className="mt-1 text-sm text-muted-foreground/60">
               Ask anything, or type{" "}
               <span className="rounded bg-secondary px-1 py-0.5 font-mono text-[11px] text-muted-foreground/80">

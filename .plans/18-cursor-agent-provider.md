@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add Cursor as a first-class provider in T3 Code using ACP (`agent acp`) over JSON-RPC 2.0 stdio, with robust session lifecycle handling and canonical `ProviderRuntimeEvent` projection.
+Add Cursor as a first-class provider in T3 Gurt using ACP (`agent acp`) over JSON-RPC 2.0 stdio, with robust session lifecycle handling and canonical `ProviderRuntimeEvent` projection.
 
 ---
 

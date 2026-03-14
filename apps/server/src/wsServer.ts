@@ -845,7 +845,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
             }),
         });
 
-        // Filter out sessions already tracked by T3 Code's Claude Code provider
+        // Filter out sessions already tracked by T3 Gurt's Claude Code provider
         // to prevent duplicate thread creation during import sync.
         // Check both persisted bindings and active in-memory sessions.
         const trackedIds = yield* providerService.listTrackedClaudeSessionIds();

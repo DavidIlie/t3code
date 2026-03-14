@@ -215,7 +215,7 @@ jobs:
         with:
           tag_name: ${{ needs.preflight.outputs.tag }}
           target_commitish: ${{ needs.preflight.outputs.ref }}
-          name: T3 Code (Gurt) v${{ needs.preflight.outputs.version }}
+          name: T3 Gurt v${{ needs.preflight.outputs.version }}
           generate_release_notes: true
           prerelease: false
           make_latest: true

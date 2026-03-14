@@ -103,7 +103,7 @@ export interface ProviderServiceShape {
    * List Claude Code session IDs that are already tracked by provider runtime bindings.
    *
    * Returns session IDs extracted from resume cursors of claudeCode provider entries.
-   * Used to avoid re-importing sessions that T3 Code itself created.
+   * Used to avoid re-importing sessions that T3 Gurt itself created.
    */
   readonly listTrackedClaudeSessionIds: () => Effect.Effect<ReadonlyArray<string>>;
 

@@ -2039,7 +2039,7 @@ export default function Sidebar() {
         <DialogPopup className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add Project</DialogTitle>
-            <DialogDescription>Add a project folder to T3 Code.</DialogDescription>
+            <DialogDescription>Add a project folder to T3 Gurt.</DialogDescription>
           </DialogHeader>
           <DialogPanel>
             <div className="space-y-3">
