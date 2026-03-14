@@ -196,6 +196,8 @@ describe("ProviderCommandReactor", () => {
           sessionModelSwitch: provider === "cursor" ? "unsupported" : "in-session",
         }),
       rollbackConversation: () => unsupported(),
+      reconnectMcpServer: () => unsupported(),
+      toggleMcpServer: () => unsupported(),
       listTrackedClaudeSessionIds: () => Effect.succeed([]),
       streamEvents: Stream.fromPubSub(runtimeEventPubSub),
     };

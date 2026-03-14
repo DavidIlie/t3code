@@ -14,6 +14,7 @@
 import type {
   ProviderInterruptTurnInput,
   ProviderKind,
+  ProviderReconnectMcpServerInput,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
   ProviderRuntimeEvent,
@@ -21,6 +22,7 @@ import type {
   ProviderSession,
   ProviderSessionStartInput,
   ProviderStopSessionInput,
+  ProviderToggleMcpServerInput,
   ThreadId,
   ProviderTurnStartResult,
 } from "@t3tools/contracts";
@@ -98,6 +100,20 @@ export interface ProviderServiceShape {
     readonly threadId: ThreadId;
     readonly numTurns: number;
   }) => Effect.Effect<void, ProviderServiceError>;
+
+  /**
+   * Reconnect a disconnected MCP server for a Claude Code session.
+   */
+  readonly reconnectMcpServer: (
+    input: ProviderReconnectMcpServerInput,
+  ) => Effect.Effect<void, ProviderServiceError>;
+
+  /**
+   * Toggle an MCP server on/off for a Claude Code session.
+   */
+  readonly toggleMcpServer: (
+    input: ProviderToggleMcpServerInput,
+  ) => Effect.Effect<void, ProviderServiceError>;
 
   /**
    * List Claude Code session IDs that are already tracked by provider runtime bindings.

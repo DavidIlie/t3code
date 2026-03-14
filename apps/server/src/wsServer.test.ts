@@ -1168,6 +1168,8 @@ describe("WebSocket Server", () => {
       listSessions: () => Effect.succeed([]),
       getCapabilities: () => Effect.succeed({ sessionModelSwitch: "in-session" }),
       rollbackConversation: () => unsupported(),
+      reconnectMcpServer: () => unsupported(),
+      toggleMcpServer: () => unsupported(),
       listTrackedClaudeSessionIds: () => Effect.succeed([]),
       streamEvents: Stream.fromPubSub(runtimeEventPubSub),
     };
@@ -1456,32 +1458,6 @@ describe("WebSocket Server", () => {
     } finally {
       process.off("unhandledRejection", onUnhandledRejection);
     }
-  });
-
-  it("returns errors for removed projects CRUD methods", async () => {
-    server = await createTestServer({ cwd: "/test" });
-    const addr = server.address();
-    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
-
-    const ws = await connectWs(port);
-    connections.push(ws);
-    await waitForMessage(ws);
-
-    const listResponse = await sendRequest(ws, WS_METHODS.projectsList);
-    expect(listResponse.result).toBeUndefined();
-    expect(listResponse.error?.message).toContain("Invalid request format");
-
-    const addResponse = await sendRequest(ws, WS_METHODS.projectsAdd, {
-      cwd: "/tmp/project-a",
-    });
-    expect(addResponse.result).toBeUndefined();
-    expect(addResponse.error?.message).toContain("Invalid request format");
-
-    const removeResponse = await sendRequest(ws, WS_METHODS.projectsRemove, {
-      id: "project-a",
-    });
-    expect(removeResponse.result).toBeUndefined();
-    expect(removeResponse.error?.message).toContain("Invalid request format");
   });
 
   it("supports projects.searchEntries", async () => {

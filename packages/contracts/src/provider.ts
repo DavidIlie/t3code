@@ -52,10 +52,19 @@ const CodexProviderStartOptions = Schema.Struct({
   homePath: Schema.optional(TrimmedNonEmptyStringSchema),
 });
 
+const ClaudeCodeThinkingConfig = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("adaptive") }),
+  Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("disabled") }),
+]);
+
 const ClaudeCodeProviderStartOptions = Schema.Struct({
   binaryPath: Schema.optional(TrimmedNonEmptyStringSchema),
   permissionMode: Schema.optional(TrimmedNonEmptyStringSchema),
   maxThinkingTokens: Schema.optional(NonNegativeInt),
+  thinking: Schema.optional(ClaudeCodeThinkingConfig),
+  maxTurns: Schema.optional(NonNegativeInt),
+  maxBudgetUsd: Schema.optional(Schema.Number),
 });
 
 const CursorProviderStartOptions = Schema.Struct({
@@ -128,6 +137,19 @@ export const ProviderRespondToUserInputInput = Schema.Struct({
   answers: ProviderUserInputAnswers,
 });
 export type ProviderRespondToUserInputInput = typeof ProviderRespondToUserInputInput.Type;
+
+export const ProviderReconnectMcpServerInput = Schema.Struct({
+  threadId: ThreadId,
+  serverName: TrimmedNonEmptyStringSchema,
+});
+export type ProviderReconnectMcpServerInput = typeof ProviderReconnectMcpServerInput.Type;
+
+export const ProviderToggleMcpServerInput = Schema.Struct({
+  threadId: ThreadId,
+  serverName: TrimmedNonEmptyStringSchema,
+  enabled: Schema.Boolean,
+});
+export type ProviderToggleMcpServerInput = typeof ProviderToggleMcpServerInput.Type;
 
 const ProviderEventKind = Schema.Literals(["session", "notification", "request", "error"]);
 

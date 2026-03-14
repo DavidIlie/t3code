@@ -36,6 +36,8 @@ const fakeClaudeAdapter: ClaudeCodeAdapterShape = {
   interruptTurn: vi.fn(),
   respondToRequest: vi.fn(),
   respondToUserInput: vi.fn(),
+  reconnectMcpServer: vi.fn(),
+  toggleMcpServer: vi.fn(),
   stopSession: vi.fn(),
   listSessions: vi.fn(),
   hasSession: vi.fn(),

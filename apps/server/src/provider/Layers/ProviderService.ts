@@ -13,17 +13,20 @@ import {
   NonNegativeInt,
   ThreadId,
   ProviderInterruptTurnInput,
+  ProviderReconnectMcpServerInput,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
   ProviderSendTurnInput,
   ProviderSessionStartInput,
   ProviderStopSessionInput,
+  ProviderToggleMcpServerInput,
   type ProviderRuntimeEvent,
   type ProviderSession,
 } from "@t3tools/contracts";
 import { Effect, Layer, Option, PubSub, Queue, Schema, SchemaIssue, Stream } from "effect";
 
-import { ProviderValidationError } from "../Errors.ts";
+import { ProviderUnsupportedError, ProviderValidationError } from "../Errors.ts";
+import { ClaudeCodeAdapter, type ClaudeCodeAdapterShape } from "../Services/ClaudeCodeAdapter.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { ProviderService, type ProviderServiceShape } from "../Services/ProviderService.ts";
 import {
@@ -135,6 +138,7 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
 
     const registry = yield* ProviderAdapterRegistry;
     const directory = yield* ProviderSessionDirectory;
+    const claudeAdapter = yield* Effect.serviceOption(ClaudeCodeAdapter);
     const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
     const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
 
@@ -527,6 +531,37 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
       ),
     );
 
+    const requireClaudeAdapter = (): Effect.Effect<ClaudeCodeAdapterShape, ProviderUnsupportedError> =>
+      Option.isSome(claudeAdapter)
+        ? Effect.succeed(claudeAdapter.value)
+        : Effect.fail(
+            new ProviderUnsupportedError({
+              provider: "claudeCode",
+            }),
+          );
+
+    const reconnectMcpServer: ProviderServiceShape["reconnectMcpServer"] = (rawInput) =>
+      Effect.gen(function* () {
+        const input = yield* decodeInputOrValidationError({
+          operation: "ProviderService.reconnectMcpServer",
+          schema: ProviderReconnectMcpServerInput,
+          payload: rawInput,
+        });
+        const adapter = yield* requireClaudeAdapter();
+        yield* adapter.reconnectMcpServer(input.threadId, input.serverName);
+      });
+
+    const toggleMcpServer: ProviderServiceShape["toggleMcpServer"] = (rawInput) =>
+      Effect.gen(function* () {
+        const input = yield* decodeInputOrValidationError({
+          operation: "ProviderService.toggleMcpServer",
+          schema: ProviderToggleMcpServerInput,
+          payload: rawInput,
+        });
+        const adapter = yield* requireClaudeAdapter();
+        yield* adapter.toggleMcpServer(input.threadId, input.serverName, input.enabled);
+      });
+
     const listTrackedClaudeSessionIds: ProviderServiceShape["listTrackedClaudeSessionIds"] = () =>
       Effect.gen(function* () {
         const threadIds = yield* directory.listThreadIds();
@@ -554,6 +589,8 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
       listSessions,
       getCapabilities,
       rollbackConversation,
+      reconnectMcpServer,
+      toggleMcpServer,
       listTrackedClaudeSessionIds,
       // Each access creates a fresh PubSub subscription so that multiple
       // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each

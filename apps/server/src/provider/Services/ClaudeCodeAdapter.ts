@@ -10,7 +10,9 @@
  *
  * @module ClaudeCodeAdapter
  */
+import type { ThreadId } from "@t3tools/contracts";
 import { ServiceMap } from "effect";
+import type { Effect } from "effect";
 
 import type { ProviderAdapterError } from "../Errors.ts";
 import type { ProviderAdapterShape } from "./ProviderAdapter.ts";
@@ -20,6 +22,23 @@ import type { ProviderAdapterShape } from "./ProviderAdapter.ts";
  */
 export interface ClaudeCodeAdapterShape extends ProviderAdapterShape<ProviderAdapterError> {
   readonly provider: "claudeCode";
+
+  /**
+   * Reconnect a disconnected MCP server for an active session.
+   */
+  readonly reconnectMcpServer: (
+    threadId: ThreadId,
+    serverName: string,
+  ) => Effect.Effect<void, ProviderAdapterError>;
+
+  /**
+   * Toggle an MCP server on/off for an active session.
+   */
+  readonly toggleMcpServer: (
+    threadId: ThreadId,
+    serverName: string,
+    enabled: boolean,
+  ) => Effect.Effect<void, ProviderAdapterError>;
 }
 
 /**

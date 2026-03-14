@@ -105,6 +105,10 @@ export function createWsNativeApi(): NativeApi {
         if (!window.desktopBridge) return null;
         return window.desktopBridge.pickFolder();
       },
+      pickFile: async (filters) => {
+        if (!window.desktopBridge) return null;
+        return window.desktopBridge.pickFile(filters);
+      },
       confirm: async (message) => {
         if (window.desktopBridge) {
           return window.desktopBridge.confirm(message);
@@ -181,6 +185,14 @@ export function createWsNativeApi(): NativeApi {
     },
     provider: {
       getUsage: () => transport.request(WS_METHODS.providerGetUsage, {}),
+      reconnectMcpServer: (input) =>
+        transport.request(WS_METHODS.providerReconnectMcpServer, input),
+      toggleMcpServer: (input) =>
+        transport.request(WS_METHODS.providerToggleMcpServer, input),
+      onAccountUpdated: (callback) =>
+        transport.subscribe(WS_CHANNELS.providerAccountUpdated, (message) =>
+          callback(message.data),
+        ),
     },
     server: {
       getConfig: () => transport.request(WS_METHODS.serverGetConfig),

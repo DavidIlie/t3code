@@ -59,6 +59,7 @@ import type {
 } from "./orchestration";
 import { EditorId } from "./editor";
 import type { ThreadId } from "./baseSchemas";
+import type { WsProviderAccountUpdatedPayload } from "./ws";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -111,6 +112,7 @@ export interface DesktopUpdateActionResult {
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   pickFolder: () => Promise<string | null>;
+  pickFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
@@ -123,6 +125,14 @@ export interface DesktopBridge {
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
+  isShellCommandInstalled: () => Promise<boolean>;
+  installShellCommand: () => Promise<void>;
+  uninstallShellCommand: () => Promise<void>;
+  onOpenProject: (listener: (projectPath: string) => void) => () => void;
+  setTrayEnabled: (enabled: boolean) => void;
+  getTrayState: () => Promise<DesktopTrayState | null>;
+  setTrayState: (state: DesktopTrayState) => void;
+  onTrayMessage: (listener: (message: DesktopTrayMessage) => void) => () => void;
 }
 
 export interface DesktopTrayThread {
@@ -166,6 +176,7 @@ export interface ProviderUsageResult {
 export interface NativeApi {
   dialogs: {
     pickFolder: () => Promise<string | null>;
+    pickFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>;
     confirm: (message: string) => Promise<boolean>;
   };
   terminal: {
@@ -226,6 +237,15 @@ export interface NativeApi {
   };
   provider: {
     getUsage: () => Promise<ProviderUsageResult>;
+    reconnectMcpServer: (input: { threadId: string; serverName: string }) => Promise<void>;
+    toggleMcpServer: (input: {
+      threadId: string;
+      serverName: string;
+      enabled: boolean;
+    }) => Promise<void>;
+    onAccountUpdated: (
+      callback: (payload: WsProviderAccountUpdatedPayload) => void,
+    ) => () => void;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;

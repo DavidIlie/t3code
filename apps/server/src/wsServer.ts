@@ -30,6 +30,7 @@ import {
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import {
   Cause,
+  Duration,
   Effect,
   Exit,
   FileSystem,
@@ -60,7 +61,7 @@ import { clamp } from "effect/Number";
 import { Open, resolveAvailableEditors } from "./open";
 import { ServerConfig } from "./config";
 import { GitCore } from "./git/Services/GitCore.ts";
-import { tryHandleProjectFaviconRequest } from "./projectFaviconRoute";
+import { tryHandleProjectFaviconRequest, tryHandleProjectIconRequest } from "./projectFaviconRoute";
 import {
   ATTACHMENTS_ROUTE_PREFIX,
   normalizeAttachmentRelativePath,
@@ -418,6 +419,9 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         if (tryHandleProjectFaviconRequest(url, res)) {
           return;
         }
+        if (tryHandleProjectIconRequest(url, res)) {
+          return;
+        }
 
         if (url.pathname.startsWith(ATTACHMENTS_ROUTE_PREFIX)) {
           const rawRelativePath = url.pathname.slice(ATTACHMENTS_ROUTE_PREFIX.length);
@@ -609,6 +613,37 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       providers: providerStatuses,
     }),
   ).pipe(Effect.forkIn(subscriptionsScope));
+
+  // Forward provider runtime rate-limit events to clients
+  yield* Stream.runForEach(
+    providerService.streamEvents.pipe(
+      Stream.filter((event) => event.type === "account.rate-limits.updated"),
+    ),
+    (event) =>
+      pushBus.publishAll(WS_CHANNELS.providerAccountUpdated, {
+        provider: event.provider,
+        data: (event.payload as Record<string, unknown>)?.rateLimits ?? event.payload,
+      }),
+  ).pipe(Effect.forkIn(subscriptionsScope));
+
+  // Periodic usage push (initial after 3s, then every 5 min)
+  yield* Effect.gen(function* () {
+    yield* Effect.sleep(Duration.seconds(3));
+    const pushUsage = Effect.gen(function* () {
+      const usage = yield* Effect.tryPromise(() => fetchProviderUsage());
+      if (usage.claudeCode.available && usage.claudeCode.tiers.length > 0) {
+        yield* pushBus.publishAll(WS_CHANNELS.providerAccountUpdated, {
+          provider: "claudeCode",
+          data: usage.claudeCode,
+        });
+      }
+    }).pipe(Effect.catch(() => Effect.void));
+
+    while (true) {
+      yield* pushUsage;
+      yield* Effect.sleep(Duration.minutes(5));
+    }
+  }).pipe(Effect.forkIn(subscriptionsScope));
 
   yield* Scope.provide(orchestrationReactor.start, subscriptionsScope);
   yield* readiness.markOrchestrationSubscriptionsReady;
@@ -1446,6 +1481,18 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
               message: `Failed to fetch usage: ${error instanceof Error ? error.message : "unknown error"}`,
             }),
         });
+
+      case WS_METHODS.providerReconnectMcpServer: {
+        const body = stripRequestTag(request.body);
+        yield* providerService.reconnectMcpServer(body);
+        return {};
+      }
+
+      case WS_METHODS.providerToggleMcpServer: {
+        const body = stripRequestTag(request.body);
+        yield* providerService.toggleMcpServer(body);
+        return {};
+      }
 
       default: {
         const _exhaustiveCheck: never = request.body;

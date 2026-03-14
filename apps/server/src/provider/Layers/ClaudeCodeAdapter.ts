@@ -232,6 +232,8 @@ interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
       tools?: Array<{ name: string; description?: string }>;
     }>
   >;
+  readonly reconnectMcpServer: (serverName: string) => Promise<void>;
+  readonly toggleMcpServer: (serverName: string, enabled: boolean) => Promise<void>;
 }
 
 export interface ClaudeCodeAdapterLiveOptions {
@@ -1808,14 +1810,24 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           ...(permissionMode === "bypassPermissions"
             ? { allowDangerouslySkipPermissions: true }
             : {}),
-          ...(providerOptions?.maxThinkingTokens !== undefined
-            ? { maxThinkingTokens: providerOptions.maxThinkingTokens }
+          // Prefer `thinking` config over deprecated `maxThinkingTokens`
+          ...(providerOptions?.thinking
+            ? { thinking: providerOptions.thinking }
+            : providerOptions?.maxThinkingTokens !== undefined
+              ? { maxThinkingTokens: providerOptions.maxThinkingTokens }
+              : {}),
+          ...(providerOptions?.maxTurns !== undefined
+            ? { maxTurns: providerOptions.maxTurns }
+            : {}),
+          ...(providerOptions?.maxBudgetUsd !== undefined
+            ? { maxBudgetUsd: providerOptions.maxBudgetUsd }
             : {}),
           ...(resumeState?.resume ? { resume: resumeState.resume } : {}),
           ...(resumeState?.resumeSessionAt ? { resumeSessionAt: resumeState.resumeSessionAt } : {}),
           includePartialMessages: true,
           canUseTool,
           env: buildClaudeEnv(),
+          settingSources: ["project"],
           ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
         };
 
@@ -1895,8 +1907,16 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
               ...(input.model ? { model: input.model } : {}),
               ...(input.cwd ? { cwd: input.cwd } : {}),
               ...(permissionMode ? { permissionMode } : {}),
-              ...(providerOptions?.maxThinkingTokens !== undefined
-                ? { maxThinkingTokens: providerOptions.maxThinkingTokens }
+              ...(providerOptions?.thinking
+                ? { thinking: providerOptions.thinking }
+                : providerOptions?.maxThinkingTokens !== undefined
+                  ? { maxThinkingTokens: providerOptions.maxThinkingTokens }
+                  : {}),
+              ...(providerOptions?.maxTurns !== undefined
+                ? { maxTurns: providerOptions.maxTurns }
+                : {}),
+              ...(providerOptions?.maxBudgetUsd !== undefined
+                ? { maxBudgetUsd: providerOptions.maxBudgetUsd }
                 : {}),
             },
           },
@@ -2138,6 +2158,73 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
         return context !== undefined && !context.stopped;
       });
 
+    const reconnectMcpServer: ClaudeCodeAdapterShape["reconnectMcpServer"] = (
+      threadId,
+      serverName,
+    ) =>
+      Effect.gen(function* () {
+        const context = yield* requireSession(threadId);
+        yield* Effect.tryPromise({
+          try: () => context.query.reconnectMcpServer(serverName),
+          catch: (cause) => toRequestError(threadId, "mcp/reconnect", cause),
+        });
+        // Re-fetch and emit updated MCP status
+        const mcpStatus = yield* Effect.tryPromise(() => context.query.mcpServerStatus()).pipe(
+          Effect.orElseSucceed(
+            () =>
+              [] as Array<{
+                name: string;
+                status: string;
+                tools?: Array<{ name: string; description?: string }>;
+              }>,
+          ),
+        );
+        const stamp = yield* makeEventStamp();
+        yield* offerRuntimeEvent({
+          type: "mcp.status.updated",
+          eventId: stamp.eventId,
+          provider: PROVIDER,
+          createdAt: stamp.createdAt,
+          threadId,
+          payload: { status: mcpStatus },
+          providerRefs: {},
+        });
+      });
+
+    const toggleMcpServer: ClaudeCodeAdapterShape["toggleMcpServer"] = (
+      threadId,
+      serverName,
+      enabled,
+    ) =>
+      Effect.gen(function* () {
+        const context = yield* requireSession(threadId);
+        yield* Effect.tryPromise({
+          try: () => context.query.toggleMcpServer(serverName, enabled),
+          catch: (cause) => toRequestError(threadId, "mcp/toggle", cause),
+        });
+        // Re-fetch and emit updated MCP status
+        const mcpStatus = yield* Effect.tryPromise(() => context.query.mcpServerStatus()).pipe(
+          Effect.orElseSucceed(
+            () =>
+              [] as Array<{
+                name: string;
+                status: string;
+                tools?: Array<{ name: string; description?: string }>;
+              }>,
+          ),
+        );
+        const stamp = yield* makeEventStamp();
+        yield* offerRuntimeEvent({
+          type: "mcp.status.updated",
+          eventId: stamp.eventId,
+          provider: PROVIDER,
+          createdAt: stamp.createdAt,
+          threadId,
+          payload: { status: mcpStatus },
+          providerRefs: {},
+        });
+      });
+
     const stopAll: ClaudeCodeAdapterShape["stopAll"] = () =>
       Effect.forEach(
         sessions,
@@ -2171,6 +2258,8 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
       rollbackThread,
       respondToRequest,
       respondToUserInput,
+      reconnectMcpServer,
+      toggleMcpServer,
       stopSession,
       listSessions,
       hasSession,

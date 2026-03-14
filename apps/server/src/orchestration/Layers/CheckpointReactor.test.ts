@@ -92,6 +92,8 @@ function createProviderServiceHarness(
     listSessions,
     getCapabilities: () => Effect.succeed({ sessionModelSwitch: "in-session" }),
     rollbackConversation,
+    reconnectMcpServer: () => unsupported(),
+    toggleMcpServer: () => unsupported(),
     listTrackedClaudeSessionIds: () => Effect.succeed([]),
     streamEvents: Stream.fromPubSub(runtimeEventPubSub),
   };

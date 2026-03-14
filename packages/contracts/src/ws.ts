@@ -47,15 +47,13 @@ import {
   ProjectWriteFileInput,
 } from "./project";
 import { OpenInEditorInput } from "./editor";
+import { ProviderReconnectMcpServerInput, ProviderToggleMcpServerInput } from "./provider";
 import { ServerConfigUpdatedPayload } from "./server";
 
 // ── WebSocket RPC Method Names ───────────────────────────────────────
 
 export const WS_METHODS = {
-  // Project registry methods
-  projectsList: "projects.list",
-  projectsAdd: "projects.add",
-  projectsRemove: "projects.remove",
+  // Project methods
   projectsSearchEntries: "projects.searchEntries",
   projectsWriteFile: "projects.writeFile",
   projectsImportHistory: "projects.importHistory",
@@ -100,6 +98,8 @@ export const WS_METHODS = {
 
   // Provider
   providerGetUsage: "provider.getUsage",
+  providerReconnectMcpServer: "provider.reconnectMcpServer",
+  providerToggleMcpServer: "provider.toggleMcpServer",
 } as const;
 
 // ── Push Event Channels ──────────────────────────────────────────────
@@ -108,9 +108,7 @@ export const WS_CHANNELS = {
   terminalEvent: "terminal.event",
   serverWelcome: "server.welcome",
   serverConfigUpdated: "server.configUpdated",
-  providerSessionCommands: "provider.sessionCommands",
   providerAccountUpdated: "provider.accountUpdated",
-  mcpStatusUpdated: "mcp.statusUpdated",
 } as const;
 
 // -- Tagged Union of all request body schemas ─────────────────────────
@@ -181,6 +179,8 @@ const WebSocketRequestBody = Schema.Union([
 
   // Provider
   tagRequestBody(WS_METHODS.providerGetUsage, Schema.Struct({})),
+  tagRequestBody(WS_METHODS.providerReconnectMcpServer, ProviderReconnectMcpServerInput),
+  tagRequestBody(WS_METHODS.providerToggleMcpServer, ProviderToggleMcpServerInput),
 ]);
 
 export const WebSocketRequest = Schema.Struct({
@@ -220,10 +220,17 @@ export const WsWelcomePayload = Schema.Struct({
 });
 export type WsWelcomePayload = typeof WsWelcomePayload.Type;
 
+export const WsProviderAccountUpdatedPayload = Schema.Struct({
+  provider: Schema.String,
+  data: Schema.Unknown,
+});
+export type WsProviderAccountUpdatedPayload = typeof WsProviderAccountUpdatedPayload.Type;
+
 export interface WsPushPayloadByChannel {
   readonly [WS_CHANNELS.serverWelcome]: WsWelcomePayload;
   readonly [WS_CHANNELS.serverConfigUpdated]: typeof ServerConfigUpdatedPayload.Type;
   readonly [WS_CHANNELS.terminalEvent]: typeof TerminalEvent.Type;
+  readonly [WS_CHANNELS.providerAccountUpdated]: WsProviderAccountUpdatedPayload;
   readonly [ORCHESTRATION_WS_CHANNELS.domainEvent]: OrchestrationEvent;
 }
 
@@ -251,11 +258,16 @@ export const WsPushOrchestrationDomainEvent = makeWsPushSchema(
   ORCHESTRATION_WS_CHANNELS.domainEvent,
   OrchestrationEvent,
 );
+export const WsPushProviderAccountUpdated = makeWsPushSchema(
+  WS_CHANNELS.providerAccountUpdated,
+  WsProviderAccountUpdatedPayload,
+);
 
 export const WsPushChannelSchema = Schema.Literals([
   WS_CHANNELS.serverWelcome,
   WS_CHANNELS.serverConfigUpdated,
   WS_CHANNELS.terminalEvent,
+  WS_CHANNELS.providerAccountUpdated,
   ORCHESTRATION_WS_CHANNELS.domainEvent,
 ]);
 export type WsPushChannelSchema = typeof WsPushChannelSchema.Type;
@@ -264,6 +276,7 @@ export const WsPush = Schema.Union([
   WsPushServerWelcome,
   WsPushServerConfigUpdated,
   WsPushTerminalEvent,
+  WsPushProviderAccountUpdated,
   WsPushOrchestrationDomainEvent,
 ]);
 export type WsPush = typeof WsPush.Type;
