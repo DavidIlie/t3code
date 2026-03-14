@@ -640,6 +640,7 @@ export const makeGitManager = Effect.gen(function* () {
     /** When true, also produce a semantic feature branch name. */
     includeBranch?: boolean;
     filePaths?: readonly string[];
+    commitMessageInstructions?: string;
   }) =>
     Effect.gen(function* () {
       const context = yield* gitCore.prepareCommitContext(input.cwd, input.filePaths);
@@ -666,6 +667,9 @@ export const makeGitManager = Effect.gen(function* () {
           stagedSummary: limitContext(context.stagedSummary, 8_000),
           stagedPatch: limitContext(context.stagedPatch, 50_000),
           ...(input.includeBranch ? { includeBranch: true } : {}),
+          ...(input.commitMessageInstructions
+            ? { commitMessageInstructions: input.commitMessageInstructions }
+            : {}),
         })
         .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
 
@@ -683,6 +687,7 @@ export const makeGitManager = Effect.gen(function* () {
     commitMessage?: string,
     preResolvedSuggestion?: CommitAndBranchSuggestion,
     filePaths?: readonly string[],
+    commitMessageInstructions?: string,
   ) =>
     Effect.gen(function* () {
       const suggestion =
@@ -692,6 +697,7 @@ export const makeGitManager = Effect.gen(function* () {
           branch,
           ...(commitMessage ? { commitMessage } : {}),
           ...(filePaths ? { filePaths } : {}),
+          ...(commitMessageInstructions ? { commitMessageInstructions } : {}),
         }));
       if (!suggestion) {
         return { status: "skipped_no_changes" as const };
@@ -973,6 +979,7 @@ export const makeGitManager = Effect.gen(function* () {
     branch: string | null,
     commitMessage?: string,
     filePaths?: readonly string[],
+    commitMessageInstructions?: string,
   ) =>
     Effect.gen(function* () {
       const suggestion = yield* resolveCommitAndBranchSuggestion({
@@ -980,6 +987,7 @@ export const makeGitManager = Effect.gen(function* () {
         branch,
         ...(commitMessage ? { commitMessage } : {}),
         ...(filePaths ? { filePaths } : {}),
+        ...(commitMessageInstructions ? { commitMessageInstructions } : {}),
         includeBranch: true,
       });
       if (!suggestion) {
@@ -1045,6 +1053,7 @@ export const makeGitManager = Effect.gen(function* () {
           initialStatus.branch,
           input.commitMessage,
           input.filePaths,
+          input.commitMessageInstructions,
         );
         branchStep = result.branchStep;
         commitMessageForStep = result.resolvedCommitMessage;
@@ -1061,6 +1070,7 @@ export const makeGitManager = Effect.gen(function* () {
         commitMessageForStep,
         preResolvedCommitSuggestion,
         input.filePaths,
+        input.commitMessageInstructions,
       );
 
       const push = wantsPush
@@ -1081,11 +1091,36 @@ export const makeGitManager = Effect.gen(function* () {
     },
   );
 
+  const generateCommitMessage: GitManagerShape["generateCommitMessage"] = Effect.fnUntraced(
+    function* (input) {
+      const details = yield* gitCore.statusDetails(input.cwd);
+      const context = yield* gitCore.prepareCommitContext(input.cwd, input.filePaths);
+      if (!context) {
+        return { subject: "", body: "" };
+      }
+
+      const generated = yield* textGeneration
+        .generateCommitMessage({
+          cwd: input.cwd,
+          branch: details.branch,
+          stagedSummary: limitContext(context.stagedSummary, 8_000),
+          stagedPatch: limitContext(context.stagedPatch, 50_000),
+          ...(input.commitMessageInstructions
+            ? { commitMessageInstructions: input.commitMessageInstructions }
+            : {}),
+        })
+        .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
+
+      return { subject: generated.subject, body: generated.body };
+    },
+  );
+
   return {
     status,
     resolvePullRequest,
     preparePullRequestThread,
     runStackedAction,
+    generateCommitMessage,
   } satisfies GitManagerShape;
 });
 

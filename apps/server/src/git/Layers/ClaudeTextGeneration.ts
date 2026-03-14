@@ -167,6 +167,7 @@ function parseRawJson(
 const makeClaudeTextGeneration = (() => {
   const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = (input) => {
     const wantsBranch = input.includeBranch === true;
+    const userInstructions = input.commitMessageInstructions?.trim() ?? "";
 
     const prompt = [
       "You write concise git commit messages.",
@@ -180,6 +181,9 @@ const makeClaudeTextGeneration = (() => {
         ? ["- branch must be a short semantic git branch fragment for this change"]
         : []),
       "- capture the primary user-visible or developer-visible change",
+      ...(userInstructions.length > 0
+        ? ["", "Additional user instructions:", limitSection(userInstructions, 2_000)]
+        : []),
       "",
       `Branch: ${input.branch ?? "(detached)"}`,
       "",

@@ -7,6 +7,8 @@
  * @module GitManager
  */
 import {
+  GitGenerateCommitMessageInput,
+  GitGenerateCommitMessageResult,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullRequestRefInput,
@@ -52,6 +54,13 @@ export interface GitManagerShape {
   readonly runStackedAction: (
     input: GitRunStackedActionInput,
   ) => Effect.Effect<GitRunStackedActionResult, GitManagerServiceError>;
+
+  /**
+   * Generate a commit message from the current staged changes.
+   */
+  readonly generateCommitMessage: (
+    input: GitGenerateCommitMessageInput,
+  ) => Effect.Effect<GitGenerateCommitMessageResult, GitManagerServiceError>;
 }
 
 /**

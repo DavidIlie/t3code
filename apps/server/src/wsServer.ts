@@ -78,6 +78,7 @@ import { expandHomePath } from "./os-jank.ts";
 import { makeServerPushBus } from "./wsServer/pushBus.ts";
 import { makeServerReadiness } from "./wsServer/readiness.ts";
 import { decodeJsonResult, formatSchemaError } from "@t3tools/shared/schemaJson";
+import { fetchProviderUsage } from "./providerUsage.ts";
 
 /**
  * ServerShape - Service API for server lifecycle control.
@@ -1300,6 +1301,11 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return yield* gitManager.preparePullRequestThread(body);
       }
 
+      case WS_METHODS.gitGenerateCommitMessage: {
+        const body = stripRequestTag(request.body);
+        return yield* gitManager.generateCommitMessage(body);
+      }
+
       case WS_METHODS.gitListBranches: {
         const body = stripRequestTag(request.body);
         return yield* git.listBranches(body);
@@ -1431,6 +1437,15 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         const keybindingsConfig = yield* keybindingsManager.upsertKeybindingRule(body);
         return { keybindings: keybindingsConfig, issues: [] };
       }
+
+      case WS_METHODS.providerGetUsage:
+        return yield* Effect.tryPromise({
+          try: () => fetchProviderUsage(),
+          catch: (error) =>
+            new RouteRequestError({
+              message: `Failed to fetch usage: ${error instanceof Error ? error.message : "unknown error"}`,
+            }),
+        });
 
       default: {
         const _exhaustiveCheck: never = request.body;

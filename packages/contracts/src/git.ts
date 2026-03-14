@@ -65,6 +65,7 @@ export const GitRunStackedActionInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   action: GitStackedAction,
   commitMessage: Schema.optional(TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(10_000))),
+  commitMessageInstructions: Schema.optional(Schema.String),
   featureBranch: Schema.optional(Schema.Boolean),
   filePaths: Schema.optional(
     Schema.Array(TrimmedNonEmptyStringSchema).check(Schema.isMinLength(1)),
@@ -254,3 +255,20 @@ export const GitShowCommitDiffResult = Schema.Struct({
   body: Schema.optional(Schema.String),
 });
 export type GitShowCommitDiffResult = typeof GitShowCommitDiffResult.Type;
+
+// ── Commit Message Generation ─────────────────────────────────────
+
+export const GitGenerateCommitMessageInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  filePaths: Schema.optional(
+    Schema.Array(TrimmedNonEmptyStringSchema).check(Schema.isMinLength(1)),
+  ),
+  commitMessageInstructions: Schema.optional(Schema.String),
+});
+export type GitGenerateCommitMessageInput = typeof GitGenerateCommitMessageInput.Type;
+
+export const GitGenerateCommitMessageResult = Schema.Struct({
+  subject: Schema.String,
+  body: Schema.String,
+});
+export type GitGenerateCommitMessageResult = typeof GitGenerateCommitMessageResult.Type;

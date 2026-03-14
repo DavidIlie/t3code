@@ -14,6 +14,7 @@ import {
 import {
   GitCheckoutInput,
   GitCreateBranchInput,
+  GitGenerateCommitMessageInput,
   GitLogInput,
   GitPreparePullRequestThreadInput,
   GitCreateWorktreeInput,
@@ -78,6 +79,7 @@ export const WS_METHODS = {
   gitInit: "git.init",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
+  gitGenerateCommitMessage: "git.generateCommitMessage",
   gitLog: "git.log",
   gitShowCommitDiff: "git.showCommitDiff",
 
@@ -95,6 +97,9 @@ export const WS_METHODS = {
   // Server meta
   serverGetConfig: "server.getConfig",
   serverUpsertKeybinding: "server.upsertKeybinding",
+
+  // Provider
+  providerGetUsage: "provider.getUsage",
 } as const;
 
 // ── Push Event Channels ──────────────────────────────────────────────
@@ -155,6 +160,7 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.gitInit, GitInitInput),
   tagRequestBody(WS_METHODS.gitResolvePullRequest, GitPullRequestRefInput),
   tagRequestBody(WS_METHODS.gitPreparePullRequestThread, GitPreparePullRequestThreadInput),
+  tagRequestBody(WS_METHODS.gitGenerateCommitMessage, GitGenerateCommitMessageInput),
   tagRequestBody(WS_METHODS.gitLog, GitLogInput),
   tagRequestBody(WS_METHODS.gitShowCommitDiff, GitShowCommitDiffInput),
 
@@ -172,6 +178,9 @@ const WebSocketRequestBody = Schema.Union([
   // Server meta
   tagRequestBody(WS_METHODS.serverGetConfig, Schema.Struct({})),
   tagRequestBody(WS_METHODS.serverUpsertKeybinding, KeybindingRule),
+
+  // Provider
+  tagRequestBody(WS_METHODS.providerGetUsage, Schema.Struct({})),
 ]);
 
 export const WebSocketRequest = Schema.Struct({

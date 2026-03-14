@@ -165,6 +165,8 @@ export function createWsNativeApi(): NativeApi {
         transport.request(WS_METHODS.gitPreparePullRequestThread, input),
       log: (input) => transport.request(WS_METHODS.gitLog, input),
       showCommitDiff: (input) => transport.request(WS_METHODS.gitShowCommitDiff, input),
+      generateCommitMessage: (input) =>
+        transport.request(WS_METHODS.gitGenerateCommitMessage, input),
     },
     contextMenu: {
       show: async <T extends string>(
@@ -176,6 +178,9 @@ export function createWsNativeApi(): NativeApi {
         }
         return showContextMenuFallback(items, position);
       },
+    },
+    provider: {
+      getUsage: () => transport.request(WS_METHODS.providerGetUsage, {}),
     },
     server: {
       getConfig: () => transport.request(WS_METHODS.serverGetConfig),

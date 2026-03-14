@@ -56,6 +56,9 @@ const AppSettingsSchema = Schema.Struct({
   timestampFormat: Schema.Literals(["locale", "12-hour", "24-hour"]).pipe(
     Schema.withConstructorDefault(() => Option.some("locale")),
   ),
+  commitMessageInstructions: Schema.String.pipe(
+    Schema.withConstructorDefault(() => Option.some("")),
+  ),
 });
 export type AppSettings = typeof AppSettingsSchema.Type;
 export type TimestampFormat = AppSettings["timestampFormat"];

@@ -1,6 +1,8 @@
 import type {
   GitCheckoutInput,
   GitCreateBranchInput,
+  GitGenerateCommitMessageInput,
+  GitGenerateCommitMessageResult,
   GitLogInput,
   GitLogResult,
   GitPreparePullRequestThreadInput,
@@ -139,6 +141,28 @@ export type DesktopTrayMessage = {
   threadId: ThreadId;
 };
 
+// ── Provider Usage ────────────────────────────────────────────────
+
+export interface ProviderUsageTier {
+  key: string;
+  label: string;
+  utilization: number;
+  resetsAt: string | null;
+}
+
+export interface ProviderUsageProviderData {
+  available: boolean;
+  plan: string | null;
+  tiers: ProviderUsageTier[];
+  extraUsage: { enabled: boolean; spent: number; limit: number } | null;
+  error: string | null;
+}
+
+export interface ProviderUsageResult {
+  claudeCode: ProviderUsageProviderData;
+  codex: ProviderUsageProviderData;
+}
+
 export interface NativeApi {
   dialogs: {
     pickFolder: () => Promise<string | null>;
@@ -190,12 +214,18 @@ export interface NativeApi {
     runStackedAction: (input: GitRunStackedActionInput) => Promise<GitRunStackedActionResult>;
     log: (input: GitLogInput) => Promise<GitLogResult>;
     showCommitDiff: (input: GitShowCommitDiffInput) => Promise<GitShowCommitDiffResult>;
+    generateCommitMessage: (
+      input: GitGenerateCommitMessageInput,
+    ) => Promise<GitGenerateCommitMessageResult>;
   };
   contextMenu: {
     show: <T extends string>(
       items: readonly ContextMenuItem<T>[],
       position?: { x: number; y: number },
     ) => Promise<T | null>;
+  };
+  provider: {
+    getUsage: () => Promise<ProviderUsageResult>;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;
