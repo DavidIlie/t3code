@@ -529,7 +529,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const lockedProvider: ProviderKind | null = hasThreadStarted
     ? (sessionProvider ?? selectedProviderByThreadId ?? null)
     : null;
-  const selectedProvider: ProviderKind = lockedProvider ?? selectedProviderByThreadId ?? "codex";
+  const selectedProvider: ProviderKind = lockedProvider ?? selectedProviderByThreadId ?? settings.defaultProvider;
   const providerUsageSnapshot = useProviderSessionStore(
     (state) => state.usageByProvider[selectedProvider] ?? null,
   );
@@ -554,7 +554,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       : null;
   const baseThreadModel = resolveModelSlugForProvider(
     selectedProvider,
-    activeThread?.model ?? activeProject?.model ?? getDefaultModel(selectedProvider),
+    activeThread?.model ?? activeProject?.model ?? (settings.defaultModel || null) ?? getDefaultModel(selectedProvider),
   );
   const customModelsForSelectedProvider = settings.customCodexModels;
   const selectedModel = useMemo(() => {
