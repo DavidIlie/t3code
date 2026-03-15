@@ -424,7 +424,7 @@ export function deriveWorkLogEntries(
       const entry: WorkLogEntry = {
         id: activity.id,
         createdAt: activity.createdAt,
-        label: activity.summary,
+        label: typeof activity.summary === "string" ? activity.summary : String(activity.summary ?? ""),
         tone: activity.tone === "approval" ? "info" : activity.tone,
       };
       if (payload && typeof payload.detail === "string" && payload.detail.length > 0) {
