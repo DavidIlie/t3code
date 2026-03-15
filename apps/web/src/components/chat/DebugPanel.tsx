@@ -4,6 +4,7 @@ import { BugIcon, ChevronDownIcon, ChevronUpIcon, XIcon } from "lucide-react";
 import type { Thread, ThreadSession } from "~/types";
 import { formatDuration } from "~/session-logic";
 import { isElectron } from "~/env";
+import { useProviderSessionStore } from "~/providerSessionStore";
 
 interface DebugPanelProps {
   thread: Thread;
@@ -58,6 +59,15 @@ export const DebugPanel = memo(function DebugPanel({ thread, onClose }: DebugPan
   const session = thread.session;
   const latestTurn = thread.latestTurn;
   const turnUsage = extractUsageFromActivities(thread.activities, latestTurn?.turnId ?? undefined);
+  const sessionInfo = useProviderSessionStore(
+    (state) => state.sessionInfoByThread[thread.id],
+  );
+  const mcpServers = useProviderSessionStore(
+    (state) => state.mcpStatusByThread[thread.id],
+  );
+  const commands = useProviderSessionStore(
+    (state) => state.commandsByThread[thread.id],
+  );
 
   const turnDuration =
     latestTurn?.startedAt && latestTurn?.completedAt
@@ -142,9 +152,19 @@ export const DebugPanel = memo(function DebugPanel({ thread, onClose }: DebugPan
             </div>
           )}
           <div className="flex items-center justify-between gap-2">
-            <span className="shrink-0 text-[10px] text-muted-foreground/50">Runtime</span>
-            <span className="text-[10px] text-muted-foreground/80">{thread.runtimeMode}</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground/50">Mode</span>
+            <span className="text-[10px] text-muted-foreground/80">
+              {thread.interactionMode === "plan" ? "Plan" : "Default"} · {thread.runtimeMode === "full-access" ? "Full access" : "Approval required"}
+            </span>
           </div>
+          {sessionInfo?.providerVersion && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="shrink-0 text-[10px] text-muted-foreground/50">Version</span>
+              <span className="text-[10px] font-mono text-muted-foreground/80">
+                v{sessionInfo.providerVersion}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-2">
             <span className="shrink-0 text-[10px] text-muted-foreground/50">Messages</span>
             <span className="text-[10px] text-muted-foreground/80">{thread.messages.length}</span>
@@ -168,13 +188,43 @@ export const DebugPanel = memo(function DebugPanel({ thread, onClose }: DebugPan
               value={session ? formatProviderLabel(session.provider) : "none"}
             />
             <Row label="Status" value={formatSessionStatus(session)} />
-            <Row label="Model" value={thread.model || "default"} />
-            <Row label="Runtime" value={thread.runtimeMode} />
-            <Row label="Interaction" value={thread.interactionMode} />
+            <Row label="Model" value={sessionInfo?.model ?? (thread.model || "default")} mono />
+            {sessionInfo?.providerVersion && (
+              <Row label="SDK Version" value={`v${sessionInfo.providerVersion}`} mono />
+            )}
+            <Row label="Runtime Mode" value={thread.runtimeMode} />
+            <Row label="Interaction Mode" value={thread.interactionMode} />
             {session?.lastError && (
               <Row label="Error" value={session.lastError} className="text-red-400" />
             )}
           </Section>
+
+          {/* MCP Servers */}
+          {mcpServers && mcpServers.length > 0 && (
+            <Section title={`MCP Servers (${mcpServers.length})`}>
+              {mcpServers.map((server) => (
+                <Row
+                  key={server.name}
+                  label={server.name}
+                  value={`${server.status}${server.tools?.length ? ` · ${server.tools.length} tools` : ""}`}
+                />
+              ))}
+            </Section>
+          )}
+
+          {/* Slash Commands */}
+          {commands && commands.length > 0 && (
+            <Section title={`Commands (${commands.length})`}>
+              {commands.slice(0, 10).map((cmd) => (
+                <Row key={cmd.name} label={`/${cmd.name}`} value={cmd.description} />
+              ))}
+              {commands.length > 10 && (
+                <div className="text-[10px] text-muted-foreground/40">
+                  +{commands.length - 10} more
+                </div>
+              )}
+            </Section>
+          )}
 
           {/* Turn info */}
           {latestTurn && (
