@@ -344,7 +344,7 @@ describe("deriveWorkLogEntries", () => {
     expect(entries.map((entry) => entry.id)).toEqual(["tool-complete"]);
   });
 
-  it("omits task start and completion lifecycle entries", () => {
+  it("includes task start/completion with agent annotations and omits task.progress", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
         id: "task-start",
@@ -352,6 +352,7 @@ describe("deriveWorkLogEntries", () => {
         kind: "task.started",
         summary: "default task started",
         tone: "info",
+        payload: { taskId: "agent-1" },
       }),
       makeActivity({
         id: "task-progress",
@@ -366,11 +367,17 @@ describe("deriveWorkLogEntries", () => {
         kind: "task.completed",
         summary: "Task completed",
         tone: "info",
+        payload: { taskId: "agent-1", status: "completed" },
       }),
     ];
 
     const entries = deriveWorkLogEntries(activities, undefined);
-    expect(entries.map((entry) => entry.id)).toEqual(["task-progress"]);
+    expect(entries.map((entry) => entry.id)).toEqual(["task-start", "task-complete"]);
+    expect(entries[0]?.agentTaskId).toBe("agent-1");
+    expect(entries[0]?.agentTaskKind).toBe("started");
+    expect(entries[1]?.agentTaskId).toBe("agent-1");
+    expect(entries[1]?.agentTaskKind).toBe("completed");
+    expect(entries[1]?.agentTaskStatus).toBe("completed");
   });
 
   it("filters by turn id when provided", () => {

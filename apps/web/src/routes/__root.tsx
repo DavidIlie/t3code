@@ -263,6 +263,15 @@ function EventRouter() {
         useProviderSessionStore.getState().setProviderUsage(provider, snapshot);
       }
     });
+    const unsubProviderSessionConfigured = api.provider.onSessionConfigured((payload) => {
+      const store = useProviderSessionStore.getState();
+      if (payload.commands.length > 0) {
+        store.setCommands(payload.threadId, payload.commands);
+      }
+      if (payload.mcpServers.length > 0) {
+        store.setMcpStatus(payload.threadId, payload.mcpServers);
+      }
+    });
     const unsubTerminalEvent = api.terminal.onEvent((event) => {
       const hasRunningSubprocess = terminalRunningSubprocessFromEvent(event);
       if (hasRunningSubprocess === null) {
@@ -354,6 +363,7 @@ function EventRouter() {
       domainEventFlushThrottler.cancel();
       unsubDomainEvent();
       unsubProviderAccount();
+      unsubProviderSessionConfigured();
       unsubTerminalEvent();
       unsubWelcome();
       unsubServerConfigUpdated();

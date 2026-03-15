@@ -193,6 +193,10 @@ export function createWsNativeApi(): NativeApi {
         transport.subscribe(WS_CHANNELS.providerAccountUpdated, (message) =>
           callback(message.data),
         ),
+      onSessionConfigured: (callback) =>
+        transport.subscribe(WS_CHANNELS.providerSessionConfigured, (message) =>
+          callback(message.data),
+        ),
     },
     server: {
       getConfig: () => transport.request(WS_METHODS.serverGetConfig),

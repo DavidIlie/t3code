@@ -59,7 +59,7 @@ import type {
 } from "./orchestration";
 import { EditorId } from "./editor";
 import type { ThreadId } from "./baseSchemas";
-import type { WsProviderAccountUpdatedPayload } from "./ws";
+import type { WsProviderAccountUpdatedPayload, WsProviderSessionConfiguredPayload } from "./ws";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -245,6 +245,9 @@ export interface NativeApi {
     }) => Promise<void>;
     onAccountUpdated: (
       callback: (payload: WsProviderAccountUpdatedPayload) => void,
+    ) => () => void;
+    onSessionConfigured: (
+      callback: (payload: WsProviderSessionConfiguredPayload) => void,
     ) => () => void;
   };
   server: {

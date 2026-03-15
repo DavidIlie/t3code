@@ -626,6 +626,45 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       }),
   ).pipe(Effect.forkIn(subscriptionsScope));
 
+  // Forward provider session.configured and mcp.status.updated events to clients
+  yield* Stream.runForEach(
+    providerService.streamEvents.pipe(
+      Stream.filter(
+        (event) => event.type === "session.configured" || event.type === "mcp.status.updated",
+      ),
+    ),
+    (event) =>
+      Effect.gen(function* () {
+        const payload = event.payload as Record<string, unknown>;
+        const threadId =
+          typeof event.threadId === "string" ? event.threadId : undefined;
+        if (!threadId) return;
+
+        if (event.type === "session.configured") {
+          const config = payload.config as Record<string, unknown> | undefined;
+          const commands = Array.isArray(config?.commands)
+            ? (config.commands as Array<{ name: string; description: string; argumentHint?: string }>)
+            : [];
+          yield* pushBus.publishAll(WS_CHANNELS.providerSessionConfigured, {
+            threadId,
+            commands,
+            mcpServers: [],
+          });
+        } else if (event.type === "mcp.status.updated") {
+          const status = Array.isArray(payload.status) ? payload.status : [];
+          yield* pushBus.publishAll(WS_CHANNELS.providerSessionConfigured, {
+            threadId,
+            commands: [],
+            mcpServers: status as Array<{
+              name: string;
+              status: string;
+              tools?: Array<{ name: string; description?: string }>;
+            }>,
+          });
+        }
+      }),
+  ).pipe(Effect.forkIn(subscriptionsScope));
+
   // Periodic usage push (initial after 3s, then every 5 min)
   yield* Effect.gen(function* () {
     yield* Effect.sleep(Duration.seconds(3));

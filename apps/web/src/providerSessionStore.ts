@@ -2,15 +2,15 @@ import { create } from "zustand";
 import type { ProviderKind } from "@t3tools/contracts";
 
 export interface SlashCommandInfo {
-  name: string;
-  description: string;
-  argumentHint: string;
+  readonly name: string;
+  readonly description: string;
+  readonly argumentHint?: string | undefined;
 }
 
 export interface McpServerInfo {
-  name: string;
-  status: string;
-  tools?: Array<{ name: string; description?: string }>;
+  readonly name: string;
+  readonly status: string;
+  readonly tools?: ReadonlyArray<{ readonly name: string; readonly description?: string | undefined }> | undefined;
 }
 
 export interface AccountInfo {
@@ -35,9 +35,9 @@ export interface ProviderUsageSnapshot {
 
 interface ProviderSessionState {
   /** Commands (skills) per thread, keyed by threadId */
-  commandsByThread: Record<string, SlashCommandInfo[]>;
+  commandsByThread: Record<string, ReadonlyArray<SlashCommandInfo>>;
   /** MCP server status per thread */
-  mcpStatusByThread: Record<string, McpServerInfo[]>;
+  mcpStatusByThread: Record<string, ReadonlyArray<McpServerInfo>>;
   /** Account info per thread */
   accountByThread: Record<string, AccountInfo>;
   /** Global MCP servers from ~/.claude/mcp.json (pre-session) */
@@ -45,8 +45,8 @@ interface ProviderSessionState {
   /** Usage snapshots per provider */
   usageByProvider: Partial<Record<ProviderKind, ProviderUsageSnapshot>>;
 
-  setCommands: (threadId: string, commands: SlashCommandInfo[]) => void;
-  setMcpStatus: (threadId: string, status: McpServerInfo[]) => void;
+  setCommands: (threadId: string, commands: ReadonlyArray<SlashCommandInfo>) => void;
+  setMcpStatus: (threadId: string, status: ReadonlyArray<McpServerInfo>) => void;
   setAccountInfo: (threadId: string, account: AccountInfo) => void;
   setGlobalMcpServers: (servers: McpServerInfo[]) => void;
   setProviderUsage: (provider: ProviderKind, snapshot: ProviderUsageSnapshot) => void;

@@ -109,6 +109,7 @@ export const WS_CHANNELS = {
   serverWelcome: "server.welcome",
   serverConfigUpdated: "server.configUpdated",
   providerAccountUpdated: "provider.accountUpdated",
+  providerSessionConfigured: "provider.sessionConfigured",
 } as const;
 
 // -- Tagged Union of all request body schemas ─────────────────────────
@@ -226,11 +227,33 @@ export const WsProviderAccountUpdatedPayload = Schema.Struct({
 });
 export type WsProviderAccountUpdatedPayload = typeof WsProviderAccountUpdatedPayload.Type;
 
+export const WsProviderSessionConfiguredPayload = Schema.Struct({
+  threadId: Schema.String,
+  commands: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      description: Schema.String,
+      argumentHint: Schema.optional(Schema.String),
+    }),
+  ),
+  mcpServers: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      status: Schema.String,
+      tools: Schema.optional(
+        Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.optional(Schema.String) })),
+      ),
+    }),
+  ),
+});
+export type WsProviderSessionConfiguredPayload = typeof WsProviderSessionConfiguredPayload.Type;
+
 export interface WsPushPayloadByChannel {
   readonly [WS_CHANNELS.serverWelcome]: WsWelcomePayload;
   readonly [WS_CHANNELS.serverConfigUpdated]: typeof ServerConfigUpdatedPayload.Type;
   readonly [WS_CHANNELS.terminalEvent]: typeof TerminalEvent.Type;
   readonly [WS_CHANNELS.providerAccountUpdated]: WsProviderAccountUpdatedPayload;
+  readonly [WS_CHANNELS.providerSessionConfigured]: WsProviderSessionConfiguredPayload;
   readonly [ORCHESTRATION_WS_CHANNELS.domainEvent]: OrchestrationEvent;
 }
 
@@ -262,12 +285,17 @@ export const WsPushProviderAccountUpdated = makeWsPushSchema(
   WS_CHANNELS.providerAccountUpdated,
   WsProviderAccountUpdatedPayload,
 );
+export const WsPushProviderSessionConfigured = makeWsPushSchema(
+  WS_CHANNELS.providerSessionConfigured,
+  WsProviderSessionConfiguredPayload,
+);
 
 export const WsPushChannelSchema = Schema.Literals([
   WS_CHANNELS.serverWelcome,
   WS_CHANNELS.serverConfigUpdated,
   WS_CHANNELS.terminalEvent,
   WS_CHANNELS.providerAccountUpdated,
+  WS_CHANNELS.providerSessionConfigured,
   ORCHESTRATION_WS_CHANNELS.domainEvent,
 ]);
 export type WsPushChannelSchema = typeof WsPushChannelSchema.Type;
@@ -277,6 +305,7 @@ export const WsPush = Schema.Union([
   WsPushServerConfigUpdated,
   WsPushTerminalEvent,
   WsPushProviderAccountUpdated,
+  WsPushProviderSessionConfigured,
   WsPushOrchestrationDomainEvent,
 ]);
 export type WsPush = typeof WsPush.Type;
