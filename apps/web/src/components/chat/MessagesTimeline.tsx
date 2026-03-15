@@ -70,7 +70,6 @@ interface MessagesTimelineProps {
   resolvedTheme: "light" | "dark";
   workspaceRoot: string | undefined;
   timestampFormat: TimestampFormat;
-  groupToolCalls: boolean;
   interactionMode: "default" | "plan";
 }
 
@@ -96,7 +95,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   resolvedTheme,
   workspaceRoot,
   timestampFormat,
-  groupToolCalls,
   interactionMode,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
@@ -133,98 +131,52 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
     );
 
-    if (groupToolCalls) {
-      // When grouping is enabled, collect ALL work entries from the timeline into
-      // a single group and place it at the position of the first work entry.
-      // This is more robust than requiring consecutive entries — even if a
-      // proposed-plan or streaming message entry sits between work entries, they
-      // will still be grouped into one card.
-      const allWorkEntries: WorkLogEntry[] = [];
-      let firstWorkEntryId: string | undefined;
-      let firstWorkCreatedAt: string | undefined;
+    // Group consecutive work entries into a single card. When a non-work entry
+    // (message, proposed-plan) appears, it breaks the group and starts a new one.
+    for (let index = 0; index < timelineEntries.length; index += 1) {
+      const timelineEntry = timelineEntries[index];
+      if (!timelineEntry) continue;
 
-      for (const entry of timelineEntries) {
-        if (entry.kind === "work") {
-          allWorkEntries.push(entry.entry);
-          if (!firstWorkEntryId) {
-            firstWorkEntryId = entry.id;
-            firstWorkCreatedAt = entry.createdAt;
-          }
+      if (timelineEntry.kind === "work") {
+        const groupedEntries = [timelineEntry.entry];
+        let cursor = index + 1;
+        while (cursor < timelineEntries.length) {
+          const nextEntry = timelineEntries[cursor];
+          if (!nextEntry || nextEntry.kind !== "work") break;
+          groupedEntries.push(nextEntry.entry);
+          cursor += 1;
         }
-      }
-
-      let workGroupEmitted = false;
-      for (const timelineEntry of timelineEntries) {
-        if (timelineEntry.kind === "work") {
-          if (!workGroupEmitted) {
-            workGroupEmitted = true;
-            nextRows.push({
-              kind: "work",
-              id: firstWorkEntryId!,
-              createdAt: firstWorkCreatedAt!,
-              groupedEntries: allWorkEntries,
-            });
-          }
-          continue;
-        }
-
-        if (timelineEntry.kind === "proposed-plan") {
-          nextRows.push({
-            kind: "proposed-plan",
-            id: timelineEntry.id,
-            createdAt: timelineEntry.createdAt,
-            proposedPlan: timelineEntry.proposedPlan,
-          });
-          continue;
-        }
-
+        index = cursor - 1;
         nextRows.push({
-          kind: "message",
+          kind: "work",
           id: timelineEntry.id,
           createdAt: timelineEntry.createdAt,
-          message: timelineEntry.message,
-          durationStart:
-            durationStartByMessageId.get(timelineEntry.message.id) ?? timelineEntry.message.createdAt,
-          showCompletionDivider:
-            timelineEntry.message.role === "assistant" &&
-            completionDividerBeforeEntryId === timelineEntry.id,
+          groupedEntries,
         });
+        continue;
       }
-    } else {
-      // When grouping is disabled, each work entry gets its own card.
-      for (const timelineEntry of timelineEntries) {
-        if (timelineEntry.kind === "work") {
-          nextRows.push({
-            kind: "work",
-            id: timelineEntry.id,
-            createdAt: timelineEntry.createdAt,
-            groupedEntries: [timelineEntry.entry],
-          });
-          continue;
-        }
 
-        if (timelineEntry.kind === "proposed-plan") {
-          nextRows.push({
-            kind: "proposed-plan",
-            id: timelineEntry.id,
-            createdAt: timelineEntry.createdAt,
-            proposedPlan: timelineEntry.proposedPlan,
-          });
-          continue;
-        }
-
+      if (timelineEntry.kind === "proposed-plan") {
         nextRows.push({
-          kind: "message",
+          kind: "proposed-plan",
           id: timelineEntry.id,
           createdAt: timelineEntry.createdAt,
-          message: timelineEntry.message,
-          durationStart:
-            durationStartByMessageId.get(timelineEntry.message.id) ?? timelineEntry.message.createdAt,
-          showCompletionDivider:
-            timelineEntry.message.role === "assistant" &&
-            completionDividerBeforeEntryId === timelineEntry.id,
+          proposedPlan: timelineEntry.proposedPlan,
         });
+        continue;
       }
+
+      nextRows.push({
+        kind: "message",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        message: timelineEntry.message,
+        durationStart:
+          durationStartByMessageId.get(timelineEntry.message.id) ?? timelineEntry.message.createdAt,
+        showCompletionDivider:
+          timelineEntry.message.role === "assistant" &&
+          completionDividerBeforeEntryId === timelineEntry.id,
+      });
     }
 
     if (isWorking) {
@@ -236,7 +188,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }
 
     return nextRows;
-  }, [timelineEntries, completionDividerBeforeEntryId, isWorking, activeTurnStartedAt, groupToolCalls]);
+  }, [timelineEntries, completionDividerBeforeEntryId, isWorking, activeTurnStartedAt]);
 
   const firstUnvirtualizedRowIndex = useMemo(() => {
     const firstTailRowIndex = Math.max(rows.length - ALWAYS_UNVIRTUALIZED_TAIL_ROWS, 0);

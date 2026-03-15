@@ -982,24 +982,6 @@ function SettingsRouteView() {
                 />
               </div>
 
-              <div className="mt-3 flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Group tool calls</p>
-                  <p className="text-xs text-muted-foreground">
-                    When enabled, all tool calls in a turn are grouped into a single card. When
-                    disabled, tool calls are shown chronologically between text messages.
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.groupToolCalls}
-                  onCheckedChange={(checked) =>
-                    updateSettings({
-                      groupToolCalls: Boolean(checked),
-                    })
-                  }
-                  aria-label="Group tool calls"
-                />
-              </div>
             </section>}
 
             {show.terminal && <TerminalSettingsSection

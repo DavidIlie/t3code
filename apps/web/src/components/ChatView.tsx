@@ -3523,7 +3523,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
               resolvedTheme={resolvedTheme}
               workspaceRoot={activeProject?.cwd ?? undefined}
               timestampFormat={settings.timestampFormat}
-              groupToolCalls={settings.groupToolCalls}
               interactionMode={activeThread.interactionMode ?? "default"}
             />
           </div>
