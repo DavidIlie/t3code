@@ -3462,7 +3462,19 @@ export default function ChatView({ threadId }: ChatViewProps) {
       <ProviderHealthBanner status={activeProviderStatus} />
       <ThreadErrorBanner
         error={activeThread.error}
+        isSessionError={activeThread.session?.orchestrationStatus === "error"}
         onDismiss={() => setThreadError(activeThread.id, null)}
+        onRestartSession={() => {
+          const api = readNativeApi();
+          if (!api) return;
+          void api.orchestration.dispatchCommand({
+            type: "thread.session.stop",
+            commandId: newCommandId(),
+            threadId: activeThread.id,
+            createdAt: new Date().toISOString(),
+          });
+          setThreadError(activeThread.id, null);
+        }}
       />
       {/* Main content area with optional plan sidebar */}
       <div className="flex min-h-0 flex-1">
