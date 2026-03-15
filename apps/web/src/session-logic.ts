@@ -36,6 +36,12 @@ export interface WorkLogEntry {
   command?: string;
   changedFiles?: ReadonlyArray<string>;
   tone: "thinking" | "tool" | "info" | "error";
+  /** Set on task.started / task.completed entries to identify agent (sub)tasks. */
+  agentTaskId?: string;
+  /** Discriminator for agent task lifecycle entries. */
+  agentTaskKind?: "started" | "completed";
+  /** Status for completed agent tasks. */
+  agentTaskStatus?: string;
 }
 
 export interface PendingApproval {
@@ -406,7 +412,7 @@ export function deriveWorkLogEntries(
   return ordered
     .filter((activity) => (latestTurnId ? activity.turnId === latestTurnId : true))
     .filter((activity) => activity.kind !== "tool.started")
-    .filter((activity) => activity.kind !== "task.started" && activity.kind !== "task.completed")
+    .filter((activity) => activity.kind !== "task.progress")
     .filter((activity) => activity.summary !== "Checkpoint captured")
     .map((activity) => {
       const payload =
@@ -429,6 +435,18 @@ export function deriveWorkLogEntries(
       }
       if (changedFiles.length > 0) {
         entry.changedFiles = changedFiles;
+      }
+
+      // Annotate agent task lifecycle entries with taskId and kind.
+      if (activity.kind === "task.started" || activity.kind === "task.completed") {
+        const taskId = typeof payload?.taskId === "string" ? payload.taskId : undefined;
+        if (taskId) {
+          entry.agentTaskId = taskId;
+          entry.agentTaskKind = activity.kind === "task.started" ? "started" : "completed";
+          if (activity.kind === "task.completed" && typeof payload?.status === "string") {
+            entry.agentTaskStatus = payload.status;
+          }
+        }
       }
 
       // Annotate MCP tool calls with server name from mcp__servername__toolname pattern

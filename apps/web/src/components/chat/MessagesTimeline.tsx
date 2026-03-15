@@ -5,14 +5,14 @@ import {
   type VirtualItem,
   useVirtualizer,
 } from "@tanstack/react-virtual";
-import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
+import { deriveTimelineEntries, formatElapsed, type WorkLogEntry } from "../../session-logic";
 import { type TimestampFormat } from "../../appSettings";
 import { formatTimestamp } from "../../timestampFormat";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../chat-scroll";
 import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import ChatMarkdown from "../ChatMarkdown";
-import { BrainIcon, ChevronRightIcon, Undo2Icon } from "lucide-react";
+import { BotIcon, BrainIcon, CheckCircleIcon, ChevronRightIcon, Undo2Icon, XCircleIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { clamp } from "effect/Number";
 import { estimateTimelineMessageHeight } from "../timelineHeight";
@@ -307,21 +307,28 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         (() => {
           const groupId = row.id;
           const groupedEntries = row.groupedEntries;
+          const segments = buildWorkSegments(groupedEntries);
           const isExpanded = expandedWorkGroups[groupId] ?? false;
-          const hasOverflow = groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
-          const visibleEntries =
+          const hasOverflow = segments.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
+          const visibleSegments =
             hasOverflow && !isExpanded
-              ? groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
-              : groupedEntries;
-          const hiddenCount = groupedEntries.length - visibleEntries.length;
-          const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
-          const groupLabel = onlyToolEntries
+              ? segments.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
+              : segments;
+          const hiddenCount = segments.length - visibleSegments.length;
+          const hasAgentTasks = segments.some((s) => s.kind === "agent-task");
+          const onlyToolEntries =
+            !hasAgentTasks && groupedEntries.every((entry) => entry.tone === "tool");
+          const groupLabel = hasAgentTasks
             ? groupedEntries.length === 1
-              ? "Tool call"
-              : `Tool calls (${groupedEntries.length})`
-            : groupedEntries.length === 1
               ? "Work event"
-              : `Work log (${groupedEntries.length})`;
+              : `Work log (${groupedEntries.length})`
+            : onlyToolEntries
+              ? groupedEntries.length === 1
+                ? "Tool call"
+                : `Tool calls (${groupedEntries.length})`
+              : groupedEntries.length === 1
+                ? "Work event"
+                : `Work log (${groupedEntries.length})`;
 
           return (
             <div className="rounded-lg border border-border/80 bg-card/45 px-3 py-2">
@@ -340,48 +347,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                 )}
               </div>
               <div className="space-y-1">
-                {visibleEntries.map((workEntry) => (
-                  <div key={`work-row:${workEntry.id}`} className="flex items-start gap-2 py-0.5">
-                    <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/30" />
-                    <div className="min-w-0 flex-1 py-[2px]">
-                      <p className={`text-[11px] leading-relaxed ${workToneClass(workEntry.tone)}`}>
-                        {workEntry.label}
-                      </p>
-                      {workEntry.command && (
-                        <pre className="mt-1 overflow-x-auto rounded-md border border-border/70 bg-background/80 px-2 py-1 font-mono text-[11px] leading-relaxed text-foreground/80">
-                          {workEntry.command}
-                        </pre>
-                      )}
-                      {workEntry.changedFiles && workEntry.changedFiles.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {workEntry.changedFiles.slice(0, 6).map((filePath) => (
-                            <span
-                              key={`${workEntry.id}:${filePath}`}
-                              className="rounded-md border border-border/70 bg-background/65 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/85"
-                              title={filePath}
-                            >
-                              {filePath}
-                            </span>
-                          ))}
-                          {workEntry.changedFiles.length > 6 && (
-                            <span className="px-1 text-[10px] text-muted-foreground/65">
-                              +{workEntry.changedFiles.length - 6} more
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {workEntry.detail &&
-                        (!workEntry.command || workEntry.detail !== workEntry.command) && (
-                          <p
-                            className="mt-1 text-[11px] leading-relaxed text-muted-foreground/75"
-                            title={workEntry.detail}
-                          >
-                            {workEntry.detail}
-                          </p>
-                        )}
-                    </div>
-                  </div>
-                ))}
+                {visibleSegments.map((segment) =>
+                  segment.kind === "entry" ? (
+                    <WorkEntryRow key={segment.entry.id} entry={segment.entry} />
+                  ) : (
+                    <AgentTaskCard key={segment.group.taskId} group={segment.group} />
+                  ),
+                )}
               </div>
             </div>
           );
@@ -711,4 +683,152 @@ function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {
   if (tone === "tool") return "text-muted-foreground/70";
   if (tone === "thinking") return "text-muted-foreground/50";
   return "text-muted-foreground/40";
+}
+
+// ── Agent task nesting ──────────────────────────────────────────
+
+interface AgentTaskGroup {
+  taskId: string;
+  label: string;
+  detail: string | undefined;
+  status: string | undefined;
+  children: WorkLogEntry[];
+}
+
+type WorkSegment =
+  | { kind: "entry"; entry: WorkLogEntry }
+  | { kind: "agent-task"; group: AgentTaskGroup };
+
+/**
+ * Parses a flat list of work entries into segments, grouping entries between
+ * task.started and task.completed into nested agent task groups.
+ */
+function buildWorkSegments(entries: ReadonlyArray<WorkLogEntry>): WorkSegment[] {
+  const segments: WorkSegment[] = [];
+  const openTasks = new Map<string, AgentTaskGroup>();
+
+  for (const entry of entries) {
+    if (entry.agentTaskKind === "started" && entry.agentTaskId) {
+      const group: AgentTaskGroup = {
+        taskId: entry.agentTaskId,
+        label: entry.label,
+        detail: entry.detail,
+        status: undefined,
+        children: [],
+      };
+      openTasks.set(entry.agentTaskId, group);
+      segments.push({ kind: "agent-task", group });
+      continue;
+    }
+
+    if (entry.agentTaskKind === "completed" && entry.agentTaskId) {
+      const group = openTasks.get(entry.agentTaskId);
+      if (group) {
+        group.status = entry.agentTaskStatus ?? "completed";
+        openTasks.delete(entry.agentTaskId);
+      }
+      continue;
+    }
+
+    // If there's an active agent task, nest this entry under it.
+    if (openTasks.size > 0) {
+      const lastTask = [...openTasks.values()].at(-1);
+      if (lastTask) {
+        lastTask.children.push(entry);
+        continue;
+      }
+    }
+
+    segments.push({ kind: "entry", entry });
+  }
+
+  return segments;
+}
+
+function WorkEntryRow({ entry }: { entry: WorkLogEntry }) {
+  return (
+    <div className="flex items-start gap-2 py-0.5">
+      <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/30" />
+      <div className="min-w-0 flex-1 py-[2px]">
+        <p className={`text-[11px] leading-relaxed ${workToneClass(entry.tone)}`}>{entry.label}</p>
+        {entry.command && (
+          <pre className="mt-1 overflow-x-auto rounded-md border border-border/70 bg-background/80 px-2 py-1 font-mono text-[11px] leading-relaxed text-foreground/80">
+            {entry.command}
+          </pre>
+        )}
+        {entry.changedFiles && entry.changedFiles.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {entry.changedFiles.slice(0, 6).map((filePath) => (
+              <span
+                key={`${entry.id}:${filePath}`}
+                className="rounded-md border border-border/70 bg-background/65 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/85"
+                title={filePath}
+              >
+                {filePath}
+              </span>
+            ))}
+            {entry.changedFiles.length > 6 && (
+              <span className="px-1 text-[10px] text-muted-foreground/65">
+                +{entry.changedFiles.length - 6} more
+              </span>
+            )}
+          </div>
+        )}
+        {entry.detail && (!entry.command || entry.detail !== entry.command) && (
+          <p
+            className="mt-1 text-[11px] leading-relaxed text-muted-foreground/75"
+            title={entry.detail}
+          >
+            {entry.detail}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AgentTaskCard({ group }: { group: AgentTaskGroup }) {
+  const statusIcon =
+    group.status === "failed" ? (
+      <XCircleIcon className="size-3 text-rose-400/70" />
+    ) : group.status ? (
+      <CheckCircleIcon className="size-3 text-emerald-400/60" />
+    ) : null;
+  const statusLabel =
+    group.status === "failed"
+      ? "Failed"
+      : group.status === "stopped"
+        ? "Stopped"
+        : group.status
+          ? "Done"
+          : "Running...";
+
+  return (
+    <Collapsible defaultOpen={!group.status}>
+      <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-muted/40">
+        <BotIcon className="size-3.5 shrink-0 text-indigo-400/70" />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground/70">
+          {group.detail ?? group.label}
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+          {statusIcon}
+          {statusLabel}
+        </span>
+        <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/40 transition-transform duration-200 [[data-panel-open]_&]:rotate-90" />
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <div className="ml-2 border-l-2 border-indigo-400/20 pl-2">
+          <div className="space-y-0.5">
+            {group.children.length > 0 ? (
+              group.children.map((child) => <WorkEntryRow key={child.id} entry={child} />)
+            ) : (
+              <p className="py-1 text-[10px] italic text-muted-foreground/40">
+                {group.status ? "No recorded actions" : "Working..."}
+              </p>
+            )}
+          </div>
+        </div>
+      </CollapsiblePanel>
+    </Collapsible>
+  );
 }
