@@ -2592,9 +2592,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only on thread change
   }, [activeThread?.id]);
 
+  const [isInterrupting, setIsInterrupting] = useState(false);
+  useEffect(() => {
+    if (phase !== "running") setIsInterrupting(false);
+  }, [phase]);
   const onInterrupt = async () => {
     const api = readNativeApi();
-    if (!api || !activeThread) return;
+    if (!api || !activeThread || isInterrupting) return;
+    setIsInterrupting(true);
     await api.orchestration.dispatchCommand({
       type: "thread.turn.interrupt",
       commandId: newCommandId(),
@@ -3967,22 +3972,34 @@ export default function ChatView({ threadId }: ChatViewProps) {
                           </Button>
                         </div>
                       ) : phase === "running" ? (
-                        <button
-                          type="button"
-                          className="flex size-8 items-center justify-center rounded-full bg-rose-500/90 text-white transition-all duration-150 hover:bg-rose-500 hover:scale-105 cursor-pointer sm:h-8 sm:w-8"
-                          onClick={() => void onInterrupt()}
-                          aria-label="Stop generation"
-                        >
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 12 12"
-                            fill="currentColor"
-                            aria-hidden="true"
+                        isInterrupting ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-9 rounded-full px-4 sm:h-8"
+                            disabled
                           >
-                            <rect x="2" y="2" width="8" height="8" rx="1.5" />
-                          </svg>
-                        </button>
+                            Stopping...
+                          </Button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="flex size-8 items-center justify-center rounded-full bg-rose-500/90 text-white transition-all duration-150 hover:bg-rose-500 hover:scale-105 cursor-pointer sm:h-8 sm:w-8"
+                            onClick={() => void onInterrupt()}
+                            aria-label="Stop generation"
+                          >
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 12 12"
+                              fill="currentColor"
+                              aria-hidden="true"
+                            >
+                              <rect x="2" y="2" width="8" height="8" rx="1.5" />
+                            </svg>
+                          </button>
+                        )
                       ) : pendingUserInputs.length === 0 ? (
                         showPlanFollowUpPrompt ? (
                           prompt.trim().length > 0 ? (
@@ -4024,6 +4041,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
                                     onClick={() => void onImplementPlanInNewThread()}
                                   >
                                     Implement in new thread
+                                  </MenuItem>
+                                  <MenuItem
+                                    onClick={() => handleInteractionModeChange("default")}
+                                  >
+                                    Reject plan
                                   </MenuItem>
                                 </MenuPopup>
                               </Menu>
