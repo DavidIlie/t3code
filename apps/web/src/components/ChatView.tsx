@@ -3519,6 +3519,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
               workspaceRoot={activeProject?.cwd ?? undefined}
               timestampFormat={settings.timestampFormat}
               groupToolCalls={settings.groupToolCalls}
+              interactionMode={activeThread.interactionMode}
             />
           </div>
 

@@ -66,7 +66,7 @@ import {
 } from "./ui/dialog";
 import ProjectSettingsDialog, { getProjectIconComponent } from "./ProjectSettingsDialog";
 import AccountPill from "./AccountPill";
-import { SidebarUsageBars, UsageCard } from "./UsageCard";
+import { SidebarUsageBars } from "./UsageCard";
 import {
   getArm64IntelBuildWarningDescription,
   getDesktopUpdateActionError,
@@ -1961,9 +1961,6 @@ export default function Sidebar() {
                 <span className="text-xs">Settings</span>
               </SidebarMenuButton>
             )}
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <UsageCard />
           </SidebarMenuItem>
         </SidebarMenu>
         <p className="px-2 text-[10px] text-muted-foreground/40">

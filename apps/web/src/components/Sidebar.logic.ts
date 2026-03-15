@@ -14,6 +14,7 @@ export function shouldOpenProjectFolderPickerImmediately(input: {
 export interface ThreadStatusPill {
   label:
     | "Working"
+    | "Planning"
     | "Connecting"
     | "Completed"
     | "Pending Approval"
@@ -103,7 +104,7 @@ export function resolveThreadStatusPill(input: {
 
   if (thread.session?.status === "running") {
     return {
-      label: "Working",
+      label: thread.interactionMode === "plan" ? "Planning" : "Working",
       colorClass: "text-sky-600 dark:text-sky-300/80",
       dotClass: "bg-sky-500 dark:bg-sky-300/80",
       pulse: true,

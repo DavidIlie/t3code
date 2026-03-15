@@ -71,6 +71,7 @@ interface MessagesTimelineProps {
   workspaceRoot: string | undefined;
   timestampFormat: TimestampFormat;
   groupToolCalls: boolean;
+  interactionMode: "default" | "plan";
 }
 
 export const MessagesTimeline = memo(function MessagesTimeline({
@@ -96,6 +97,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   workspaceRoot,
   timestampFormat,
   groupToolCalls,
+  interactionMode,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
   const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);
@@ -565,8 +567,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             </span>
             <span>
               {row.createdAt
-                ? `Working for ${formatWorkingTimer(row.createdAt, nowIso) ?? "0s"}`
-                : "Working..."}
+                ? `${interactionMode === "plan" ? "Planning" : "Working"} for ${formatWorkingTimer(row.createdAt, nowIso) ?? "0s"}`
+                : interactionMode === "plan" ? "Planning..." : "Working..."}
             </span>
           </div>
         </div>
