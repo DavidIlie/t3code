@@ -449,6 +449,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       {row.kind === "message" &&
         row.message.role === "assistant" &&
         (() => {
+          const isEmpty = !row.message.text && !row.message.reasoning && !row.message.streaming;
+          // Skip empty assistant messages entirely (e.g. after plan-only turns)
+          if (isEmpty) return null;
           const messageText = row.message.text || (row.message.streaming ? "" : "(empty response)");
           return (
             <>
