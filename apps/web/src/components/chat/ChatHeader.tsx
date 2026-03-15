@@ -14,6 +14,7 @@ import { Toggle } from "../ui/toggle";
 import { SidebarTrigger } from "../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
 import { ProjectFavicon } from "../Sidebar";
+import { useProviderSessionStore } from "../../providerSessionStore";
 
 interface ChatHeaderProps {
   activeThreadId: ThreadId;
@@ -66,6 +67,10 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleHistory,
   onToggleDebugPanel,
 }: ChatHeaderProps) {
+  const sessionInfo = useProviderSessionStore(
+    (state) => state.sessionInfoByThread[activeThreadId],
+  );
+
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
@@ -89,6 +94,7 @@ export const ChatHeader = memo(function ChatHeader({
             No Git
           </Badge>
         )}
+        <SessionInfoBadge sessionInfo={sessionInfo} />
       </div>
       <div className="@container/header-actions flex min-w-0 flex-1 items-center justify-end gap-2 @sm/header-actions:gap-3">
         {activeProjectScripts && (
@@ -177,3 +183,31 @@ export const ChatHeader = memo(function ChatHeader({
     </div>
   );
 });
+
+function formatModelName(model: string): string {
+  // "claude-opus-4-6" → "Opus 4.6", "claude-sonnet-4-5-20250929" → "Sonnet 4.5"
+  const match = model.match(/claude-(\w+)-(\d+)-(\d+)/);
+  if (match?.[1] && match[2] && match[3]) {
+    const family = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+    return `${family} ${match[2]}.${match[3]}`;
+  }
+  return model;
+}
+
+import type { SessionInfo } from "../../providerSessionStore";
+
+function SessionInfoBadge({ sessionInfo }: { sessionInfo: SessionInfo | undefined }) {
+  if (!sessionInfo) return null;
+  const { providerVersion, model } = sessionInfo;
+  if (!providerVersion && !model) return null;
+
+  const parts: string[] = [];
+  if (providerVersion) parts.push(`v${providerVersion}`);
+  if (model) parts.push(formatModelName(model));
+
+  return (
+    <Badge variant="outline" className="hidden shrink-0 gap-1 text-[10px] text-muted-foreground sm:inline-flex">
+      {parts.join(" / ")}
+    </Badge>
+  );
+}

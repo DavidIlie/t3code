@@ -17,6 +17,11 @@ export interface AccountInfo {
   [key: string]: unknown;
 }
 
+export interface SessionInfo {
+  readonly providerVersion: string | undefined;
+  readonly model: string | undefined;
+}
+
 export interface UsageTier {
   label: string;
   percentUsed: number;
@@ -44,12 +49,15 @@ interface ProviderSessionState {
   globalMcpServers: McpServerInfo[];
   /** Usage snapshots per provider */
   usageByProvider: Partial<Record<ProviderKind, ProviderUsageSnapshot>>;
+  /** Session info (version, model) per thread */
+  sessionInfoByThread: Record<string, SessionInfo>;
 
   setCommands: (threadId: string, commands: ReadonlyArray<SlashCommandInfo>) => void;
   setMcpStatus: (threadId: string, status: ReadonlyArray<McpServerInfo>) => void;
   setAccountInfo: (threadId: string, account: AccountInfo) => void;
   setGlobalMcpServers: (servers: McpServerInfo[]) => void;
   setProviderUsage: (provider: ProviderKind, snapshot: ProviderUsageSnapshot) => void;
+  setSessionInfo: (threadId: string, info: SessionInfo) => void;
 }
 
 export const useProviderSessionStore = create<ProviderSessionState>((set) => ({
@@ -58,6 +66,7 @@ export const useProviderSessionStore = create<ProviderSessionState>((set) => ({
   accountByThread: {},
   globalMcpServers: [],
   usageByProvider: {},
+  sessionInfoByThread: {},
 
   setCommands: (threadId, commands) =>
     set((state) => ({
@@ -75,5 +84,9 @@ export const useProviderSessionStore = create<ProviderSessionState>((set) => ({
   setProviderUsage: (provider, snapshot) =>
     set((state) => ({
       usageByProvider: { ...state.usageByProvider, [provider]: snapshot },
+    })),
+  setSessionInfo: (threadId, info) =>
+    set((state) => ({
+      sessionInfoByThread: { ...state.sessionInfoByThread, [threadId]: info },
     })),
 }));

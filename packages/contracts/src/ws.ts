@@ -245,6 +245,10 @@ export const WsProviderSessionConfiguredPayload = Schema.Struct({
       ),
     }),
   ),
+  /** Provider version (e.g. Claude Code SDK version) */
+  providerVersion: Schema.optional(Schema.String),
+  /** Model identifier (e.g. "claude-opus-4-6") */
+  model: Schema.optional(Schema.String),
 });
 export type WsProviderSessionConfiguredPayload = typeof WsProviderSessionConfiguredPayload.Type;
 

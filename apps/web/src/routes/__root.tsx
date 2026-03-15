@@ -271,6 +271,13 @@ function EventRouter() {
       if (payload.mcpServers.length > 0) {
         store.setMcpStatus(payload.threadId, payload.mcpServers);
       }
+      if (payload.providerVersion || payload.model) {
+        const existing = store.sessionInfoByThread[payload.threadId];
+        store.setSessionInfo(payload.threadId, {
+          providerVersion: payload.providerVersion ?? existing?.providerVersion,
+          model: payload.model ?? existing?.model,
+        });
+      }
     });
     const unsubTerminalEvent = api.terminal.onEvent((event) => {
       const hasRunningSubprocess = terminalRunningSubprocessFromEvent(event);

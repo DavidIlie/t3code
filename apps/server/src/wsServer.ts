@@ -645,10 +645,15 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
           const commands = Array.isArray(config?.commands)
             ? (config.commands as Array<{ name: string; description: string; argumentHint?: string }>)
             : [];
+          const providerVersion =
+            typeof config?.claude_code_version === "string" ? config.claude_code_version : undefined;
+          const model = typeof config?.model === "string" ? config.model : undefined;
           yield* pushBus.publishAll(WS_CHANNELS.providerSessionConfigured, {
             threadId,
             commands,
             mcpServers: [],
+            ...(providerVersion ? { providerVersion } : {}),
+            ...(model ? { model } : {}),
           });
         } else if (event.type === "mcp.status.updated") {
           const status = Array.isArray(payload.status) ? payload.status : [];

@@ -12,6 +12,7 @@ import {
 } from "@t3tools/contracts";
 import { Cache, Cause, Duration, Effect, Layer, Option, Ref, Stream } from "effect";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
+import { stripHtmlTags } from "@t3tools/shared/sanitize";
 
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
@@ -128,12 +129,12 @@ function runtimeTurnState(
 
 function runtimeTurnErrorMessage(event: ProviderRuntimeEvent): string | undefined {
   const payloadErrorMessage = asString(runtimePayloadRecord(event)?.errorMessage);
-  return payloadErrorMessage;
+  return payloadErrorMessage ? stripHtmlTags(payloadErrorMessage) : payloadErrorMessage;
 }
 
 function runtimeErrorMessageFromEvent(event: ProviderRuntimeEvent): string | undefined {
   const payloadMessage = asString(runtimePayloadRecord(event)?.message);
-  return payloadMessage;
+  return payloadMessage ? stripHtmlTags(payloadMessage) : payloadMessage;
 }
 
 function orchestrationSessionStatusFromRuntimeState(
