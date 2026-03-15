@@ -856,7 +856,7 @@ const make = Effect.gen(function* () {
               return activeTurnId !== null ? "running" : "ready";
           }
         })();
-        const lastError =
+        const lastErrorRaw =
           event.type === "session.state.changed" && event.payload.state === "error"
             ? (event.payload.reason ?? thread.session?.lastError ?? "Provider session error")
             : event.type === "turn.completed" && runtimeTurnState(event) === "failed"
@@ -864,6 +864,7 @@ const make = Effect.gen(function* () {
               : status === "ready"
                 ? null
                 : (thread.session?.lastError ?? null);
+        const lastError = lastErrorRaw ? stripHtmlTags(lastErrorRaw) : lastErrorRaw;
 
         if (shouldApplyThreadLifecycle) {
           yield* orchestrationEngine.dispatch({
