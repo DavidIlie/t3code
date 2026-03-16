@@ -52,21 +52,21 @@ const DiffPanelSheet = (props: {
   );
 };
 
-const LazyDiffPanel = ({ mode }: { mode: DiffPanelMode }) => {
+const LazyDiffPanel = ({ mode, onClose }: { mode: DiffPanelMode; onClose?: () => void }) => {
   return (
     <DiffWorkerPoolProvider>
       <Suspense fallback={<DiffPanelLoadingState mode={mode} />}>
-        <DiffPanel mode={mode} />
+        <DiffPanel mode={mode} onClose={onClose} />
       </Suspense>
     </DiffWorkerPoolProvider>
   );
 };
 
-const LazyHistoryPanel = ({ mode }: { mode: DiffPanelMode }) => {
+const LazyHistoryPanel = ({ mode, onClose }: { mode: DiffPanelMode; onClose?: () => void }) => {
   return (
     <DiffWorkerPoolProvider>
       <Suspense fallback={<DiffPanelLoadingState mode={mode} />}>
-        <GitHistoryPanel mode={mode} />
+        <GitHistoryPanel mode={mode} onClose={onClose} />
       </Suspense>
     </DiffWorkerPoolProvider>
   );
@@ -326,14 +326,14 @@ function ChatThreadRouteView() {
       </SidebarInset>
       <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
         {shouldRenderDiffContent ? (
-          <LazyDiffPanel mode="sheet" />
+          <LazyDiffPanel mode="sheet" onClose={closeDiff} />
         ) : (
           <DiffPanelLoadingState mode="sheet" />
         )}
       </DiffPanelSheet>
       <DiffPanelSheet diffOpen={historyOpen} onCloseDiff={closeHistory}>
         {shouldRenderHistoryContent ? (
-          <LazyHistoryPanel mode="sheet" />
+          <LazyHistoryPanel mode="sheet" onClose={closeHistory} />
         ) : (
           <DiffPanelLoadingState mode="sheet" />
         )}

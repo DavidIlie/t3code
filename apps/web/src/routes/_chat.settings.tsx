@@ -336,6 +336,7 @@ const SECTION_SEARCH_DATA: Record<string, string[]> = {
   appearance: ["appearance", "theme", "light", "dark", "system", "timestamp", "format"],
   usage: ["usage", "sidebar", "bars", "rate limit", "tiers"],
   codex: ["codex", "binary", "path", "home", "app server"],
+  claude: ["claude", "claude code", "binary", "base url", "api", "anthropic"],
   models: ["models", "model", "slug", "provider", "default", "codex", "claude"],
   responses: ["responses", "stream", "streaming", "assistant"],
   developer: ["developer", "debug", "tool calls", "group"],
@@ -418,6 +419,9 @@ function SettingsRouteView() {
 
   const codexBinaryPath = settings.codexBinaryPath;
   const codexHomePath = settings.codexHomePath;
+  const claudeBinaryPath = settings.claudeBinaryPath;
+  const claudeBaseUrl = settings.claudeBaseUrl;
+  const claudeApiKey = settings.claudeApiKey;
   const keybindingsConfigPath = serverConfigQuery.data?.keybindingsConfigPath ?? null;
   const availableEditors = serverConfigQuery.data?.availableEditors;
 
@@ -713,6 +717,77 @@ function SettingsRouteView() {
                     }
                   >
                     Reset codex overrides
+                  </Button>
+                </div>
+              </div>
+            </section>}
+
+            {show.claude && <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="mb-4">
+                <h2 className="text-sm font-medium text-foreground">Claude Code</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  These overrides apply to new sessions and let you use a custom Claude Code setup or non-Anthropic endpoint.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <label htmlFor="claude-binary-path" className="block space-y-1">
+                  <span className="text-xs font-medium text-foreground">Claude binary path</span>
+                  <Input
+                    id="claude-binary-path"
+                    value={claudeBinaryPath}
+                    onChange={(event) => updateSettings({ claudeBinaryPath: event.target.value })}
+                    placeholder="claude"
+                    spellCheck={false}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Leave blank to use <code>claude</code> from your PATH.
+                  </span>
+                </label>
+
+                <label htmlFor="claude-base-url" className="block space-y-1">
+                  <span className="text-xs font-medium text-foreground">ANTHROPIC_BASE_URL</span>
+                  <Input
+                    id="claude-base-url"
+                    value={claudeBaseUrl}
+                    onChange={(event) => updateSettings({ claudeBaseUrl: event.target.value })}
+                    placeholder="https://api.anthropic.com"
+                    spellCheck={false}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Override the Anthropic API base URL for non-Anthropic models or proxies.
+                  </span>
+                </label>
+
+                <label htmlFor="claude-api-key" className="block space-y-1">
+                  <span className="text-xs font-medium text-foreground">ANTHROPIC_API_KEY</span>
+                  <Input
+                    id="claude-api-key"
+                    type="password"
+                    value={claudeApiKey}
+                    onChange={(event) => updateSettings({ claudeApiKey: event.target.value })}
+                    placeholder="sk-ant-..."
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Optional API key override for the Claude Code provider.
+                  </span>
+                </label>
+
+                <div className="flex justify-end">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() =>
+                      updateSettings({
+                        claudeBinaryPath: defaults.claudeBinaryPath,
+                        claudeBaseUrl: defaults.claudeBaseUrl,
+                        claudeApiKey: defaults.claudeApiKey,
+                      })
+                    }
+                  >
+                    Reset Claude overrides
                   </Button>
                 </div>
               </div>

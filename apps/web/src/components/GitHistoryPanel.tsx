@@ -132,7 +132,7 @@ function getRenderableFiles(patch: string | undefined, cacheScope: string): File
   }
 }
 
-export default function GitHistoryPanel({ mode = "sidebar" }: { mode?: DiffPanelMode }) {
+export default function GitHistoryPanel({ mode = "sidebar", onClose }: { mode?: DiffPanelMode; onClose?: (() => void) | undefined }) {
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   const routeParams = useParams({
@@ -257,12 +257,16 @@ export default function GitHistoryPanel({ mode = "sidebar" }: { mode?: DiffPanel
   }, [navigateWithSearch]);
 
   const closePanel = useCallback(() => {
-    navigateWithSearch((previous) => ({
-      ...stripHistorySearchParams(previous),
-      diff: undefined,
-      history: undefined,
-    }));
-  }, [navigateWithSearch]);
+    if (onClose) {
+      onClose();
+    } else {
+      navigateWithSearch((previous) => ({
+        ...stripHistorySearchParams(previous),
+        diff: undefined,
+        history: undefined,
+      }));
+    }
+  }, [onClose, navigateWithSearch]);
 
   const askAboutCommit = useCallback(
     (commit: { hash: string; abbreviatedHash: string; subject: string }) => {

@@ -5,11 +5,11 @@ Fork: https://github.com/DavidIlie/t3code
 
 ## Last Synced Commit
 
-`46ea594f` — Actions dialog: autofocus script-name field (#912) (2026-03-13)
+`4b811dae` — Fixed Typos in Agents.md (#1120) (2026-03-15)
 
 ## Pending Upstream Commits
 
-<!-- Updated by running: git log --oneline 46ea594f..upstream/main -->
+<!-- Updated by running: git log --oneline 4b811dae..upstream/main -->
 <!-- Each commit gets moved to Integrated or Skipped after processing -->
 
 None — fully synced with upstream/main.
@@ -104,6 +104,11 @@ None — fully synced with upstream/main.
 - `876bbd71` — Extract reusable clipboard hook and standardize media queries
 - `89ffcf42` — Upgrade oxfmt and oxlint tooling versions
 - `46ea594f` — Actions dialog: autofocus script-name field (#912)
+- `8b8e8b38` — fix(web): unify focus ring styles across sidebar and app
+- `cc2ab000` — chore: add .idea/ to .gitignore
+- `2bb71f41` — feat(web): add scroll to bottom pill in chat view
+- `6d76865e` — fix: tighten node engine range for node:sqlite compat
+- `4b811dae` — Fixed Typos in Agents.md
 
 ## Skipped
 

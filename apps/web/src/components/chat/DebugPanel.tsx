@@ -76,7 +76,7 @@ export const DebugPanel = memo(function DebugPanel({ thread, onClose }: DebugPan
 
   return (
     <div
-      className={`absolute right-2 z-50 w-72 rounded-lg border border-border/60 bg-popover/95 shadow-lg backdrop-blur-sm text-xs ${isElectron ? "top-[58px]" : "top-2"}`}
+      className={`absolute right-2 z-50 w-72 max-h-[70vh] overflow-y-auto rounded-lg border border-border/60 bg-popover/95 shadow-lg backdrop-blur-sm text-xs ${isElectron ? "top-[58px]" : "top-2"}`}
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-1.5">

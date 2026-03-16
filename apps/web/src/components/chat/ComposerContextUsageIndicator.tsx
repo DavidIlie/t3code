@@ -1,36 +1,54 @@
 import { memo } from "react";
 import { cn } from "~/lib/utils";
-import type { ThreadContextUsageSnapshot } from "../../session-logic";
+import type { ProviderUsageSnapshot } from "../../providerSessionStore";
 import { Button } from "../ui/button";
 import {
   Menu,
   MenuGroup,
   MenuPopup,
-  MenuSeparator as MenuDivider,
   MenuTrigger,
 } from "../ui/menu";
-import { buildComposerContextUsageIndicatorViewModel } from "./ComposerContextUsageIndicator.logic";
+import { ProviderUsageContent } from "../UsageCard";
 
 const RING_RADIUS = 6;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
+function deriveHighestPercent(snapshot: ProviderUsageSnapshot | null): number | null {
+  const tiers = snapshot?.tiers;
+  if (!tiers || tiers.length === 0) return null;
+  let highest = 0;
+  for (const t of tiers) {
+    if (t.percentUsed > highest) highest = t.percentUsed;
+  }
+  return highest;
+}
+
+type Severity = "ok" | "warning" | "danger";
+
+function deriveSeverity(percent: number | null): Severity {
+  if (percent === null) return "ok";
+  if (percent >= 90) return "danger";
+  if (percent >= 70) return "warning";
+  return "ok";
+}
+
 export const ComposerContextUsageIndicator = memo(function ComposerContextUsageIndicator({
   snapshot,
 }: {
-  snapshot: ThreadContextUsageSnapshot | null;
+  snapshot: ProviderUsageSnapshot | null;
 }) {
-  const viewModel = buildComposerContextUsageIndicatorViewModel(snapshot);
+  const highestPercent = deriveHighestPercent(snapshot);
+  const severity = deriveSeverity(highestPercent);
   const ringToneClass =
-    viewModel.severity === "danger"
+    severity === "danger"
       ? "stroke-rose-500"
-      : viewModel.severity === "warning"
+      : severity === "warning"
         ? "stroke-amber-500"
         : "stroke-muted-foreground/80";
-  const progressPercent = viewModel.progressPercent;
   const dashOffset =
-    progressPercent === null
+    highestPercent === null
       ? RING_CIRCUMFERENCE
-      : RING_CIRCUMFERENCE * (1 - Math.max(0, Math.min(progressPercent, 100)) / 100);
+      : RING_CIRCUMFERENCE * (1 - Math.max(0, Math.min(highestPercent, 100)) / 100);
 
   return (
     <Menu>
@@ -39,7 +57,7 @@ export const ComposerContextUsageIndicator = memo(function ComposerContextUsageI
           <Button
             size="sm"
             variant="ghost"
-            aria-label={viewModel.ariaLabel}
+            aria-label="Usage"
             className="relative inline-flex size-7 shrink-0 px-0 text-muted-foreground/75 hover:text-foreground/80"
           />
         }
@@ -59,7 +77,7 @@ export const ComposerContextUsageIndicator = memo(function ComposerContextUsageI
             strokeWidth="1.5"
             fill="none"
           />
-          {progressPercent !== null ? (
+          {highestPercent !== null ? (
             <circle
               cx="8"
               cy="8"
@@ -76,32 +94,12 @@ export const ComposerContextUsageIndicator = memo(function ComposerContextUsageI
             />
           ) : null}
         </svg>
-        {viewModel.showCompactionNotice ? (
-          <span
-            aria-hidden="true"
-            className="absolute right-1 top-1 size-1.5 rounded-full bg-amber-500 ring-1 ring-background"
-          />
-        ) : null}
       </MenuTrigger>
       <MenuPopup side="top" align="start" className="max-w-72">
         <MenuGroup>
-          <div className="px-2 pt-1.5 pb-0.5 text-muted-foreground text-xs">
-            Usage:
+          <div className="px-2 py-1.5">
+            <ProviderUsageContent snapshot={snapshot ?? undefined} />
           </div>
-          <div className="px-2 pb-0.5 font-medium text-foreground text-sm leading-tight">
-            {viewModel.summaryLine}
-          </div>
-          <div className="px-2 pb-1.5 text-foreground text-sm leading-tight">
-            {viewModel.tokensLine}
-          </div>
-          {viewModel.showCompactionNotice ? (
-            <>
-              <MenuDivider />
-              <div className="px-2 py-1.5 text-amber-600 text-xs leading-tight">
-                Context was compacted recently.
-              </div>
-            </>
-          ) : null}
         </MenuGroup>
       </MenuPopup>
     </Menu>

@@ -60,6 +60,8 @@ const ClaudeCodeThinkingConfig = Schema.Union([
 
 const ClaudeCodeProviderStartOptions = Schema.Struct({
   binaryPath: Schema.optional(TrimmedNonEmptyStringSchema),
+  baseUrl: Schema.optional(TrimmedNonEmptyStringSchema),
+  apiKey: Schema.optional(TrimmedNonEmptyStringSchema),
   permissionMode: Schema.optional(TrimmedNonEmptyStringSchema),
   maxThinkingTokens: Schema.optional(NonNegativeInt),
   thinking: Schema.optional(ClaudeCodeThinkingConfig),

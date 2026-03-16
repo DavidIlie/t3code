@@ -61,13 +61,22 @@ const PROVIDER = "claudeCode" as const;
  * - Keeps `ELECTRON_RUN_AS_NODE` when running inside Electron so the
  *   spawned child resolves to a Node.js-compatible runtime.
  */
-function buildClaudeEnv(): Record<string, string | undefined> {
+function buildClaudeEnv(overrides?: {
+  baseUrl?: string;
+  apiKey?: string;
+}): Record<string, string | undefined> {
   const env = { ...process.env };
   delete env.CLAUDECODE;
   delete env.CLAUDE_CODE_ENTRYPOINT;
   // Ensure spawned node children inside Electron run as Node, not Electron.
   if (process.versions.electron) {
     env.ELECTRON_RUN_AS_NODE = "1";
+  }
+  if (overrides?.baseUrl) {
+    env.ANTHROPIC_BASE_URL = overrides.baseUrl;
+  }
+  if (overrides?.apiKey) {
+    env.ANTHROPIC_API_KEY = overrides.apiKey;
   }
   return env;
 }
@@ -214,6 +223,14 @@ interface ClaudeSessionContext {
   lastAssistantUuid: string | undefined;
   lastThreadStartedId: string | undefined;
   stopped: boolean;
+  /** First user message text, used for auto-generating a thread title. */
+  firstUserMessage: string | undefined;
+  /** Whether a title has already been generated for this thread. */
+  titleGenerated: boolean;
+  /** Anthropic API key for title generation (from provider options or env). */
+  readonly anthropicApiKey: string | undefined;
+  /** Anthropic base URL for title generation (from provider options or env). */
+  readonly anthropicBaseUrl: string | undefined;
 }
 
 interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
@@ -368,6 +385,23 @@ function summarizeToolRequest(
     return undefined;
   }
 
+  // Skill tool — show skill name and optional args
+  if (toolName === "Skill") {
+    const skill = typeof input.skill === "string" ? input.skill : null;
+    const args = typeof input.args === "string" ? input.args.trim() : null;
+    if (skill) {
+      return args ? `/${skill} ${args}` : `/${skill}`;
+    }
+  }
+
+  // Agent tool — show description
+  if (toolName === "Agent") {
+    const desc = typeof input.description === "string" ? input.description.trim() : null;
+    if (desc) {
+      return desc;
+    }
+  }
+
   const commandValue = input.command ?? input.cmd;
   const command = typeof commandValue === "string" ? commandValue : undefined;
   if (command && command.trim().length > 0) {
@@ -381,7 +415,9 @@ function summarizeToolRequest(
   return `${toolName}: ${serialized.slice(0, 397)}...`;
 }
 
-function titleForTool(itemType: CanonicalItemType): string {
+function titleForTool(itemType: CanonicalItemType, toolName?: string): string {
+  if (toolName === "Skill") return "Skill";
+  if (toolName === "Agent") return "Agent";
   switch (itemType) {
     case "command_execution":
       return "Command run";
@@ -599,6 +635,66 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
 
     const offerRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
       Queue.offer(runtimeEventQueue, event).pipe(Effect.asVoid);
+
+    /**
+     * Generate a short, descriptive thread title via a lightweight Haiku query
+     * through the Claude Agent SDK, then emit a `thread.metadata.updated` event.
+     *
+     * Uses the SDK's `query` function so auth is handled transparently
+     * (OAuth, API key, etc.) without needing a separate API key.
+     */
+    const generateThreadTitle = (
+      context: ClaudeSessionContext,
+      userMessage: string,
+    ): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const titleText = yield* Effect.tryPromise(async () => {
+          const resolvedCliPath = resolveClaudeCliPath();
+          const titleQuery = query({
+            prompt: `Generate a short title (2-6 words) for this coding task. Return ONLY the title, no quotes or extra punctuation.\n\nTask: ${userMessage.slice(0, 300)}`,
+            options: {
+              model: "claude-haiku-4-5-20251001",
+              maxTurns: 1,
+              tools: [],
+              persistSession: false,
+              executable: resolveClaudeExecutable(),
+              ...(resolvedCliPath ? { pathToClaudeCodeExecutable: resolvedCliPath } : {}),
+              env: buildClaudeEnv({
+                ...(context.anthropicBaseUrl ? { baseUrl: context.anthropicBaseUrl } : {}),
+                ...(context.anthropicApiKey ? { apiKey: context.anthropicApiKey } : {}),
+              }),
+            },
+          });
+
+          let text = "";
+          for await (const message of titleQuery) {
+            if (message.type === "assistant") {
+              text = extractAssistantText(message);
+            }
+            if (message.type === "result") {
+              break;
+            }
+          }
+          return text.trim();
+        }).pipe(Effect.orElseSucceed(() => ""));
+
+        if (!titleText) return;
+
+        const title = titleText.slice(0, 80);
+        const stamp = yield* makeEventStamp();
+        yield* offerRuntimeEvent({
+          type: "thread.metadata.updated",
+          eventId: stamp.eventId,
+          provider: PROVIDER,
+          createdAt: stamp.createdAt,
+          threadId: context.session.threadId,
+          payload: { name: title },
+          providerRefs: {},
+        });
+      }).pipe(
+        // Title generation is best-effort — never fail the turn.
+        Effect.catch(() => Effect.void),
+      );
 
     const logNativeSdkMessage = (
       context: ClaudeSessionContext,
@@ -902,6 +998,12 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           },
         });
 
+        // Generate a descriptive title after the first successful turn.
+        if (!context.titleGenerated && status === "completed" && context.firstUserMessage) {
+          context.titleGenerated = true;
+          Effect.runFork(generateThreadTitle(context, context.firstUserMessage));
+        }
+
         const updatedAt = yield* nowIso;
         context.turnState = undefined;
         context.session = {
@@ -1024,7 +1126,7 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
             itemId,
             itemType,
             toolName,
-            title: titleForTool(itemType),
+            title: titleForTool(itemType, toolName),
             ...(detail ? { detail } : {}),
           };
           context.inFlightTools.set(index, tool);
@@ -1826,7 +1928,10 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           ...(resumeState?.resumeSessionAt ? { resumeSessionAt: resumeState.resumeSessionAt } : {}),
           includePartialMessages: true,
           canUseTool,
-          env: buildClaudeEnv(),
+          env: buildClaudeEnv({
+            ...(providerOptions?.baseUrl ? { baseUrl: providerOptions.baseUrl } : {}),
+            ...(providerOptions?.apiKey ? { apiKey: providerOptions.apiKey } : {}),
+          }),
           settingSources: ["project"],
           ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
         };
@@ -1880,6 +1985,10 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           lastAssistantUuid: resumeState?.resumeSessionAt,
           lastThreadStartedId: undefined,
           stopped: false,
+          firstUserMessage: undefined,
+          titleGenerated: !!(resumeState?.turnCount && resumeState.turnCount > 0),
+          anthropicApiKey: providerOptions?.apiKey,
+          anthropicBaseUrl: providerOptions?.baseUrl,
         };
         yield* Ref.set(contextRef, context);
         sessions.set(threadId, context);
@@ -2004,6 +2113,11 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
             operation: "sendTurn",
             issue: `Thread '${input.threadId}' already has an active turn '${context.turnState.turnId}'.`,
           });
+        }
+
+        // Capture the first user message for auto-title generation.
+        if (!context.titleGenerated && !context.firstUserMessage && input.input?.trim()) {
+          context.firstUserMessage = input.input.trim();
         }
 
         if (input.model) {

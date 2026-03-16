@@ -6,7 +6,7 @@ import {
 } from "@t3tools/contracts";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
-import { BugIcon, DiffIcon, HistoryIcon } from "lucide-react";
+import { BugIcon, DiffIcon, HistoryIcon, ZapIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
@@ -33,6 +33,7 @@ interface ChatHeaderProps {
   diffOpen: boolean;
   historyOpen: boolean;
   debugPanelOpen: boolean;
+  skillsPanelOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -40,6 +41,7 @@ interface ChatHeaderProps {
   onToggleDiff: () => void;
   onToggleHistory: () => void;
   onToggleDebugPanel: () => void;
+  onToggleSkillsPanel: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -59,6 +61,7 @@ export const ChatHeader = memo(function ChatHeader({
   diffOpen,
   historyOpen,
   debugPanelOpen,
+  skillsPanelOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -66,6 +69,7 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleDiff,
   onToggleHistory,
   onToggleDebugPanel,
+  onToggleSkillsPanel,
 }: ChatHeaderProps) {
   const sessionInfo = useProviderSessionStore(
     (state) => state.sessionInfoByThread[activeThreadId],
@@ -132,6 +136,23 @@ export const ChatHeader = memo(function ChatHeader({
             }
           />
           <TooltipPopup side="bottom">Toggle debug panel</TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className="shrink-0"
+                pressed={skillsPanelOpen}
+                onPressedChange={onToggleSkillsPanel}
+                aria-label="Toggle skills panel"
+                variant="outline"
+                size="xs"
+              >
+                <ZapIcon className="size-3" />
+              </Toggle>
+            }
+          />
+          <TooltipPopup side="bottom">Toggle skills panel</TooltipPopup>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger

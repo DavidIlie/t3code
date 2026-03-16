@@ -65,7 +65,6 @@ import {
   hasToolActivityForTurn,
   isLatestTurnSettled,
   formatElapsed,
-  type ThreadContextUsageSnapshot,
 } from "../session-logic";
 import { isScrollContainerNearBottom } from "../chat-scroll";
 import {
@@ -75,7 +74,7 @@ import {
   type PendingUserInputDraftAnswer,
 } from "../pendingUserInput";
 import { useStore } from "../store";
-import { useProviderSessionStore } from "../providerSessionStore";
+import { type McpServerInfo, useProviderSessionStore } from "../providerSessionStore";
 import {
   buildPlanImplementationThreadTitle,
   buildPlanImplementationPrompt,
@@ -113,6 +112,7 @@ import {
   LockIcon,
   LockOpenIcon,
   XIcon,
+  ZapIcon,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
@@ -169,6 +169,7 @@ import { ComposerPendingApprovalPanel } from "./chat/ComposerPendingApprovalPane
 import { ComposerPendingUserInputPanel } from "./chat/ComposerPendingUserInputPanel";
 import { ComposerPlanFollowUpBanner } from "./chat/ComposerPlanFollowUpBanner";
 import { ProviderHealthBanner } from "./chat/ProviderHealthBanner";
+import { SkillsPanel } from "./chat/SkillsPanel";
 import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
 import {
   buildLocalDraftThread,
@@ -200,6 +201,7 @@ const EMPTY_PROVIDER_COMMANDS_ARRAY: Array<{
   description: string;
   argumentHint: string;
 }> = [];
+const EMPTY_MCP_SERVERS_ARRAY: McpServerInfo[] = [];
 const COMPOSER_PATH_QUERY_DEBOUNCE_MS = 120;
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
@@ -288,7 +290,16 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const [expandedWorkGroups, setExpandedWorkGroups] = useState<Record<string, boolean>>({});
   const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
   const [debugPanelOpen, setDebugPanelOpen] = useState(true);
+  const [skillsPanelOpen, setSkillsPanelOpen] = useState(false);
   const [isComposerFooterCompact, setIsComposerFooterCompact] = useState(false);
+  const [queuedMessage, setQueuedMessage] = useState<{
+    text: string;
+    images: ComposerImageAttachment[];
+  } | null>(null);
+  const [steerMessage, setSteerMessage] = useState<{
+    text: string;
+    images: ComposerImageAttachment[];
+  } | null>(null);
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
   // When set, the thread-change reset effect will open the sidebar instead of closing it.
@@ -407,6 +418,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
     (state) =>
       (activeThreadId ? state.commandsByThread[activeThreadId] : undefined) ??
       EMPTY_PROVIDER_COMMANDS_ARRAY,
+  );
+  const mcpServers = useProviderSessionStore(
+    (state) =>
+      (activeThreadId ? state.mcpStatusByThread[activeThreadId] : undefined) ??
+      EMPTY_MCP_SERVERS_ARRAY,
   );
   const activeLatestTurn = activeThread?.latestTurn ?? null;
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
@@ -534,21 +550,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const providerUsageSnapshot = useProviderSessionStore(
     (state) => state.usageByProvider[selectedProvider] ?? null,
   );
-  const composerUsageSnapshot = useMemo((): ThreadContextUsageSnapshot | null => {
-    const tiers = providerUsageSnapshot?.tiers;
-    if (!tiers || tiers.length === 0) return null;
-    // Use the most critical (highest percentUsed) tier as the ring indicator
-    let highestPercent = 0;
-    for (const t of tiers) {
-      if (t.percentUsed > highestPercent) highestPercent = t.percentUsed;
-    }
-    return {
-      usedTokens: null,
-      maxTokens: null,
-      percentUsed: highestPercent,
-      recentlyCompacted: false,
-    };
-  }, [providerUsageSnapshot]);
   const cursorModelSelectionLockedReason =
     hasThreadStarted && selectedProvider === "cursor"
       ? "Cursor currently does not support changing models after the first message in a thread."
@@ -585,16 +586,22 @@ export default function ChatView({ threadId }: ChatViewProps) {
     return Object.keys(codexOptions).length > 0 ? { codex: codexOptions } : undefined;
   }, [selectedCodexFastModeEnabled, selectedEffort, selectedProvider, supportsReasoningEffort]);
   const providerOptionsForDispatch = useMemo(() => {
-    if (!settings.codexBinaryPath && !settings.codexHomePath) {
-      return undefined;
-    }
-    return {
-      codex: {
+    const result: Record<string, Record<string, string>> = {};
+    if (settings.codexBinaryPath || settings.codexHomePath) {
+      result.codex = {
         ...(settings.codexBinaryPath ? { binaryPath: settings.codexBinaryPath } : {}),
         ...(settings.codexHomePath ? { homePath: settings.codexHomePath } : {}),
-      },
-    };
-  }, [settings.codexBinaryPath, settings.codexHomePath]);
+      };
+    }
+    if (settings.claudeBinaryPath || settings.claudeBaseUrl || settings.claudeApiKey) {
+      result.claudeCode = {
+        ...(settings.claudeBinaryPath ? { binaryPath: settings.claudeBinaryPath } : {}),
+        ...(settings.claudeBaseUrl ? { baseUrl: settings.claudeBaseUrl } : {}),
+        ...(settings.claudeApiKey ? { apiKey: settings.claudeApiKey } : {}),
+      };
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  }, [settings.codexBinaryPath, settings.codexHomePath, settings.claudeBinaryPath, settings.claudeBaseUrl, settings.claudeApiKey]);
   const selectedCursorModel = useMemo(
     () => (selectedProvider === "cursor" ? parseCursorModelSelection(selectedModel) : null),
     [selectedModel, selectedProvider],
@@ -1048,7 +1055,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
         type: "provider-slash-command",
         commandName: cmd.name,
         label: `/${cmd.name}`,
-        description: cmd.description,
+        description: cmd.argumentHint
+          ? `${cmd.description} — ${cmd.argumentHint}`
+          : cmd.description,
       }));
       const allItems = [...slashCommandItems, ...providerCommandItems];
       const query = composerTrigger.query.trim().toLowerCase();
@@ -1827,6 +1836,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
     setIsRevertingCheckpoint(false);
   }, [activeThread?.id]);
 
+  // Clear queued/steer messages on thread switch
+  useEffect(() => {
+    setQueuedMessage(null);
+    setSteerMessage(null);
+  }, [activeThread?.id]);
+
   useEffect(() => {
     if (!activeThread?.id || terminalState.terminalOpen) return;
     const frame = window.requestAnimationFrame(() => {
@@ -2305,6 +2320,19 @@ export default function ChatView({ threadId }: ChatViewProps) {
       onAdvanceActivePendingUserInput();
       return;
     }
+    // Queue message if agent is running (max 1 queued/steer message)
+    if (phase === "running" && !queuedMessage && !steerMessage) {
+      const trimmed = prompt.trim();
+      if (!trimmed && composerImages.length === 0) return;
+      setQueuedMessage({ text: trimmed, images: [...composerImages] });
+      promptRef.current = "";
+      clearComposerDraftContent(activeThread.id);
+      setComposerHighlightedItemId(null);
+      setComposerCursor(0);
+      setComposerTrigger(null);
+      return;
+    }
+    if (phase === "running") return;
     const trimmed = prompt.trim();
     if (showPlanFollowUpPrompt && activeProposedPlan) {
       const followUp = resolvePlanFollowUpSubmission({
@@ -2598,9 +2626,75 @@ export default function ChatView({ threadId }: ChatViewProps) {
   useEffect(() => {
     if (phase !== "running") setIsInterrupting(false);
   }, [phase]);
+
+  // Auto-send queued/steer message when turn completes.
+  // Two-phase approach: first effect restores content to composer and sets a ref flag,
+  // second effect fires on the next render (when prompt is populated) and triggers onSend.
+  const prevPhaseRef = useRef(phase);
+  const pendingQueuedSendRef = useRef(false);
+  useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = phase;
+    if (prev === "running" && phase === "ready") {
+      // Steer takes priority over queue
+      const pending = steerMessage ?? queuedMessage;
+      if (pending) {
+        const { text, images } = pending;
+        setSteerMessage(null);
+        setQueuedMessage(null);
+        promptRef.current = text;
+        setPrompt(text);
+        setComposerCursor(text.length);
+        if (images.length > 0) addComposerImagesToDraft(images);
+        pendingQueuedSendRef.current = true;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: fire on phase/queue/steer changes
+  }, [phase, queuedMessage, steerMessage]);
+
+  // Fire auto-send once composer is populated from the queued message
+  useEffect(() => {
+    if (pendingQueuedSendRef.current && (prompt.trim() || composerImages.length > 0)) {
+      pendingQueuedSendRef.current = false;
+      queueMicrotask(() => void onSend());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: fire when composer updates after queue restore
+  }, [prompt, composerImages]);
+
   const onInterrupt = async () => {
     const api = readNativeApi();
     if (!api || !activeThread || isInterrupting) return;
+    // Restore queued message to composer before stopping (but not steer — it stays pending for auto-send)
+    if (!steerMessage && queuedMessage) {
+      promptRef.current = queuedMessage.text;
+      setPrompt(queuedMessage.text);
+      setComposerCursor(queuedMessage.text.length);
+      if (queuedMessage.images.length > 0) addComposerImagesToDraft(queuedMessage.images);
+      setQueuedMessage(null);
+    }
+    setIsInterrupting(true);
+    await api.orchestration.dispatchCommand({
+      type: "thread.turn.interrupt",
+      commandId: newCommandId(),
+      threadId: activeThread.id,
+      createdAt: new Date().toISOString(),
+    });
+  };
+
+  const onSteer = async () => {
+    const api = readNativeApi();
+    if (!api || !activeThread || isInterrupting || steerMessage) return;
+    const trimmed = prompt.trim();
+    if (!trimmed && composerImages.length === 0) return;
+    // Discard any queued message — steer takes priority
+    setQueuedMessage(null);
+    setSteerMessage({ text: trimmed, images: [...composerImages] });
+    promptRef.current = "";
+    clearComposerDraftContent(activeThread.id);
+    setComposerHighlightedItemId(null);
+    setComposerCursor(0);
+    setComposerTrigger(null);
+    // Directly dispatch interrupt (don't call onInterrupt which would read stale closure)
     setIsInterrupting(true);
     await api.orchestration.dispatchCommand({
       type: "thread.turn.interrupt",
@@ -3211,6 +3305,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         });
         if (applied) {
           setComposerHighlightedItemId(null);
+          toastManager.add({ type: "info", title: `/${item.commandName}` });
           // Auto-submit after a microtask to let the replacement take effect
           queueMicrotask(() => void onSend());
         }
@@ -3448,6 +3543,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           diffOpen={diffOpen}
           historyOpen={historyOpen}
           debugPanelOpen={debugPanelOpen}
+          skillsPanelOpen={skillsPanelOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
           }}
@@ -3456,7 +3552,18 @@ export default function ChatView({ threadId }: ChatViewProps) {
           onDeleteProjectScript={deleteProjectScript}
           onToggleDiff={onToggleDiff}
           onToggleHistory={onToggleHistory}
-          onToggleDebugPanel={() => setDebugPanelOpen((prev) => !prev)}
+          onToggleDebugPanel={() => {
+            setDebugPanelOpen((prev) => {
+              if (!prev) setSkillsPanelOpen(false);
+              return !prev;
+            });
+          }}
+          onToggleSkillsPanel={() => {
+            setSkillsPanelOpen((prev) => {
+              if (!prev) setDebugPanelOpen(false);
+              return !prev;
+            });
+          }}
         />
       </header>
 
@@ -3723,6 +3830,51 @@ export default function ChatView({ threadId }: ChatViewProps) {
                   />
                 </div>
 
+                {/* Queued message indicator */}
+                {queuedMessage && !steerMessage && (
+                  <div className="flex items-center justify-between gap-2 px-3 pb-1 text-xs text-muted-foreground">
+                    <span>Message queued — will send when done</span>
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs text-muted-foreground/80 hover:text-foreground underline cursor-pointer"
+                      onClick={() => {
+                        promptRef.current = queuedMessage.text;
+                        setPrompt(queuedMessage.text);
+                        setComposerCursor(queuedMessage.text.length);
+                        if (queuedMessage.images.length > 0)
+                          addComposerImagesToDraft(queuedMessage.images);
+                        setQueuedMessage(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                {/* Steer message indicator */}
+                {steerMessage && (
+                  <div className="flex items-center justify-between gap-2 px-3 pb-1 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <ZapIcon className="size-3" />
+                      Steering — will resume with your guidance
+                    </span>
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs text-muted-foreground/80 hover:text-foreground underline cursor-pointer"
+                      onClick={() => {
+                        promptRef.current = steerMessage.text;
+                        setPrompt(steerMessage.text);
+                        setComposerCursor(steerMessage.text.length);
+                        if (steerMessage.images.length > 0)
+                          addComposerImagesToDraft(steerMessage.images);
+                        setSteerMessage(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
                 {/* Bottom toolbar */}
                 {activePendingApproval ? (
                   <div className="flex items-center justify-end gap-2 px-2.5 pb-2.5 sm:px-3 sm:pb-3">
@@ -3786,7 +3938,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         />
                       )}
 
-                      <ComposerContextUsageIndicator snapshot={composerUsageSnapshot} />
+                      <ComposerContextUsageIndicator snapshot={providerUsageSnapshot} />
 
                       {isComposerFooterCompact ? (
                         <CompactComposerControlsMenu
@@ -4001,22 +4153,65 @@ export default function ChatView({ threadId }: ChatViewProps) {
                             Stopping...
                           </Button>
                         ) : (
-                          <button
-                            type="button"
-                            className="flex size-8 items-center justify-center rounded-full bg-rose-500/90 text-white transition-all duration-150 hover:bg-rose-500 hover:scale-105 cursor-pointer sm:h-8 sm:w-8"
-                            onClick={() => void onInterrupt()}
-                            aria-label="Stop generation"
-                          >
-                            <svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 12 12"
-                              fill="currentColor"
-                              aria-hidden="true"
+                          <div className="flex items-center gap-1.5">
+                            {!queuedMessage && !steerMessage &&
+                              (prompt.trim() || composerImages.length > 0) && (
+                                <>
+                                  <Tooltip>
+                                    <TooltipTrigger
+                                      render={
+                                        <button
+                                          type="button"
+                                          className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/70 text-white transition-all duration-150 hover:bg-amber-500 hover:scale-105 cursor-pointer"
+                                          aria-label="Steer — interrupt and resume with this message"
+                                          onClick={() => void onSteer()}
+                                        >
+                                          <ZapIcon className="size-3.5" />
+                                        </button>
+                                      }
+                                    />
+                                    <TooltipPopup side="top">Steer — interrupt and redirect the agent</TooltipPopup>
+                                  </Tooltip>
+                                  <button
+                                    type="submit"
+                                    className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/50 text-primary-foreground transition-all duration-150 hover:bg-primary/70 hover:scale-105 cursor-pointer"
+                                    aria-label="Queue message"
+                                  >
+                                    <svg
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 14 14"
+                                      fill="none"
+                                      aria-hidden="true"
+                                    >
+                                      <path
+                                        d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5"
+                                        stroke="currentColor"
+                                        strokeWidth="1.8"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                    </svg>
+                                  </button>
+                                </>
+                              )}
+                            <button
+                              type="button"
+                              className="flex size-8 items-center justify-center rounded-full bg-rose-500/90 text-white transition-all duration-150 hover:bg-rose-500 hover:scale-105 cursor-pointer sm:h-8 sm:w-8"
+                              onClick={() => void onInterrupt()}
+                              aria-label="Stop generation"
                             >
-                              <rect x="2" y="2" width="8" height="8" rx="1.5" />
-                            </svg>
-                          </button>
+                              <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 12 12"
+                                fill="currentColor"
+                                aria-hidden="true"
+                              >
+                                <rect x="2" y="2" width="8" height="8" rx="1.5" />
+                              </svg>
+                            </button>
+                          </div>
                         )
                       ) : pendingUserInputs.length === 0 ? (
                         showPlanFollowUpPrompt ? (
@@ -4151,6 +4346,23 @@ export default function ChatView({ threadId }: ChatViewProps) {
                 planSidebarDismissedForTurnRef.current = turnKey;
               }
             }}
+          />
+        ) : null}
+
+        {/* Skills panel */}
+        {skillsPanelOpen ? (
+          <SkillsPanel
+            commands={providerCommands}
+            mcpServers={mcpServers}
+            onInsertCommand={(commandName) => {
+              const insertion = `/${commandName} `;
+              promptRef.current = insertion;
+              setPrompt(insertion);
+              setComposerCursor(insertion.length);
+              setComposerTrigger(null);
+              focusComposer();
+            }}
+            onClose={() => setSkillsPanelOpen(false)}
           />
         ) : null}
       </div>

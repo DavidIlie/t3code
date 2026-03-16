@@ -344,7 +344,7 @@ describe("deriveWorkLogEntries", () => {
     expect(entries.map((entry) => entry.id)).toEqual(["tool-complete"]);
   });
 
-  it("includes task start/completion with agent annotations and omits task.progress", () => {
+  it("includes task start/completion with agent annotations and nests task.progress", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
         id: "task-start",
@@ -358,8 +358,9 @@ describe("deriveWorkLogEntries", () => {
         id: "task-progress",
         createdAt: "2026-02-23T00:00:02.000Z",
         kind: "task.progress",
-        summary: "Updating files",
+        summary: "Reasoning update",
         tone: "info",
+        payload: { taskId: "agent-1", detail: "Reading src/foo.ts", lastToolName: "Read" },
       }),
       makeActivity({
         id: "task-complete",
@@ -372,12 +373,17 @@ describe("deriveWorkLogEntries", () => {
     ];
 
     const entries = deriveWorkLogEntries(activities, undefined);
-    expect(entries.map((entry) => entry.id)).toEqual(["task-start", "task-complete"]);
+    expect(entries.map((entry) => entry.id)).toEqual(["task-start", "task-progress", "task-complete"]);
     expect(entries[0]?.agentTaskId).toBe("agent-1");
     expect(entries[0]?.agentTaskKind).toBe("started");
+    // task.progress entry is included and associated with the agent task
     expect(entries[1]?.agentTaskId).toBe("agent-1");
-    expect(entries[1]?.agentTaskKind).toBe("completed");
-    expect(entries[1]?.agentTaskStatus).toBe("completed");
+    expect(entries[1]?.agentTaskKind).toBeUndefined();
+    expect(entries[1]?.label).toBe("Reading src/foo.ts");
+    expect(entries[1]?.tone).toBe("tool");
+    expect(entries[2]?.agentTaskId).toBe("agent-1");
+    expect(entries[2]?.agentTaskKind).toBe("completed");
+    expect(entries[2]?.agentTaskStatus).toBe("completed");
   });
 
   it("filters by turn id when provided", () => {
@@ -651,19 +657,21 @@ describe("PROVIDER_OPTIONS", () => {
     const claude = PROVIDER_OPTIONS.find((option) => option.value === "claudeCode");
     const cursor = PROVIDER_OPTIONS.find((option) => option.value === "cursor");
     expect(PROVIDER_OPTIONS).toEqual([
-      { value: "codex", label: "Codex", available: true },
-      { value: "claudeCode", label: "Claude Code", available: true },
-      { value: "cursor", label: "Cursor", available: false },
+      { value: "codex", label: "Codex", available: true, docsUrl: "https://developers.openai.com/codex/sdk/" },
+      { value: "claudeCode", label: "Claude Code", available: true, docsUrl: "https://docs.anthropic.com/en/docs/claude-code" },
+      { value: "cursor", label: "Cursor", available: false, docsUrl: "https://docs.cursor.com" },
     ]);
     expect(claude).toEqual({
       value: "claudeCode",
       label: "Claude Code",
       available: true,
+      docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
     });
     expect(cursor).toEqual({
       value: "cursor",
       label: "Cursor",
       available: false,
+      docsUrl: "https://docs.cursor.com",
     });
   });
 });

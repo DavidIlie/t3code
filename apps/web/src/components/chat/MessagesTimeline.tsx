@@ -345,13 +345,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                 )}
               </div>
               <div className="space-y-1">
-                {visibleSegments.map((segment) =>
-                  segment.kind === "entry" ? (
-                    <WorkEntryRow key={segment.entry.id} entry={segment.entry} />
-                  ) : (
-                    <AgentTaskCard key={segment.group.taskId} group={segment.group} />
-                  ),
-                )}
+                {renderWorkSegments(visibleSegments)}
               </div>
             </div>
           );
@@ -679,6 +673,38 @@ function formatMessageMeta(createdAt: string, duration: string | null, tsFormat:
   return `${formatTimestamp(createdAt, tsFormat)} • ${duration}`;
 }
 
+/**
+ * Parses tool detail strings like `Skill: {"skill":"simplify"}` or
+ * `Agent: {"description":"Code review","prompt":"..."}` into human-readable text.
+ * Falls through to the raw string for unrecognized patterns.
+ */
+function formatToolDetail(detail: string): string {
+  // Skill: {"skill":"simplify","args":"--fix"}
+  const skillMatch = detail.match(/^Skill:\s*(\{.+\})$/);
+  if (skillMatch?.[1]) {
+    try {
+      const parsed = JSON.parse(skillMatch[1]) as Record<string, unknown>;
+      const skill = typeof parsed.skill === "string" ? parsed.skill : null;
+      if (skill) {
+        const args = typeof parsed.args === "string" ? parsed.args.trim() : null;
+        return args ? `/${skill} ${args}` : `/${skill}`;
+      }
+    } catch { /* fall through */ }
+  }
+
+  // Agent: {"description":"Code review","prompt":"..."}
+  const agentMatch = detail.match(/^Agent:\s*(\{.+\})$/);
+  if (agentMatch?.[1]) {
+    try {
+      const parsed = JSON.parse(agentMatch[1]) as Record<string, unknown>;
+      const desc = typeof parsed.description === "string" ? parsed.description.trim() : null;
+      if (desc) return desc;
+    } catch { /* fall through */ }
+  }
+
+  return detail;
+}
+
 function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {
   if (tone === "error") return "text-rose-300/50 dark:text-rose-300/50";
   if (tone === "tool") return "text-muted-foreground/70";
@@ -731,11 +757,18 @@ function buildWorkSegments(entries: ReadonlyArray<WorkLogEntry>): WorkSegment[] 
       continue;
     }
 
-    // If there's an active agent task, nest this entry under it.
-    if (openTasks.size > 0) {
-      const lastTask = [...openTasks.values()].at(-1);
-      if (lastTask) {
-        lastTask.children.push(entry);
+    // Route child entries to their specific parent task by agentTaskId,
+    // not just the most recently opened one (fixes parallel agent nesting).
+    if (entry.agentTaskId && openTasks.has(entry.agentTaskId)) {
+      openTasks.get(entry.agentTaskId)!.children.push(entry);
+      continue;
+    }
+
+    // Fallback: if there's exactly one open task, nest under it.
+    if (openTasks.size === 1) {
+      const onlyTask = openTasks.values().next().value;
+      if (onlyTask) {
+        onlyTask.children.push(entry);
         continue;
       }
     }
@@ -744,6 +777,43 @@ function buildWorkSegments(entries: ReadonlyArray<WorkLogEntry>): WorkSegment[] 
   }
 
   return segments;
+}
+
+/**
+ * Renders work segments, grouping consecutive agent-task segments into a
+ * responsive grid so parallel agents don't stack vertically.
+ */
+function renderWorkSegments(segments: WorkSegment[]): React.ReactNode[] {
+  const result: React.ReactNode[] = [];
+  let i = 0;
+  while (i < segments.length) {
+    const segment = segments[i]!;
+    if (segment.kind === "entry") {
+      result.push(<WorkEntryRow key={segment.entry.id} entry={segment.entry} />);
+      i++;
+      continue;
+    }
+    // Collect consecutive agent-task segments.
+    const run: AgentTaskGroup[] = [segment.group];
+    let j = i + 1;
+    while (j < segments.length && segments[j]!.kind === "agent-task") {
+      run.push((segments[j] as { kind: "agent-task"; group: AgentTaskGroup }).group);
+      j++;
+    }
+    if (run.length === 1) {
+      result.push(<AgentTaskCard key={run[0]!.taskId} group={run[0]!} />);
+    } else {
+      result.push(
+        <div key={`agent-grid-${run[0]!.taskId}`} className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+          {run.map((group) => (
+            <AgentTaskCard key={group.taskId} group={group} />
+          ))}
+        </div>,
+      );
+    }
+    i = j;
+  }
+  return result;
 }
 
 function WorkEntryRow({ entry }: { entry: WorkLogEntry }) {
@@ -780,7 +850,7 @@ function WorkEntryRow({ entry }: { entry: WorkLogEntry }) {
             className="mt-1 text-[11px] leading-relaxed text-muted-foreground/75"
             title={entry.detail}
           >
-            {entry.detail}
+            {formatToolDetail(entry.detail)}
           </p>
         )}
       </div>
@@ -809,7 +879,7 @@ function AgentTaskCard({ group }: { group: AgentTaskGroup }) {
       <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-muted/40">
         <BotIcon className="size-3.5 shrink-0 text-indigo-400/70" />
         <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground/70">
-          {group.detail ?? group.label}
+          {group.detail ? formatToolDetail(group.detail) : group.label}
         </span>
         <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
           {statusIcon}

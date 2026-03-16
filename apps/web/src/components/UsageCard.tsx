@@ -13,6 +13,39 @@ import { SidebarMenuButton } from "./ui/sidebar";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+/**
+ * Fetch provider usage from the server and store in the provider session store.
+ * Designed to be called from global setup (EventRouter) so usage data is
+ * available regardless of which components are mounted.
+ */
+export async function fetchProviderUsage(): Promise<void> {
+  const api = readNativeApi();
+  if (!api) return;
+  try {
+    const result = await api.provider.getUsage();
+    const store = useProviderSessionStore.getState();
+    if (result.claudeCode.available || result.claudeCode.tiers.length > 0) {
+      store.setProviderUsage("claudeCode", {
+        provider: "claudeCode",
+        plan: result.claudeCode.plan,
+        tiers: result.claudeCode.tiers.map((t) => ({
+          label: t.label,
+          percentUsed: t.utilization,
+          resetAt: t.resetsAt,
+          status: severityFromPercent(t.utilization),
+        })),
+        extraUsage: result.claudeCode.extraUsage
+          ? { spent: result.claudeCode.extraUsage.spent, limit: result.claudeCode.extraUsage.limit }
+          : null,
+        updatedAt: new Date().toISOString(),
+        raw: result.claudeCode,
+      });
+    }
+  } catch {
+    // Non-critical
+  }
+}
+
 type Severity = "ok" | "warning" | "critical";
 
 function severityFromPercent(pct: number): Severity {
@@ -235,7 +268,7 @@ function ExtraUsageRow({ spent, limit }: { spent: number; limit: number }) {
 /** Tiers shown by default — everything else is collapsed behind "Show more". */
 const PRIMARY_TIER_LABELS = new Set(["Session (5h)", "Weekly"]);
 
-function ProviderUsageContent({ snapshot }: { snapshot: ProviderUsageSnapshot | undefined }) {
+export function ProviderUsageContent({ snapshot }: { snapshot: ProviderUsageSnapshot | undefined }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!snapshot || snapshot.tiers.length === 0) {
@@ -331,34 +364,8 @@ export function UsageCard() {
     return () => clearInterval(id);
   }, [open]);
 
-  // Core fetch — stores the result without touching spinner state
-  const fetchUsage = useCallback(async () => {
-    const api = readNativeApi();
-    if (!api) return;
-    try {
-      const result = await api.provider.getUsage();
-      const store = useProviderSessionStore.getState();
-      if (result.claudeCode.available || result.claudeCode.tiers.length > 0) {
-        store.setProviderUsage("claudeCode", {
-          provider: "claudeCode",
-          plan: result.claudeCode.plan,
-          tiers: result.claudeCode.tiers.map((t) => ({
-            label: t.label,
-            percentUsed: t.utilization,
-            resetAt: t.resetsAt,
-            status: severityFromPercent(t.utilization),
-          })),
-          extraUsage: result.claudeCode.extraUsage
-            ? { spent: result.claudeCode.extraUsage.spent, limit: result.claudeCode.extraUsage.limit }
-            : null,
-          updatedAt: new Date().toISOString(),
-          raw: result.claudeCode,
-        });
-      }
-    } catch {
-      // Non-critical
-    }
-  }, []);
+  // Core fetch — delegates to the shared fetchProviderUsage function
+  const fetchUsage = useCallback(() => fetchProviderUsage(), []);
 
   // Manual refresh (shows spinner)
   const handleRefresh = useCallback(async () => {

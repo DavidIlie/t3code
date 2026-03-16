@@ -31,7 +31,7 @@ import { useTerminalStateStore } from "../terminalStateStore";
 import { terminalRunningSubprocessFromEvent } from "../terminalActivity";
 import { onServerConfigUpdated, onServerWelcome } from "../wsNativeApi";
 import { useProviderSessionStore } from "../providerSessionStore";
-import { parseRateLimitPayload } from "../components/UsageCard";
+import { fetchProviderUsage, parseRateLimitPayload } from "../components/UsageCard";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
@@ -364,10 +364,17 @@ function EventRouter() {
       });
     });
     subscribed = true;
+
+    // Fetch usage on startup and every 2 minutes so the composer and sidebar
+    // always have data — previously this only ran inside an unmounted component.
+    void fetchProviderUsage();
+    const usagePollId = setInterval(() => void fetchProviderUsage(), 120_000);
+
     return () => {
       disposed = true;
       needsProviderInvalidation = false;
       domainEventFlushThrottler.cancel();
+      clearInterval(usagePollId);
       unsubDomainEvent();
       unsubProviderAccount();
       unsubProviderSessionConfigured();

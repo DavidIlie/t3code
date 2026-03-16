@@ -22,10 +22,11 @@ export const PROVIDER_OPTIONS: Array<{
   value: ProviderPickerKind;
   label: string;
   available: boolean;
+  docsUrl?: string;
 }> = [
-  { value: "codex", label: "Codex", available: true },
-  { value: "claudeCode", label: "Claude Code", available: true },
-  { value: "cursor", label: "Cursor", available: false },
+  { value: "codex", label: "Codex", available: true, docsUrl: "https://developers.openai.com/codex/sdk/" },
+  { value: "claudeCode", label: "Claude Code", available: true, docsUrl: "https://docs.anthropic.com/en/docs/claude-code" },
+  { value: "cursor", label: "Cursor", available: false, docsUrl: "https://docs.cursor.com" },
 ];
 
 export interface WorkLogEntry {
@@ -412,7 +413,6 @@ export function deriveWorkLogEntries(
   return ordered
     .filter((activity) => (latestTurnId ? activity.turnId === latestTurnId : true))
     .filter((activity) => activity.kind !== "tool.started")
-    .filter((activity) => activity.kind !== "task.progress")
     .filter((activity) => activity.summary !== "Checkpoint captured")
     .map((activity) => {
       const payload =
@@ -446,6 +446,25 @@ export function deriveWorkLogEntries(
           if (activity.kind === "task.completed" && typeof payload?.status === "string") {
             entry.agentTaskStatus = payload.status;
           }
+        }
+      }
+
+      // Associate task.progress entries with their parent agent task and
+      // derive a descriptive label from the tool name / detail.
+      if (activity.kind === "task.progress") {
+        const taskId = typeof payload?.taskId === "string" ? payload.taskId : undefined;
+        if (taskId) {
+          entry.agentTaskId = taskId;
+        }
+        const lastToolName =
+          typeof payload?.lastToolName === "string" ? payload.lastToolName : null;
+        if (lastToolName && entry.detail) {
+          entry.label = entry.detail;
+          delete entry.detail;
+          entry.tone = "tool";
+        } else if (entry.detail) {
+          entry.label = entry.detail;
+          delete entry.detail;
         }
       }
 
@@ -667,22 +686,3 @@ export function derivePhase(session: ThreadSession | null): SessionPhase {
   return "ready";
 }
 
-// ── Context usage ─────────────────────────────────────────────────
-
-export interface ThreadContextUsageSnapshot {
-  usedTokens: number | null;
-  maxTokens: number | null;
-  percentUsed: number | null;
-  recentlyCompacted: boolean;
-}
-
-export type ThreadContextUsageSeverity = "ok" | "warning" | "danger";
-
-export function deriveContextUsageSeverity(
-  percentUsed: number | null,
-): ThreadContextUsageSeverity {
-  if (percentUsed === null) return "ok";
-  if (percentUsed >= 90) return "danger";
-  if (percentUsed >= 70) return "warning";
-  return "ok";
-}

@@ -167,11 +167,13 @@ function formatTurnChipTimestamp(isoDate: string): string {
 
 interface DiffPanelProps {
   mode?: "inline" | "sheet" | "sidebar";
+  /** External close handler — required when rendered in a portal (sheet mode) where router context may be unavailable. */
+  onClose?: (() => void) | undefined;
 }
 
 export { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 
-export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
+export default function DiffPanel({ mode = "inline", onClose }: DiffPanelProps) {
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   const [diffRenderMode, setDiffRenderMode] = useState<DiffRenderMode>("stacked");
@@ -615,7 +617,9 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
         className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
         aria-label="Close diff panel"
         onClick={() => {
-          if (routeThreadId) {
+          if (onClose) {
+            onClose();
+          } else if (routeThreadId) {
             void navigate({
               to: "/$threadId",
               params: { threadId: routeThreadId },
