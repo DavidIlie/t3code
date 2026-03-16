@@ -8,7 +8,12 @@ import {
   type BrowserWindow,
 } from "electron";
 import path from "node:path";
-import type { DesktopTrayState, DesktopTrayMessage, DesktopTrayThread, ThreadId } from "@t3tools/contracts";
+import type {
+  DesktopTrayState,
+  DesktopTrayMessage,
+  DesktopTrayThread,
+  ThreadId,
+} from "@t3tools/contracts";
 
 const SET_TRAY_ENABLED_CHANNEL = "desktop:set-tray-enabled";
 const GET_TRAY_STATE_CHANNEL = "desktop:get-tray-state";
@@ -38,7 +43,9 @@ const MAX_THREADS_IN_CONTEXT_MENU = 3;
 const MAX_VIEW_MORE_THREADS = 5;
 
 function buildTrayContextMenu(): Menu {
-  const sortedThreads = trayState.threads.toSorted((a: DesktopTrayThread, b: DesktopTrayThread) => b.lastUpdated - a.lastUpdated);
+  const sortedThreads = trayState.threads.toSorted(
+    (a: DesktopTrayThread, b: DesktopTrayThread) => b.lastUpdated - a.lastUpdated,
+  );
   const topLevelThreads = sortedThreads.slice(0, MAX_THREADS_IN_CONTEXT_MENU);
   const viewMoreThreads = sortedThreads.slice(
     MAX_THREADS_IN_CONTEXT_MENU,
@@ -97,7 +104,9 @@ function buildTrayContextMenu(): Menu {
 function updateTray(): void {
   if (!tray) return;
   tray.setContextMenu(buildTrayContextMenu());
-  const threadsNeedingAttention = trayState.threads.filter((t: DesktopTrayThread) => t.needsAttention).length;
+  const threadsNeedingAttention = trayState.threads.filter(
+    (t: DesktopTrayThread) => t.needsAttention,
+  ).length;
   if (threadsNeedingAttention > 0) {
     tray.setTitle(`(${threadsNeedingAttention} unread)`);
   } else {

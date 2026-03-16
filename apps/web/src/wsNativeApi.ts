@@ -187,8 +187,7 @@ export function createWsNativeApi(): NativeApi {
       getUsage: () => transport.request(WS_METHODS.providerGetUsage, {}),
       reconnectMcpServer: (input) =>
         transport.request(WS_METHODS.providerReconnectMcpServer, input),
-      toggleMcpServer: (input) =>
-        transport.request(WS_METHODS.providerToggleMcpServer, input),
+      toggleMcpServer: (input) => transport.request(WS_METHODS.providerToggleMcpServer, input),
       onAccountUpdated: (callback) =>
         transport.subscribe(WS_CHANNELS.providerAccountUpdated, (message) =>
           callback(message.data),

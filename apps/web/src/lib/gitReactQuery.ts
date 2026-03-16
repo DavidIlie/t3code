@@ -11,8 +11,15 @@ export const gitQueryKeys = {
   all: ["git"] as const,
   status: (cwd: string | null) => ["git", "status", cwd] as const,
   branches: (cwd: string | null) => ["git", "branches", cwd] as const,
-  log: (cwd: string | null, branch: string | undefined, skip: number | undefined, search?: string, author?: string, since?: string, until?: string) =>
-    ["git", "log", cwd, branch, skip, search, author, since, until] as const,
+  log: (
+    cwd: string | null,
+    branch: string | undefined,
+    skip: number | undefined,
+    search?: string,
+    author?: string,
+    since?: string,
+    until?: string,
+  ) => ["git", "log", cwd, branch, skip, search, author, since, until] as const,
   commitDiff: (cwd: string | null, commitHash: string) =>
     ["git", "commitDiff", cwd, commitHash] as const,
 };
@@ -212,7 +219,15 @@ export function gitLogQueryOptions(input: {
   until?: string;
 }) {
   return queryOptions({
-    queryKey: gitQueryKeys.log(input.cwd, input.branch, input.skip, input.search, input.author, input.since, input.until),
+    queryKey: gitQueryKeys.log(
+      input.cwd,
+      input.branch,
+      input.skip,
+      input.search,
+      input.author,
+      input.since,
+      input.until,
+    ),
     queryFn: async () => {
       const api = ensureNativeApi();
       if (!input.cwd) throw new Error("Git log is unavailable.");

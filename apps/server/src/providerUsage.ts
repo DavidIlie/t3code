@@ -118,9 +118,7 @@ async function readClaudeCredentials(): Promise<ClaudeCredentials | null> {
  * Refresh the OAuth token and persist the new credentials.
  * Returns the new access token, or null if refresh failed.
  */
-async function refreshAndPersistToken(
-  credentials: ClaudeCredentials,
-): Promise<string | null> {
+async function refreshAndPersistToken(credentials: ClaudeCredentials): Promise<string | null> {
   const refreshToken = credentials.claudeAiOauth?.refreshToken;
   if (!refreshToken) return null;
 
@@ -145,9 +143,7 @@ async function refreshAndPersistToken(
         ...credentials.claudeAiOauth!,
         accessToken: data.access_token,
         ...(data.refresh_token ? { refreshToken: data.refresh_token } : {}),
-        ...(data.expires_in
-          ? { expiresAt: Date.now() + data.expires_in * 1000 }
-          : {}),
+        ...(data.expires_in ? { expiresAt: Date.now() + data.expires_in * 1000 } : {}),
       },
     };
 
@@ -170,9 +166,7 @@ const TIER_LABEL_MAP: Record<string, string> = {
   seven_day_oauth_apps: "OAuth Apps",
 };
 
-async function callUsageApi(
-  accessToken: string,
-): Promise<Response> {
+async function callUsageApi(accessToken: string): Promise<Response> {
   return fetch(CLAUDE_USAGE_API, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -228,9 +222,7 @@ async function fetchClaudeUsage(): Promise<ProviderUsageResult["claudeCode"]> {
 
   let accessToken = credentials.claudeAiOauth.accessToken;
   const plan =
-    credentials.claudeAiOauth.subscriptionType ??
-    credentials.claudeAiOauth.rateLimitTier ??
-    null;
+    credentials.claudeAiOauth.subscriptionType ?? credentials.claudeAiOauth.rateLimitTier ?? null;
 
   // Check if token is expired and needs refresh
   if (credentials.claudeAiOauth.expiresAt) {

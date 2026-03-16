@@ -12,7 +12,14 @@ import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../chat-scroll";
 import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import ChatMarkdown from "../ChatMarkdown";
-import { BotIcon, BrainIcon, CheckCircleIcon, ChevronRightIcon, Undo2Icon, XCircleIcon } from "lucide-react";
+import {
+  BotIcon,
+  BrainIcon,
+  CheckCircleIcon,
+  ChevronRightIcon,
+  Undo2Icon,
+  XCircleIcon,
+} from "lucide-react";
 import { Button } from "../ui/button";
 import { clamp } from "effect/Number";
 import { estimateTimelineMessageHeight } from "../timelineHeight";
@@ -309,9 +316,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           const isExpanded = expandedWorkGroups[groupId] ?? false;
           const hasOverflow = segments.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
           const visibleSegments =
-            hasOverflow && !isExpanded
-              ? segments.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
-              : segments;
+            hasOverflow && !isExpanded ? segments.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES) : segments;
           const hiddenCount = segments.length - visibleSegments.length;
           const hasAgentTasks = segments.some((s) => s.kind === "agent-task");
           const onlyToolEntries =
@@ -344,9 +349,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   </button>
                 )}
               </div>
-              <div className="space-y-1">
-                {renderWorkSegments(visibleSegments)}
-              </div>
+              <div className="space-y-1">{renderWorkSegments(visibleSegments)}</div>
             </div>
           );
         })()}
@@ -561,7 +564,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             <span>
               {row.createdAt
                 ? `${interactionMode === "plan" ? "Planning" : "Working"} for ${formatWorkingTimer(row.createdAt, nowIso) ?? "0s"}`
-                : interactionMode === "plan" ? "Planning..." : "Working..."}
+                : interactionMode === "plan"
+                  ? "Planning..."
+                  : "Working..."}
             </span>
           </div>
         </div>
@@ -668,7 +673,11 @@ function formatWorkingTimer(startIso: string, endIso: string): string | null {
   return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
-function formatMessageMeta(createdAt: string, duration: string | null, tsFormat: TimestampFormat): string {
+function formatMessageMeta(
+  createdAt: string,
+  duration: string | null,
+  tsFormat: TimestampFormat,
+): string {
   if (!duration) return formatTimestamp(createdAt, tsFormat);
   return `${formatTimestamp(createdAt, tsFormat)} • ${duration}`;
 }
@@ -689,7 +698,9 @@ function formatToolDetail(detail: string): string {
         const args = typeof parsed.args === "string" ? parsed.args.trim() : null;
         return args ? `/${skill} ${args}` : `/${skill}`;
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   // Agent: {"description":"Code review","prompt":"..."}
@@ -699,7 +710,9 @@ function formatToolDetail(detail: string): string {
       const parsed = JSON.parse(agentMatch[1]) as Record<string, unknown>;
       const desc = typeof parsed.description === "string" ? parsed.description.trim() : null;
       if (desc) return desc;
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   return detail;

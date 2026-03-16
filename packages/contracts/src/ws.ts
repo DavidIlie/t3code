@@ -241,7 +241,9 @@ export const WsProviderSessionConfiguredPayload = Schema.Struct({
       name: Schema.String,
       status: Schema.String,
       tools: Schema.optional(
-        Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.optional(Schema.String) })),
+        Schema.Array(
+          Schema.Struct({ name: Schema.String, description: Schema.optional(Schema.String) }),
+        ),
       ),
     }),
   ),

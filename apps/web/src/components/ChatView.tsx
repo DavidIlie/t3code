@@ -546,7 +546,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const lockedProvider: ProviderKind | null = hasThreadStarted
     ? (sessionProvider ?? selectedProviderByThreadId ?? null)
     : null;
-  const selectedProvider: ProviderKind = lockedProvider ?? selectedProviderByThreadId ?? settings.defaultProvider;
+  const selectedProvider: ProviderKind =
+    lockedProvider ?? selectedProviderByThreadId ?? settings.defaultProvider;
   const providerUsageSnapshot = useProviderSessionStore(
     (state) => state.usageByProvider[selectedProvider] ?? null,
   );
@@ -556,7 +557,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
       : null;
   const baseThreadModel = resolveModelSlugForProvider(
     selectedProvider,
-    activeThread?.model ?? activeProject?.model ?? (settings.defaultModel || null) ?? getDefaultModel(selectedProvider),
+    activeThread?.model ??
+      activeProject?.model ??
+      (settings.defaultModel || null) ??
+      getDefaultModel(selectedProvider),
   );
   const customModelsForSelectedProvider = settings.customCodexModels;
   const selectedModel = useMemo(() => {
@@ -601,7 +605,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
       };
     }
     return Object.keys(result).length > 0 ? result : undefined;
-  }, [settings.codexBinaryPath, settings.codexHomePath, settings.claudeBinaryPath, settings.claudeBaseUrl, settings.claudeApiKey]);
+  }, [
+    settings.codexBinaryPath,
+    settings.codexHomePath,
+    settings.claudeBinaryPath,
+    settings.claudeBaseUrl,
+    settings.claudeApiKey,
+  ]);
   const selectedCursorModel = useMemo(
     () => (selectedProvider === "cursor" ? parseCursorModelSelection(selectedModel) : null),
     [selectedModel, selectedProvider],
@@ -1161,9 +1171,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       replace: true,
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
-        return historyOpen
-          ? stripHistorySearchParams(rest)
-          : { ...rest, history: "1" };
+        return historyOpen ? stripHistorySearchParams(rest) : { ...rest, history: "1" };
       },
     });
   }, [historyOpen, navigate, threadId]);
@@ -4154,7 +4162,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
                           </Button>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            {!queuedMessage && !steerMessage &&
+                            {!queuedMessage &&
+                              !steerMessage &&
                               (prompt.trim() || composerImages.length > 0) && (
                                 <>
                                   <Tooltip>
@@ -4170,7 +4179,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
                                         </button>
                                       }
                                     />
-                                    <TooltipPopup side="top">Steer — interrupt and redirect the agent</TooltipPopup>
+                                    <TooltipPopup side="top">
+                                      Steer — interrupt and redirect the agent
+                                    </TooltipPopup>
                                   </Tooltip>
                                   <button
                                     type="submit"
@@ -4255,9 +4266,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                                   >
                                     Implement in new thread
                                   </MenuItem>
-                                  <MenuItem
-                                    onClick={() => handleInteractionModeChange("default")}
-                                  >
+                                  <MenuItem onClick={() => handleInteractionModeChange("default")}>
                                     Reject plan
                                   </MenuItem>
                                 </MenuPopup>
@@ -4492,7 +4501,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
     </div>
   );
 }
-
 
 const ProviderModelPicker = ProviderModelPickerComponent;
 

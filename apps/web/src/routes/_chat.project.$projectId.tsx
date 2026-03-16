@@ -121,7 +121,10 @@ function ProjectRouteView() {
     return (
       <>
         <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-          <ProjectLandingPage historyOpen={historyOpen} onToggleHistory={historyOpen ? closeHistory : openHistory} />
+          <ProjectLandingPage
+            historyOpen={historyOpen}
+            onToggleHistory={historyOpen ? closeHistory : openHistory}
+          />
         </SidebarInset>
         <HistoryPanelInlineSidebar
           historyOpen={historyOpen}
@@ -136,7 +139,10 @@ function ProjectRouteView() {
   return (
     <>
       <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-        <ProjectLandingPage historyOpen={historyOpen} onToggleHistory={historyOpen ? closeHistory : openHistory} />
+        <ProjectLandingPage
+          historyOpen={historyOpen}
+          onToggleHistory={historyOpen ? closeHistory : openHistory}
+        />
       </SidebarInset>
       <Sheet
         open={historyOpen}

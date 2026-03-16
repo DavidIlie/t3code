@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIcon, ChevronDownIcon, ChevronUpIcon, ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
+import {
+  ActivityIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  ExternalLinkIcon,
+  RefreshCwIcon,
+} from "lucide-react";
 import type { ProviderKind } from "@t3tools/contracts";
 import {
   useProviderSessionStore,
@@ -126,10 +132,7 @@ const SDK_TIER_LABEL_MAP: Record<string, string> = {
  * - Claude SDK `rate_limit_event` messages (with `rate_limit_info`)
  * - Codex `account/rateLimits/updated` events (with nested objects)
  */
-export function parseRateLimitPayload(
-  provider: ProviderKind,
-  raw: unknown,
-): ProviderUsageSnapshot {
+export function parseRateLimitPayload(provider: ProviderKind, raw: unknown): ProviderUsageSnapshot {
   const now = new Date().toISOString();
   const tiers: UsageTier[] = [];
   let plan: string | null = null;
@@ -268,7 +271,11 @@ function ExtraUsageRow({ spent, limit }: { spent: number; limit: number }) {
 /** Tiers shown by default — everything else is collapsed behind "Show more". */
 const PRIMARY_TIER_LABELS = new Set(["Session (5h)", "Weekly"]);
 
-export function ProviderUsageContent({ snapshot }: { snapshot: ProviderUsageSnapshot | undefined }) {
+export function ProviderUsageContent({
+  snapshot,
+}: {
+  snapshot: ProviderUsageSnapshot | undefined;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   if (!snapshot || snapshot.tiers.length === 0) {
@@ -321,7 +328,8 @@ export function ProviderUsageContent({ snapshot }: { snapshot: ProviderUsageSnap
             </>
           ) : (
             <>
-              Show {secondaryTiers.length + (snapshot.extraUsage ? 1 : 0)} more <ChevronDownIcon className="size-3" />
+              Show {secondaryTiers.length + (snapshot.extraUsage ? 1 : 0)} more{" "}
+              <ChevronDownIcon className="size-3" />
             </>
           )}
         </button>
@@ -404,10 +412,7 @@ export function UsageCard() {
 
   const sidebarDotClass = overallStatus ? dotColor(overallStatus) : "bg-muted-foreground/30";
 
-  const handleProviderClick = useCallback(
-    (p: ProviderKind) => () => setActiveProvider(p),
-    [],
-  );
+  const handleProviderClick = useCallback((p: ProviderKind) => () => setActiveProvider(p), []);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -515,7 +520,9 @@ function CompactTierBar({ tier }: { tier: UsageTier }) {
     <div className="space-y-0.5">
       <div className="flex items-center justify-between">
         <span className="text-[10px] text-muted-foreground/70">{tier.label}</span>
-        <span className="text-[10px] text-muted-foreground/50">{Math.round(tier.percentUsed)}%</span>
+        <span className="text-[10px] text-muted-foreground/50">
+          {Math.round(tier.percentUsed)}%
+        </span>
       </div>
       <div className="h-1 w-full overflow-hidden rounded-full bg-muted/60">
         <div
@@ -523,9 +530,7 @@ function CompactTierBar({ tier }: { tier: UsageTier }) {
           style={{ width: `${Math.min(tier.percentUsed, 100)}%` }}
         />
       </div>
-      {resetLabel && (
-        <p className="text-[9px] text-muted-foreground/40">{resetLabel}</p>
-      )}
+      {resetLabel && <p className="text-[9px] text-muted-foreground/40">{resetLabel}</p>}
     </div>
   );
 }

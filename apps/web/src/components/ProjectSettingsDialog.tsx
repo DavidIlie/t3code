@@ -305,7 +305,15 @@ export default function ProjectSettingsDialog({
       nextIcons[projectId] = { type: "file", value: filePathInput.trim() };
     }
     updateSettings({ projectIcons: nextIcons });
-  }, [iconTab, selectedLucideIcon, emojiInput, filePathInput, projectId, settings.projectIcons, updateSettings]);
+  }, [
+    iconTab,
+    selectedLucideIcon,
+    emojiInput,
+    filePathInput,
+    projectId,
+    settings.projectIcons,
+    updateSettings,
+  ]);
 
   // ── MCP state ──
   const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
@@ -422,7 +430,13 @@ export default function ProjectSettingsDialog({
                     }`}
                     onClick={() => setIconTab(tab)}
                   >
-                    {tab === "favicon" ? "Auto (Favicon)" : tab === "lucide" ? "Icon" : tab === "emoji" ? "Emoji" : "Image"}
+                    {tab === "favicon"
+                      ? "Auto (Favicon)"
+                      : tab === "lucide"
+                        ? "Icon"
+                        : tab === "emoji"
+                          ? "Emoji"
+                          : "Image"}
                   </button>
                 ))}
               </div>

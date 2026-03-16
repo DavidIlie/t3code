@@ -24,8 +24,18 @@ export const PROVIDER_OPTIONS: Array<{
   available: boolean;
   docsUrl?: string;
 }> = [
-  { value: "codex", label: "Codex", available: true, docsUrl: "https://developers.openai.com/codex/sdk/" },
-  { value: "claudeCode", label: "Claude Code", available: true, docsUrl: "https://docs.anthropic.com/en/docs/claude-code" },
+  {
+    value: "codex",
+    label: "Codex",
+    available: true,
+    docsUrl: "https://developers.openai.com/codex/sdk/",
+  },
+  {
+    value: "claudeCode",
+    label: "Claude Code",
+    available: true,
+    docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
+  },
   { value: "cursor", label: "Cursor", available: false, docsUrl: "https://docs.cursor.com" },
 ];
 
@@ -424,7 +434,8 @@ export function deriveWorkLogEntries(
       const entry: WorkLogEntry = {
         id: activity.id,
         createdAt: activity.createdAt,
-        label: typeof activity.summary === "string" ? activity.summary : String(activity.summary ?? ""),
+        label:
+          typeof activity.summary === "string" ? activity.summary : String(activity.summary ?? ""),
         tone: activity.tone === "approval" ? "info" : activity.tone,
       };
       if (payload && typeof payload.detail === "string" && payload.detail.length > 0) {
@@ -685,4 +696,3 @@ export function derivePhase(session: ThreadSession | null): SessionPhase {
   if (session.status === "running") return "running";
   return "ready";
 }
-

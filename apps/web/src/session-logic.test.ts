@@ -373,7 +373,11 @@ describe("deriveWorkLogEntries", () => {
     ];
 
     const entries = deriveWorkLogEntries(activities, undefined);
-    expect(entries.map((entry) => entry.id)).toEqual(["task-start", "task-progress", "task-complete"]);
+    expect(entries.map((entry) => entry.id)).toEqual([
+      "task-start",
+      "task-progress",
+      "task-complete",
+    ]);
     expect(entries[0]?.agentTaskId).toBe("agent-1");
     expect(entries[0]?.agentTaskKind).toBe("started");
     // task.progress entry is included and associated with the agent task
@@ -657,8 +661,18 @@ describe("PROVIDER_OPTIONS", () => {
     const claude = PROVIDER_OPTIONS.find((option) => option.value === "claudeCode");
     const cursor = PROVIDER_OPTIONS.find((option) => option.value === "cursor");
     expect(PROVIDER_OPTIONS).toEqual([
-      { value: "codex", label: "Codex", available: true, docsUrl: "https://developers.openai.com/codex/sdk/" },
-      { value: "claudeCode", label: "Claude Code", available: true, docsUrl: "https://docs.anthropic.com/en/docs/claude-code" },
+      {
+        value: "codex",
+        label: "Codex",
+        available: true,
+        docsUrl: "https://developers.openai.com/codex/sdk/",
+      },
+      {
+        value: "claudeCode",
+        label: "Claude Code",
+        available: true,
+        docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
+      },
       { value: "cursor", label: "Cursor", available: false, docsUrl: "https://docs.cursor.com" },
     ]);
     expect(claude).toEqual({

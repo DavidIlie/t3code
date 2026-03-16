@@ -12,14 +12,7 @@ import {
   SettingsIcon,
 } from "lucide-react";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { isElectron } from "../env";
 import { isMacPlatform, newCommandId, newMessageId, newThreadId } from "../lib/utils";
@@ -156,9 +149,7 @@ export function CommandBar(props: { open: boolean; onOpenChange: (open: boolean)
 
     // ── Actions ───────────────────────────────────────────
     const activeProject = routeThreadId
-      ? projects.find((p) =>
-          threads.some((t) => t.id === routeThreadId && t.projectId === p.id),
-        )
+      ? projects.find((p) => threads.some((t) => t.id === routeThreadId && t.projectId === p.id))
       : projects[0];
 
     if (activeProject) {
@@ -170,10 +161,8 @@ export function CommandBar(props: { open: boolean; onOpenChange: (open: boolean)
         group: "Actions",
         keywords: ["new", "chat", "thread", "conversation"],
         action: () => {
-          const {
-            clearProjectDraftThreadId,
-            setProjectDraftThreadId,
-          } = useComposerDraftStore.getState();
+          const { clearProjectDraftThreadId, setProjectDraftThreadId } =
+            useComposerDraftStore.getState();
           clearProjectDraftThreadId(activeProject.id);
           const threadId = newThreadId();
           const createdAt = new Date().toISOString();
@@ -200,10 +189,8 @@ export function CommandBar(props: { open: boolean; onOpenChange: (open: boolean)
         group: "Actions",
         keywords: ["plan", "mode", "architect", "design"],
         action: () => {
-          const {
-            clearProjectDraftThreadId,
-            setProjectDraftThreadId,
-          } = useComposerDraftStore.getState();
+          const { clearProjectDraftThreadId, setProjectDraftThreadId } =
+            useComposerDraftStore.getState();
           clearProjectDraftThreadId(activeProject.id);
           const threadId = newThreadId();
           const createdAt = new Date().toISOString();
@@ -227,7 +214,10 @@ export function CommandBar(props: { open: boolean; onOpenChange: (open: boolean)
     // Compact conversation (send /compact as a message to active thread)
     if (routeThreadId && api) {
       const activeThread = threads.find((t) => t.id === routeThreadId);
-      if (activeThread?.session?.status === "ready" || activeThread?.session?.status === "running") {
+      if (
+        activeThread?.session?.status === "ready" ||
+        activeThread?.session?.status === "running"
+      ) {
         cmds.push({
           id: "action:compact",
           label: "Compact Conversation",
@@ -321,9 +311,8 @@ export function CommandBar(props: { open: boolean; onOpenChange: (open: boolean)
   }, [items, query]);
 
   // Clamp highlighted index when filtered results shrink — derive inline
-  const clampedHighlight = highlightedIndex >= flatItems.length
-    ? Math.max(0, flatItems.length - 1)
-    : highlightedIndex;
+  const clampedHighlight =
+    highlightedIndex >= flatItems.length ? Math.max(0, flatItems.length - 1) : highlightedIndex;
 
   // Sync clamped value back to state only when it drifts
   useEffect(() => {

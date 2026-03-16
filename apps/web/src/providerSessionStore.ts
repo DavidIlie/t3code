@@ -10,7 +10,9 @@ export interface SlashCommandInfo {
 export interface McpServerInfo {
   readonly name: string;
   readonly status: string;
-  readonly tools?: ReadonlyArray<{ readonly name: string; readonly description?: string | undefined }> | undefined;
+  readonly tools?:
+    | ReadonlyArray<{ readonly name: string; readonly description?: string | undefined }>
+    | undefined;
 }
 
 export interface AccountInfo {

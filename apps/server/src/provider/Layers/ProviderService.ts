@@ -531,7 +531,10 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
       ),
     );
 
-    const requireClaudeAdapter = (): Effect.Effect<ClaudeCodeAdapterShape, ProviderUnsupportedError> =>
+    const requireClaudeAdapter = (): Effect.Effect<
+      ClaudeCodeAdapterShape,
+      ProviderUnsupportedError
+    > =>
       Option.isSome(claudeAdapter)
         ? Effect.succeed(claudeAdapter.value)
         : Effect.fail(

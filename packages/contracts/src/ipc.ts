@@ -243,9 +243,7 @@ export interface NativeApi {
       serverName: string;
       enabled: boolean;
     }) => Promise<void>;
-    onAccountUpdated: (
-      callback: (payload: WsProviderAccountUpdatedPayload) => void,
-    ) => () => void;
+    onAccountUpdated: (callback: (payload: WsProviderAccountUpdatedPayload) => void) => () => void;
     onSessionConfigured: (
       callback: (payload: WsProviderSessionConfiguredPayload) => void,
     ) => () => void;

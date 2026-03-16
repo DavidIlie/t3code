@@ -2,12 +2,7 @@ import { memo } from "react";
 import { cn } from "~/lib/utils";
 import type { ProviderUsageSnapshot } from "../../providerSessionStore";
 import { Button } from "../ui/button";
-import {
-  Menu,
-  MenuGroup,
-  MenuPopup,
-  MenuTrigger,
-} from "../ui/menu";
+import { Menu, MenuGroup, MenuPopup, MenuTrigger } from "../ui/menu";
 import { ProviderUsageContent } from "../UsageCard";
 
 const RING_RADIUS = 6;
@@ -82,10 +77,7 @@ export const ComposerContextUsageIndicator = memo(function ComposerContextUsageI
               cx="8"
               cy="8"
               r={RING_RADIUS}
-              className={cn(
-                "transition-[stroke-dashoffset,stroke] duration-200",
-                ringToneClass,
-              )}
+              className={cn("transition-[stroke-dashoffset,stroke] duration-200", ringToneClass)}
               strokeWidth="1.75"
               strokeLinecap="round"
               strokeDasharray={RING_CIRCUMFERENCE}

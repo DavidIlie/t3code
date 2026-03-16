@@ -553,12 +553,7 @@ export default function Sidebar() {
       }
       finishAddingProject();
     },
-    [
-      focusMostRecentThreadForProject,
-      handleNewThread,
-      isAddingProject,
-      projects,
-    ],
+    [focusMostRecentThreadForProject, handleNewThread, isAddingProject, projects],
   );
 
   const handleAddProject = () => {

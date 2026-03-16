@@ -5,7 +5,11 @@ import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { DEFAULT_RUNTIME_MODE, type ProjectId, ThreadId } from "@t3tools/contracts";
 import { ArrowLeftIcon, CalendarIcon, MessageSquareIcon, SearchIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { gitBranchesQueryOptions, gitCommitDiffQueryOptions, gitLogQueryOptions } from "~/lib/gitReactQuery";
+import {
+  gitBranchesQueryOptions,
+  gitCommitDiffQueryOptions,
+  gitLogQueryOptions,
+} from "~/lib/gitReactQuery";
 import { cn, newThreadId } from "~/lib/utils";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
@@ -132,14 +136,21 @@ function getRenderableFiles(patch: string | undefined, cacheScope: string): File
   }
 }
 
-export default function GitHistoryPanel({ mode = "sidebar", onClose }: { mode?: DiffPanelMode; onClose?: (() => void) | undefined }) {
+export default function GitHistoryPanel({
+  mode = "sidebar",
+  onClose,
+}: {
+  mode?: DiffPanelMode;
+  onClose?: (() => void) | undefined;
+}) {
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   const routeParams = useParams({
     strict: false,
     select: (params) => ({
       threadId: params.threadId ? ThreadId.makeUnsafe(params.threadId) : null,
-      projectId: ((params as Record<string, string | undefined>).projectId as ProjectId | undefined) ?? null,
+      projectId:
+        ((params as Record<string, string | undefined>).projectId as ProjectId | undefined) ?? null,
     }),
   });
   const routeThreadId = routeParams.threadId;
@@ -178,7 +189,13 @@ export default function GitHistoryPanel({ mode = "sidebar", onClose }: { mode?: 
   // Pagination: accumulate commits in state, single query for latest page
   const [skipOffset, setSkipOffset] = useState(0);
   const [accumulatedCommits, setAccumulatedCommits] = useState<
-    ReadonlyArray<{ readonly hash: string; readonly abbreviatedHash: string; readonly subject: string; readonly authorName: string; readonly authorDate: string }>
+    ReadonlyArray<{
+      readonly hash: string;
+      readonly abbreviatedHash: string;
+      readonly subject: string;
+      readonly authorName: string;
+      readonly authorDate: string;
+    }>
   >([]);
   const lastAppendedOffset = useRef(0);
 
@@ -247,13 +264,21 @@ export default function GitHistoryPanel({ mode = "sidebar", onClose }: { mode?: 
 
   const selectCommit = useCallback(
     (hash: string) => {
-      navigateWithSearch((previous) => ({ ...previous, history: "1" as const, historyCommit: hash }));
+      navigateWithSearch((previous) => ({
+        ...previous,
+        history: "1" as const,
+        historyCommit: hash,
+      }));
     },
     [navigateWithSearch],
   );
 
   const goBackToList = useCallback(() => {
-    navigateWithSearch((previous) => ({ ...previous, history: "1" as const, historyCommit: undefined }));
+    navigateWithSearch((previous) => ({
+      ...previous,
+      history: "1" as const,
+      historyCommit: undefined,
+    }));
   }, [navigateWithSearch]);
 
   const closePanel = useCallback(() => {
@@ -310,7 +335,11 @@ export default function GitHistoryPanel({ mode = "sidebar", onClose }: { mode?: 
   );
 
   const renderableFiles = useMemo(
-    () => getRenderableFiles(commitDiffQuery.data?.patch, `history:${selectedCommitHash}:${resolvedTheme}`),
+    () =>
+      getRenderableFiles(
+        commitDiffQuery.data?.patch,
+        `history:${selectedCommitHash}:${resolvedTheme}`,
+      ),
     [commitDiffQuery.data?.patch, selectedCommitHash, resolvedTheme],
   );
 
@@ -590,7 +619,10 @@ export default function GitHistoryPanel({ mode = "sidebar", onClose }: { mode?: 
                   <button
                     type="button"
                     className="rounded p-0.5 text-muted-foreground/40 hover:text-foreground"
-                    onClick={() => { setSearchInput(""); searchInputRef.current?.focus(); }}
+                    onClick={() => {
+                      setSearchInput("");
+                      searchInputRef.current?.focus();
+                    }}
                   >
                     <XIcon className="size-3" />
                   </button>
@@ -634,7 +666,10 @@ export default function GitHistoryPanel({ mode = "sidebar", onClose }: { mode?: 
                   <button
                     type="button"
                     className="rounded p-0.5 text-muted-foreground/40 hover:text-foreground"
-                    onClick={() => { setSinceDate(""); setUntilDate(""); }}
+                    onClick={() => {
+                      setSinceDate("");
+                      setUntilDate("");
+                    }}
                     title="Clear dates"
                   >
                     <XIcon className="size-3" />
@@ -648,7 +683,9 @@ export default function GitHistoryPanel({ mode = "sidebar", onClose }: { mode?: 
           <div className="min-h-0 flex-1 overflow-auto">
             {allCommits.length === 0 && !isLoadingMore ? (
               <div className="flex h-full items-center justify-center text-xs text-muted-foreground/70">
-                {debouncedSearch || sinceDate || untilDate ? "No matching commits." : "No commits found."}
+                {debouncedSearch || sinceDate || untilDate
+                  ? "No matching commits."
+                  : "No commits found."}
               </div>
             ) : (
               <div className="flex flex-col">

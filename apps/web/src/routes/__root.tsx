@@ -399,9 +399,7 @@ function buildTrayState(threads: Thread[]): DesktopTrayState {
       id: thread.id,
       name: thread.title,
       needsAttention: hasUnseenCompletion(thread),
-      lastUpdated: Date.parse(
-        thread.latestTurn?.completedAt ?? thread.createdAt,
-      ),
+      lastUpdated: Date.parse(thread.latestTurn?.completedAt ?? thread.createdAt),
     })),
   };
 }

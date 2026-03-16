@@ -636,17 +636,22 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     (event) =>
       Effect.gen(function* () {
         const payload = event.payload as Record<string, unknown>;
-        const threadId =
-          typeof event.threadId === "string" ? event.threadId : undefined;
+        const threadId = typeof event.threadId === "string" ? event.threadId : undefined;
         if (!threadId) return;
 
         if (event.type === "session.configured") {
           const config = payload.config as Record<string, unknown> | undefined;
           const commands = Array.isArray(config?.commands)
-            ? (config.commands as Array<{ name: string; description: string; argumentHint?: string }>)
+            ? (config.commands as Array<{
+                name: string;
+                description: string;
+                argumentHint?: string;
+              }>)
             : [];
           const providerVersion =
-            typeof config?.claude_code_version === "string" ? config.claude_code_version : undefined;
+            typeof config?.claude_code_version === "string"
+              ? config.claude_code_version
+              : undefined;
           const model = typeof config?.model === "string" ? config.model : undefined;
           yield* pushBus.publishAll(WS_CHANNELS.providerSessionConfigured, {
             threadId,

@@ -71,9 +71,7 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleDebugPanel,
   onToggleSkillsPanel,
 }: ChatHeaderProps) {
-  const sessionInfo = useProviderSessionStore(
-    (state) => state.sessionInfoByThread[activeThreadId],
-  );
+  const sessionInfo = useProviderSessionStore((state) => state.sessionInfoByThread[activeThreadId]);
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -227,7 +225,10 @@ function SessionInfoBadge({ sessionInfo }: { sessionInfo: SessionInfo | undefine
   if (model) parts.push(formatModelName(model));
 
   return (
-    <Badge variant="outline" className="hidden shrink-0 gap-1 text-[10px] text-muted-foreground sm:inline-flex">
+    <Badge
+      variant="outline"
+      className="hidden shrink-0 gap-1 text-[10px] text-muted-foreground sm:inline-flex"
+    >
       {parts.join(" / ")}
     </Badge>
   );

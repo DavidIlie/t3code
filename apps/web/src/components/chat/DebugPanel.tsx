@@ -59,15 +59,9 @@ export const DebugPanel = memo(function DebugPanel({ thread, onClose }: DebugPan
   const session = thread.session;
   const latestTurn = thread.latestTurn;
   const turnUsage = extractUsageFromActivities(thread.activities, latestTurn?.turnId ?? undefined);
-  const sessionInfo = useProviderSessionStore(
-    (state) => state.sessionInfoByThread[thread.id],
-  );
-  const mcpServers = useProviderSessionStore(
-    (state) => state.mcpStatusByThread[thread.id],
-  );
-  const commands = useProviderSessionStore(
-    (state) => state.commandsByThread[thread.id],
-  );
+  const sessionInfo = useProviderSessionStore((state) => state.sessionInfoByThread[thread.id]);
+  const mcpServers = useProviderSessionStore((state) => state.mcpStatusByThread[thread.id]);
+  const commands = useProviderSessionStore((state) => state.commandsByThread[thread.id]);
 
   const turnDuration =
     latestTurn?.startedAt && latestTurn?.completedAt
@@ -154,7 +148,8 @@ export const DebugPanel = memo(function DebugPanel({ thread, onClose }: DebugPan
           <div className="flex items-center justify-between gap-2">
             <span className="shrink-0 text-[10px] text-muted-foreground/50">Mode</span>
             <span className="text-[10px] text-muted-foreground/80">
-              {thread.interactionMode === "plan" ? "Plan" : "Default"} · {thread.runtimeMode === "full-access" ? "Full access" : "Approval required"}
+              {thread.interactionMode === "plan" ? "Plan" : "Default"} ·{" "}
+              {thread.runtimeMode === "full-access" ? "Full access" : "Approval required"}
             </span>
           </div>
           {sessionInfo?.providerVersion && (
@@ -171,9 +166,7 @@ export const DebugPanel = memo(function DebugPanel({ thread, onClose }: DebugPan
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="shrink-0 text-[10px] text-muted-foreground/50">Activities</span>
-            <span className="text-[10px] text-muted-foreground/80">
-              {thread.activities.length}
-            </span>
+            <span className="text-[10px] text-muted-foreground/80">{thread.activities.length}</span>
           </div>
         </div>
       )}

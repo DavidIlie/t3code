@@ -21,9 +21,7 @@ export function DiffPanelShell({
 }) {
   return (
     <div className="flex h-full flex-col">
-      {header ? (
-        <div className={getDiffPanelHeaderRowClassName(mode)}>{header}</div>
-      ) : null}
+      {header ? <div className={getDiffPanelHeaderRowClassName(mode)}>{header}</div> : null}
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
     </div>
   );
