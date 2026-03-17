@@ -9,7 +9,6 @@ export const IMAGE_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/jpg": ".jpg",
   "image/png": ".png",
-  "image/svg+xml": ".svg",
   "image/tiff": ".tiff",
   "image/webp": ".webp",
 };
@@ -24,7 +23,6 @@ export const SAFE_IMAGE_FILE_EXTENSIONS = new Set([
   ".jpeg",
   ".jpg",
   ".png",
-  ".svg",
   ".tiff",
   ".webp",
 ]);
@@ -32,7 +30,7 @@ export const SAFE_IMAGE_FILE_EXTENSIONS = new Set([
 export function parseBase64DataUrl(
   dataUrl: string,
 ): { readonly mimeType: string; readonly base64: string } | null {
-  const match = /^data:([^,]+),([a-z0-9+/=\r\n ]+)$/i.exec(dataUrl.trim());
+  const match = /^data:([^,]+),([a-z0-9+/=\s]+)$/i.exec(dataUrl.trim());
   if (!match) return null;
 
   const headerParts = (match[1] ?? "")

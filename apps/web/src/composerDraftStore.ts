@@ -1138,6 +1138,8 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
           return { draftsByThreadId: nextDraftsByThreadId };
         });
         Promise.resolve().then(() => {
+          // Flush debounced localStorage write so we read back the actual persisted state.
+          composerDebouncedStorage.flush();
           const persistedIdSet = new Set(readPersistedAttachmentIdsFromStorage(threadId));
           set((state) => {
             const current = state.draftsByThreadId[threadId];
