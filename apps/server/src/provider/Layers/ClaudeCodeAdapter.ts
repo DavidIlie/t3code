@@ -38,7 +38,10 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
-import { Cause, DateTime, Deferred, Effect, Layer, Queue, Random, Ref, Stream } from "effect";
+import { Cause, DateTime, Deferred, Effect, FileSystem, Layer, Queue, Random, Ref, Stream } from "effect";
+
+import { ServerConfig } from "../../config.ts";
+import { resolveAttachmentPath } from "../../attachmentStore.ts";
 
 import {
   ProviderAdapterProcessError,
@@ -432,32 +435,70 @@ function titleForTool(itemType: CanonicalItemType, toolName?: string): string {
   }
 }
 
-function buildUserMessage(input: ProviderSendTurnInput): SDKUserMessage {
-  const fragments: string[] = [];
+function buildUserMessage(
+  input: ProviderSendTurnInput,
+  deps: { stateDir: string; fileSystem: FileSystem.FileSystem },
+): Effect.Effect<SDKUserMessage, ProviderAdapterRequestError> {
+  return Effect.gen(function* () {
+    const content: Array<
+      | { type: "text"; text: string }
+      | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+    > = [];
 
-  if (input.input && input.input.trim().length > 0) {
-    fragments.push(input.input.trim());
-  }
-
-  for (const attachment of input.attachments ?? []) {
-    if (attachment.type === "image") {
-      fragments.push(
-        `Attached image: ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes).`,
-      );
+    if (input.input && input.input.trim().length > 0) {
+      content.push({ type: "text", text: input.input.trim() });
     }
-  }
 
-  const text = fragments.join("\n\n");
+    for (const attachment of input.attachments ?? []) {
+      if (attachment.type === "image") {
+        const attachmentPath = resolveAttachmentPath({
+          stateDir: deps.stateDir,
+          attachment,
+        });
+        if (!attachmentPath) {
+          content.push({
+            type: "text",
+            text: `Attached image: ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes) — could not resolve file.`,
+          });
+          continue;
+        }
+        const bytes = yield* deps.fileSystem.readFile(attachmentPath).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProviderAdapterRequestError({
+                provider: PROVIDER,
+                method: "turn/start",
+                detail: `Failed to read attachment file: ${attachmentPath}`,
+                cause,
+              }),
+          ),
+        );
+        content.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: attachment.mimeType,
+            data: Buffer.from(bytes).toString("base64"),
+          },
+        });
+      }
+    }
 
-  return {
-    type: "user",
-    session_id: "",
-    parent_tool_use_id: null,
-    message: {
-      role: "user",
-      content: [{ type: "text", text }],
-    },
-  } as SDKUserMessage;
+    // Ensure at least one content block
+    if (content.length === 0) {
+      content.push({ type: "text", text: "" });
+    }
+
+    return {
+      type: "user",
+      session_id: "",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content,
+      },
+    } as SDKUserMessage;
+  });
 }
 
 function turnStatusFromResult(result: SDKResultMessage): ProviderRuntimeTurnStatus {
@@ -611,6 +652,9 @@ function sdkNativeItemId(message: SDKMessage): string | undefined {
 
 function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
   return Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const serverConfig = yield* Effect.service(ServerConfig);
+
     const nativeEventLogger =
       options?.nativeEventLogger ??
       (options?.nativeEventLogPath !== undefined
@@ -2182,7 +2226,10 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           },
         });
 
-        const message = buildUserMessage(input);
+        const message = yield* buildUserMessage(input, {
+          stateDir: serverConfig.stateDir,
+          fileSystem,
+        });
 
         yield* Queue.offer(context.promptQueue, {
           type: "message",

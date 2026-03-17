@@ -7,7 +7,9 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import { ApprovalRequestId, ThreadId } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Fiber, Random, Stream } from "effect";
+import { Effect, Fiber, FileSystem, Layer, Path, Random, Stream } from "effect";
+
+import { ServerConfig } from "../../config.ts";
 
 import { ProviderAdapterValidationError } from "../Errors.ts";
 import { ClaudeCodeAdapter } from "../Services/ClaudeCodeAdapter.ts";
@@ -109,7 +111,7 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
 }
 
 interface Harness {
-  readonly layer: ReturnType<typeof makeClaudeCodeAdapterLive>;
+  readonly layer: Layer.Layer<ClaudeCodeAdapter>;
   readonly query: FakeClaudeQuery;
   readonly getLastCreateQueryInput: () =>
     | {
@@ -148,8 +150,13 @@ function makeHarness(config?: {
       : {}),
   };
 
+  const testDepsLayer = Layer.mergeAll(
+    Layer.provide(ServerConfig.layerTest("/tmp/test-cwd", "/tmp/test-state"), Path.layer),
+    FileSystem.layerNoop({}),
+  );
+
   return {
-    layer: makeClaudeCodeAdapterLive(adapterOptions),
+    layer: Layer.provide(makeClaudeCodeAdapterLive(adapterOptions), testDepsLayer),
     query,
     getLastCreateQueryInput: () => createInput,
   };
