@@ -797,10 +797,7 @@ function HomePage() {
             <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/50">
               Clone Repository
             </h2>
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => void handleClone(e)}
-            >
+            <form className="flex gap-2" onSubmit={(e) => void handleClone(e)}>
               <div className="relative flex-1">
                 <input
                   type="text"
@@ -827,9 +824,7 @@ function HomePage() {
                 <span>{isCloning ? "Cloning..." : "Clone"}</span>
               </button>
             </form>
-            {cloneError && (
-              <p className="mt-1.5 text-[11px] text-destructive">{cloneError}</p>
-            )}
+            {cloneError && <p className="mt-1.5 text-[11px] text-destructive">{cloneError}</p>}
             <p className="mt-1.5 text-[11px] text-muted-foreground/50">
               Clones into{" "}
               <span className="font-mono text-muted-foreground/70">{workingDirectory}</span>
@@ -837,9 +832,7 @@ function HomePage() {
               <button
                 type="button"
                 className="underline underline-offset-2 hover:text-muted-foreground/90"
-                onClick={() =>
-                  void navigate({ to: "/settings" })
-                }
+                onClick={() => void navigate({ to: "/settings" })}
               >
                 change
               </button>

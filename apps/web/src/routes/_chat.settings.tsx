@@ -576,9 +576,7 @@ function SettingsRouteView() {
                     <Input
                       id="working-directory"
                       value={settings.workingDirectory}
-                      onChange={(event) =>
-                        updateSettings({ workingDirectory: event.target.value })
-                      }
+                      onChange={(event) => updateSettings({ workingDirectory: event.target.value })}
                       placeholder="~/dev"
                       spellCheck={false}
                     />
