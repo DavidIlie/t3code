@@ -1420,6 +1420,11 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return yield* git.initRepo(body);
       }
 
+      case WS_METHODS.gitClone: {
+        const body = stripRequestTag(request.body);
+        return yield* git.cloneRepo(body);
+      }
+
       case WS_METHODS.gitLog: {
         const body = stripRequestTag(request.body);
         return yield* git.log(body);

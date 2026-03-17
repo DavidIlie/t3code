@@ -69,6 +69,9 @@ const AppSettingsSchema = Schema.Struct({
   commitMessageInstructions: Schema.String.pipe(
     Schema.withConstructorDefault(() => Option.some("")),
   ),
+  workingDirectory: Schema.String.check(Schema.isMaxLength(4096)).pipe(
+    Schema.withConstructorDefault(() => Option.some("")),
+  ),
 });
 export type AppSettings = typeof AppSettingsSchema.Type;
 export type TimestampFormat = AppSettings["timestampFormat"];

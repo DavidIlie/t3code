@@ -1387,6 +1387,33 @@ const makeGitCore = Effect.gen(function* () {
       fallbackErrorMessage: "git init failed",
     }).pipe(Effect.asVoid);
 
+  const cloneRepo: GitCoreShape["cloneRepo"] = (input) =>
+    Effect.gen(function* () {
+      const args = ["clone", input.url];
+      if (input.directoryName) {
+        args.push(input.directoryName);
+      }
+      yield* executeGit("GitCore.cloneRepo", input.cwd, args, {
+        timeoutMs: 300_000,
+        fallbackErrorMessage: "git clone failed",
+      });
+
+      // Derive the repo directory name from the URL or explicit directoryName
+      const repoName =
+        input.directoryName ??
+        input.url
+          .replace(/\.git$/, "")
+          .replace(/\/$/, "")
+          .split(/[/:]/)
+          .pop() ??
+        "repo";
+
+      return {
+        path: path.join(input.cwd, repoName),
+        repoName,
+      };
+    });
+
   const listLocalBranchNames: GitCoreShape["listLocalBranchNames"] = (cwd) =>
     runGitStdout("GitCore.listLocalBranchNames", cwd, [
       "branch",
@@ -1507,6 +1534,7 @@ const makeGitCore = Effect.gen(function* () {
     createBranch,
     checkoutBranch,
     initRepo,
+    cloneRepo,
     listLocalBranchNames,
     log,
     showCommitDiff,

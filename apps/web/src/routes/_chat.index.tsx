@@ -13,7 +13,9 @@ import {
   BotIcon,
   FolderIcon,
   FolderOpenIcon,
+  GitBranchIcon,
   HomeIcon,
+  LoaderIcon,
   LockIcon,
   LockOpenIcon,
   MonitorIcon,
@@ -23,7 +25,7 @@ import {
 
 import { ProjectFavicon } from "../components/Sidebar";
 import { isElectron } from "../env";
-import { readNativeApi } from "../nativeApi";
+import { ensureNativeApi, readNativeApi } from "../nativeApi";
 import { useStore } from "../store";
 import { useComposerDraftStore, type ComposerImageAttachment } from "../composerDraftStore";
 import { useAppSettings } from "../appSettings";
@@ -131,6 +133,9 @@ function HomePage() {
     useState<ProviderInteractionMode>(DEFAULT_INTERACTION_MODE);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [cloneUrl, setCloneUrl] = useState("");
+  const [isCloning, setIsCloning] = useState(false);
+  const [cloneError, setCloneError] = useState<string | null>(null);
 
   const setProjectDraftThreadId = useComposerDraftStore((s) => s.setProjectDraftThreadId);
   const setComposerPrompt = useComposerDraftStore((s) => s.setPrompt);
@@ -488,6 +493,42 @@ function HomePage() {
     });
   }, [homeProject, navigate, setProjectDraftThreadId]);
 
+  const workingDirectory = settings.workingDirectory || "~";
+
+  const handleClone = useCallback(
+    async (e?: { preventDefault: () => void }) => {
+      e?.preventDefault();
+      const trimmedUrl = cloneUrl.trim();
+      if (!trimmedUrl || isCloning) return;
+
+      setIsCloning(true);
+      setCloneError(null);
+
+      try {
+        const api = ensureNativeApi();
+        const result = await api.git.clone({
+          url: trimmedUrl,
+          cwd: workingDirectory,
+        });
+
+        // Create a project for the cloned repo
+        const projectId = await findOrCreateProject(result.path);
+        if (projectId) {
+          setCloneUrl("");
+          await navigate({
+            to: "/project/$projectId",
+            params: { projectId },
+          });
+        }
+      } catch (err) {
+        setCloneError(err instanceof Error ? err.message : "Clone failed");
+      } finally {
+        setIsCloning(false);
+      }
+    },
+    [cloneUrl, isCloning, workingDirectory, findOrCreateProject, navigate],
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (menuOpen) {
@@ -750,6 +791,60 @@ function HomePage() {
               </div>
             </div>
           )}
+
+          {/* Clone repository */}
+          <div>
+            <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/50">
+              Clone Repository
+            </h2>
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => void handleClone(e)}
+            >
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-border bg-secondary px-3 py-2 pr-8 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-ring focus:outline-none"
+                  placeholder="https://github.com/user/repo.git"
+                  value={cloneUrl}
+                  onChange={(e) => {
+                    setCloneUrl(e.target.value);
+                    setCloneError(null);
+                  }}
+                  disabled={isCloning}
+                  spellCheck={false}
+                />
+                {isCloning && (
+                  <LoaderIcon className="absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground/60" />
+                )}
+              </div>
+              <button
+                type="submit"
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-2 text-xs text-foreground transition-colors hover:bg-accent disabled:opacity-40"
+                disabled={!cloneUrl.trim() || isCloning}
+              >
+                <GitBranchIcon className="size-3.5" />
+                <span>{isCloning ? "Cloning..." : "Clone"}</span>
+              </button>
+            </form>
+            {cloneError && (
+              <p className="mt-1.5 text-[11px] text-destructive">{cloneError}</p>
+            )}
+            <p className="mt-1.5 text-[11px] text-muted-foreground/50">
+              Clones into{" "}
+              <span className="font-mono text-muted-foreground/70">{workingDirectory}</span>
+              {" \u2014 "}
+              <button
+                type="button"
+                className="underline underline-offset-2 hover:text-muted-foreground/90"
+                onClick={() =>
+                  void navigate({ to: "/settings" })
+                }
+              >
+                change
+              </button>
+            </p>
+          </div>
 
           {/* Recent threads */}
           {recentThreads.length > 0 && (

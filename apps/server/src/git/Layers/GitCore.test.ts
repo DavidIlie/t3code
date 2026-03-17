@@ -89,6 +89,7 @@ const makeIsolatedGitCore = (gitService: GitServiceShape) =>
       createBranch: (input) => core.createBranch(input),
       checkoutBranch: (input) => core.checkoutBranch(input),
       initRepo: (input) => core.initRepo(input),
+      cloneRepo: (input) => core.cloneRepo(input),
       listLocalBranchNames: (cwd) => core.listLocalBranchNames(cwd),
       log: (input) => core.log(input),
       showCommitDiff: (input) => core.showCommitDiff(input),

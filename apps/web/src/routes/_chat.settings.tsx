@@ -339,6 +339,7 @@ function ShellCommandSection() {
 
 /** Searchable section keywords -- lowercase. */
 const SECTION_SEARCH_DATA: Record<string, string[]> = {
+  workspace: ["workspace", "working directory", "clone", "directory", "folder", "home", "dev"],
   appearance: ["appearance", "theme", "light", "dark", "system", "timestamp", "format"],
   usage: ["usage", "sidebar", "bars", "rate limit", "tiers"],
   codex: ["codex", "binary", "path", "home", "app server"],
@@ -559,6 +560,36 @@ function SettingsRouteView() {
                 )}
               </div>
             </header>
+
+            {show.workspace && (
+              <section className="rounded-2xl border border-border bg-card p-5">
+                <div className="mb-4">
+                  <h2 className="text-sm font-medium text-foreground">Workspace</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Set a default working directory for cloning and creating new projects.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <label htmlFor="working-directory" className="block space-y-1">
+                    <span className="text-xs font-medium text-foreground">Working directory</span>
+                    <Input
+                      id="working-directory"
+                      value={settings.workingDirectory}
+                      onChange={(event) =>
+                        updateSettings({ workingDirectory: event.target.value })
+                      }
+                      placeholder="~/dev"
+                      spellCheck={false}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      New repos cloned from the home page will be placed here. Leave blank to use
+                      your home directory.
+                    </span>
+                  </label>
+                </div>
+              </section>
+            )}
 
             {show.appearance && (
               <section className="rounded-2xl border border-border bg-card p-5">
