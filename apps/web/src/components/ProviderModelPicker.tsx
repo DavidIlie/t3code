@@ -1,6 +1,10 @@
 import { memo, useState } from "react";
 import type { ModelSlug, ProviderKind } from "@t3tools/contracts";
-import { normalizeModelSlug } from "@t3tools/shared/model";
+import {
+  getCursorModelFamilyOptions,
+  normalizeModelSlug,
+  parseCursorModelSelection,
+} from "@t3tools/shared/model";
 import { ChevronDownIcon } from "lucide-react";
 
 import { getAppModelOptions } from "../appSettings";
@@ -42,16 +46,25 @@ const COMING_SOON_PROVIDER_OPTIONS = [
 export function getCustomModelOptionsByProvider(settings: {
   customCodexModels: readonly string[];
   customClaudeModels: readonly string[];
+  customCursorModels: readonly string[];
 }): Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>> {
+  const cursorFamilyOptions = getCursorModelFamilyOptions();
   return {
     codex: getAppModelOptions("codex", settings.customCodexModels),
-    claudeAgent: getAppModelOptions("claudeAgent", settings.customClaudeModels),
+    claudeCode: getAppModelOptions("claudeCode", settings.customClaudeModels),
+    cursor: [
+      ...cursorFamilyOptions,
+      ...getAppModelOptions("cursor", settings.customCursorModels).filter(
+        (option) =>
+          option.isCustom && !cursorFamilyOptions.some((family) => family.slug === option.slug),
+      ),
+    ],
   };
 }
 
 export const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   codex: OpenAI,
-  claudeAgent: ClaudeAI,
+  claudeCode: ClaudeAI,
   cursor: CursorIcon,
 };
 
@@ -83,6 +96,10 @@ export function resolveModelForProviderPicker(
   const resolved = options.find((option) => option.slug === normalized);
   if (resolved) {
     return resolved.slug;
+  }
+
+  if (provider === "cursor") {
+    return parseCursorModelSelection(normalized).family;
   }
 
   return null;
@@ -136,7 +153,7 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             aria-hidden="true"
             className={cn(
               "size-4 shrink-0",
-              props.provider === "claudeAgent" ? "" : "text-muted-foreground/70",
+              props.provider === "claudeCode" ? "" : "text-muted-foreground/70",
             )}
           />
           <span className="truncate">{selectedModelLabel}</span>
@@ -199,7 +216,7 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 aria-hidden="true"
                 className={cn(
                   "size-4 shrink-0 opacity-80",
-                  option.value === "claudeAgent" ? "" : "text-muted-foreground/85",
+                  option.value === "claudeCode" ? "" : "text-muted-foreground/85",
                 )}
               />
               <span>{option.label}</span>

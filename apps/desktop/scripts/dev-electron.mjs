@@ -85,8 +85,7 @@ function startApp() {
       currentApp = null;
     }
 
-    const exitedAbnormally = signal !== null || code !== 0;
-    if (!shuttingDown && !expectedExits.has(app) && exitedAbnormally) {
+    if (!shuttingDown && !expectedExits.has(app) && (code !== 0 || signal !== null)) {
       scheduleRestart();
     }
   });

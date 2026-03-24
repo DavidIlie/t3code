@@ -1,60 +1,56 @@
 import { type MessageId, type TurnId } from "@t3tools/contracts";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   measureElement as measureVirtualElement,
   type VirtualItem,
   useVirtualizer,
 } from "@tanstack/react-virtual";
-import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
+import { deriveTimelineEntries, formatElapsed, type WorkLogEntry } from "../../session-logic";
+import { type TimestampFormat } from "../../appSettings";
+import { formatTimestamp } from "../../timestampFormat";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../chat-scroll";
 import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
-  CheckIcon,
-  CircleAlertIcon,
-  EyeIcon,
-  GlobeIcon,
-  HammerIcon,
-  type LucideIcon,
-  SquarePenIcon,
-  TerminalIcon,
+  BrainIcon,
+  CheckCircleIcon,
+  ChevronRightIcon,
   Undo2Icon,
-  WrenchIcon,
-  ZapIcon,
+  XCircleIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { clamp } from "effect/Number";
 import { estimateTimelineMessageHeight } from "../timelineHeight";
-import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
+import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
+import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "../ui/collapsible";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesTree } from "./ChangedFilesTree";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { MessageCopyButton } from "./MessageCopyButton";
-import { computeMessageDurationStart, normalizeCompactToolLabel } from "./MessagesTimeline.logic";
-import { TerminalContextInlineChip } from "./TerminalContextInlineChip";
-import {
-  deriveDisplayedUserMessageState,
-  type ParsedTerminalContextEntry,
-} from "~/lib/terminalContext";
-import { cn } from "~/lib/utils";
-import { type TimestampFormat } from "../../appSettings";
-import { formatTimestamp } from "../../timestampFormat";
-import {
-  buildInlineTerminalContextText,
-  formatInlineTerminalContextLabel,
-  textContainsInlineTerminalContextLabels,
-} from "./userMessageTerminalContexts";
+import { computeMessageDurationStart } from "./MessagesTimeline.logic";
+import { extractTrailingDiffContextComments } from "../../lib/diffContextComments";
+import { DiffContextCommentsAttachment } from "./DiffContextCommentsAttachment";
+
+function ThinkingBlock({ thinking, streaming }: { thinking: string; streaming?: boolean }) {
+  return (
+    <Collapsible defaultOpen={streaming}>
+      <CollapsibleTrigger className="flex items-center gap-2 py-1.5 text-[11px] text-muted-foreground/50">
+        <BrainIcon className="size-3.5" />
+        <span className="italic">{streaming ? "Thinking..." : "Thinking"}</span>
+        <ChevronRightIcon className="size-3 transition-transform duration-200 [[data-panel-open]_&]:rotate-90" />
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <div className="border-l-2 border-muted-foreground/15 py-1 pl-3">
+          <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-muted-foreground/40">
+            {thinking}
+          </pre>
+        </div>
+      </CollapsiblePanel>
+    </Collapsible>
+  );
+}
 
 const MAX_VISIBLE_WORK_LOG_ENTRIES = 6;
 const ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
@@ -79,8 +75,9 @@ interface MessagesTimelineProps {
   onImageExpand: (preview: ExpandedImagePreview) => void;
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
-  timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  timestampFormat: TimestampFormat;
+  interactionMode: "default" | "plan";
 }
 
 export const MessagesTimeline = memo(function MessagesTimeline({
@@ -103,8 +100,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onImageExpand,
   markdownCwd,
   resolvedTheme,
-  timestampFormat,
   workspaceRoot,
+  timestampFormat,
+  interactionMode,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
   const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);
@@ -140,11 +138,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
     );
 
+    // Group consecutive work entries into a single card. When a non-work entry
+    // (message, proposed-plan) appears, it breaks the group and starts a new one.
     for (let index = 0; index < timelineEntries.length; index += 1) {
       const timelineEntry = timelineEntries[index];
-      if (!timelineEntry) {
-        continue;
-      }
+      if (!timelineEntry) continue;
 
       if (timelineEntry.kind === "work") {
         const groupedEntries = [timelineEntry.entry];
@@ -155,13 +153,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           groupedEntries.push(nextEntry.entry);
           cursor += 1;
         }
+        index = cursor - 1;
         nextRows.push({
           kind: "work",
           id: timelineEntry.id,
           createdAt: timelineEntry.createdAt,
           groupedEntries,
         });
-        index = cursor - 1;
         continue;
       }
 
@@ -314,40 +312,44 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         (() => {
           const groupId = row.id;
           const groupedEntries = row.groupedEntries;
+          const segments = buildWorkSegments(groupedEntries);
           const isExpanded = expandedWorkGroups[groupId] ?? false;
-          const hasOverflow = groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
-          const visibleEntries =
-            hasOverflow && !isExpanded
-              ? groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
-              : groupedEntries;
-          const hiddenCount = groupedEntries.length - visibleEntries.length;
-          const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
-          const showHeader = hasOverflow || !onlyToolEntries;
-          const groupLabel = onlyToolEntries ? "Tool calls" : "Work log";
+          const hasOverflow = segments.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
+          const visibleSegments =
+            hasOverflow && !isExpanded ? segments.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES) : segments;
+          const hiddenCount = segments.length - visibleSegments.length;
+          const hasAgentTasks = segments.some((s) => s.kind === "agent-task");
+          const onlyToolEntries =
+            !hasAgentTasks && groupedEntries.every((entry) => entry.tone === "tool");
+          const groupLabel = hasAgentTasks
+            ? groupedEntries.length === 1
+              ? "Work event"
+              : `Work log (${groupedEntries.length})`
+            : onlyToolEntries
+              ? groupedEntries.length === 1
+                ? "Tool call"
+                : `Tool calls (${groupedEntries.length})`
+              : groupedEntries.length === 1
+                ? "Work event"
+                : `Work log (${groupedEntries.length})`;
 
           return (
-            <div className="rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
-              {showHeader && (
-                <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-                  <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55">
-                    {groupLabel} ({groupedEntries.length})
-                  </p>
-                  {hasOverflow && (
-                    <button
-                      type="button"
-                      className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
-                      onClick={() => onToggleWorkGroup(groupId)}
-                    >
-                      {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
-                    </button>
-                  )}
-                </div>
-              )}
-              <div className="space-y-0.5">
-                {visibleEntries.map((workEntry) => (
-                  <SimpleWorkEntryRow key={`work-row:${workEntry.id}`} workEntry={workEntry} />
-                ))}
+            <div className="rounded-lg border border-border/80 bg-card/45 px-3 py-2">
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/65">
+                  {groupLabel}
+                </p>
+                {hasOverflow && (
+                  <button
+                    type="button"
+                    className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/55 transition-colors duration-150 hover:text-muted-foreground/80"
+                    onClick={() => onToggleWorkGroup(groupId)}
+                  >
+                    {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
+                  </button>
+                )}
               </div>
+              <div className="space-y-1">{renderWorkSegments(visibleSegments)}</div>
             </div>
           );
         })()}
@@ -356,8 +358,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         row.message.role === "user" &&
         (() => {
           const userImages = row.message.attachments ?? [];
-          const displayedUserMessage = deriveDisplayedUserMessageState(row.message.text);
-          const terminalContexts = displayedUserMessage.contexts;
           const canRevertAgentWork = revertTurnCountByUserMessageId.has(row.message.id);
           return (
             <div className="flex justify-end">
@@ -399,18 +399,28 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                     )}
                   </div>
                 )}
-                {(displayedUserMessage.visibleText.trim().length > 0 ||
-                  terminalContexts.length > 0) && (
-                  <UserMessageBody
-                    text={displayedUserMessage.visibleText}
-                    terminalContexts={terminalContexts}
-                  />
-                )}
+                {row.message.text &&
+                  (() => {
+                    const extracted = extractTrailingDiffContextComments(row.message.text);
+                    return (
+                      <>
+                        <pre className="whitespace-pre-wrap wrap-break-word font-mono text-sm leading-relaxed text-foreground">
+                          {extracted.promptText}
+                        </pre>
+                        {extracted.commentCount > 0 && (
+                          <div className="mt-2">
+                            <DiffContextCommentsAttachment
+                              commentCount={extracted.commentCount}
+                              previewTitle={extracted.previewTitle}
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 <div className="mt-1.5 flex items-center justify-end gap-2">
                   <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
-                    {displayedUserMessage.copyText && (
-                      <MessageCopyButton text={displayedUserMessage.copyText} />
-                    )}
+                    {row.message.text && <MessageCopyButton text={row.message.text} />}
                     {canRevertAgentWork && (
                       <Button
                         type="button"
@@ -436,6 +446,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       {row.kind === "message" &&
         row.message.role === "assistant" &&
         (() => {
+          const isEmpty = !row.message.text && !row.message.reasoning && !row.message.streaming;
+          // Skip empty assistant messages entirely (e.g. after plan-only turns)
+          if (isEmpty) return null;
           const messageText = row.message.text || (row.message.streaming ? "" : "(empty response)");
           return (
             <>
@@ -449,6 +462,12 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                 </div>
               )}
               <div className="min-w-0 px-1 py-0.5">
+                {row.message.reasoning && (
+                  <ThinkingBlock
+                    thinking={row.message.reasoning}
+                    streaming={row.message.streaming && !messageText}
+                  />
+                )}
                 <ChatMarkdown
                   text={messageText}
                   cwd={markdownCwd}
@@ -544,8 +563,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             </span>
             <span>
               {row.createdAt
-                ? `Working for ${formatWorkingTimer(row.createdAt, nowIso) ?? "0s"}`
-                : "Working..."}
+                ? `${interactionMode === "plan" ? "Planning" : "Working"} for ${formatWorkingTimer(row.createdAt, nowIso) ?? "0s"}`
+                : interactionMode === "plan"
+                  ? "Planning..."
+                  : "Working..."}
             </span>
           </div>
         </div>
@@ -655,142 +676,46 @@ function formatWorkingTimer(startIso: string, endIso: string): string | null {
 function formatMessageMeta(
   createdAt: string,
   duration: string | null,
-  timestampFormat: TimestampFormat,
+  tsFormat: TimestampFormat,
 ): string {
-  if (!duration) return formatTimestamp(createdAt, timestampFormat);
-  return `${formatTimestamp(createdAt, timestampFormat)} • ${duration}`;
+  if (!duration) return formatTimestamp(createdAt, tsFormat);
+  return `${formatTimestamp(createdAt, tsFormat)} • ${duration}`;
 }
 
-const UserMessageTerminalContextInlineLabel = memo(
-  function UserMessageTerminalContextInlineLabel(props: { context: ParsedTerminalContextEntry }) {
-    const tooltipText =
-      props.context.body.length > 0
-        ? `${props.context.header}\n${props.context.body}`
-        : props.context.header;
-
-    return <TerminalContextInlineChip label={props.context.header} tooltipText={tooltipText} />;
-  },
-);
-
-const UserMessageBody = memo(function UserMessageBody(props: {
-  text: string;
-  terminalContexts: ParsedTerminalContextEntry[];
-}) {
-  if (props.terminalContexts.length > 0) {
-    const hasEmbeddedInlineLabels = textContainsInlineTerminalContextLabels(
-      props.text,
-      props.terminalContexts,
-    );
-    const inlinePrefix = buildInlineTerminalContextText(props.terminalContexts);
-    const inlineNodes: ReactNode[] = [];
-
-    if (hasEmbeddedInlineLabels) {
-      let cursor = 0;
-
-      for (const context of props.terminalContexts) {
-        const label = formatInlineTerminalContextLabel(context.header);
-        const matchIndex = props.text.indexOf(label, cursor);
-        if (matchIndex === -1) {
-          inlineNodes.length = 0;
-          break;
-        }
-        if (matchIndex > cursor) {
-          inlineNodes.push(
-            <span key={`user-terminal-context-inline-before:${context.header}:${cursor}`}>
-              {props.text.slice(cursor, matchIndex)}
-            </span>,
-          );
-        }
-        inlineNodes.push(
-          <UserMessageTerminalContextInlineLabel
-            key={`user-terminal-context-inline:${context.header}`}
-            context={context}
-          />,
-        );
-        cursor = matchIndex + label.length;
+/**
+ * Parses tool detail strings like `Skill: {"skill":"simplify"}` or
+ * `Agent: {"description":"Code review","prompt":"..."}` into human-readable text.
+ * Falls through to the raw string for unrecognized patterns.
+ */
+function formatToolDetail(detail: string): string {
+  // Skill: {"skill":"simplify","args":"--fix"}
+  const skillMatch = detail.match(/^Skill:\s*(\{.+\})$/);
+  if (skillMatch?.[1]) {
+    try {
+      const parsed = JSON.parse(skillMatch[1]) as Record<string, unknown>;
+      const skill = typeof parsed.skill === "string" ? parsed.skill : null;
+      if (skill) {
+        const args = typeof parsed.args === "string" ? parsed.args.trim() : null;
+        return args ? `/${skill} ${args}` : `/${skill}`;
       }
-
-      if (inlineNodes.length > 0) {
-        if (cursor < props.text.length) {
-          inlineNodes.push(
-            <span key={`user-message-terminal-context-inline-rest:${cursor}`}>
-              {props.text.slice(cursor)}
-            </span>,
-          );
-        }
-
-        return (
-          <div className="wrap-break-word whitespace-pre-wrap font-mono text-sm leading-relaxed text-foreground">
-            {inlineNodes}
-          </div>
-        );
-      }
+    } catch {
+      /* fall through */
     }
+  }
 
-    for (const context of props.terminalContexts) {
-      inlineNodes.push(
-        <UserMessageTerminalContextInlineLabel
-          key={`user-terminal-context-inline:${context.header}`}
-          context={context}
-        />,
-      );
-      inlineNodes.push(
-        <span key={`user-terminal-context-inline-space:${context.header}`} aria-hidden="true">
-          {" "}
-        </span>,
-      );
+  // Agent: {"description":"Code review","prompt":"..."}
+  const agentMatch = detail.match(/^Agent:\s*(\{.+\})$/);
+  if (agentMatch?.[1]) {
+    try {
+      const parsed = JSON.parse(agentMatch[1]) as Record<string, unknown>;
+      const desc = typeof parsed.description === "string" ? parsed.description.trim() : null;
+      if (desc) return desc;
+    } catch {
+      /* fall through */
     }
-
-    if (props.text.length > 0) {
-      inlineNodes.push(<span key="user-message-terminal-context-inline-text">{props.text}</span>);
-    } else if (inlinePrefix.length === 0) {
-      return null;
-    }
-
-    return (
-      <div className="wrap-break-word whitespace-pre-wrap font-mono text-sm leading-relaxed text-foreground">
-        {inlineNodes}
-      </div>
-    );
   }
 
-  if (props.text.length === 0) {
-    return null;
-  }
-
-  return (
-    <pre className="whitespace-pre-wrap wrap-break-word font-mono text-sm leading-relaxed text-foreground">
-      {props.text}
-    </pre>
-  );
-});
-
-function workToneIcon(tone: TimelineWorkEntry["tone"]): {
-  icon: LucideIcon;
-  className: string;
-} {
-  if (tone === "error") {
-    return {
-      icon: CircleAlertIcon,
-      className: "text-foreground/92",
-    };
-  }
-  if (tone === "thinking") {
-    return {
-      icon: BotIcon,
-      className: "text-foreground/92",
-    };
-  }
-  if (tone === "info") {
-    return {
-      icon: CheckIcon,
-      className: "text-foreground/92",
-    };
-  }
-  return {
-    icon: ZapIcon,
-    className: "text-foreground/92",
-  };
+  return detail;
 }
 
 function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {
@@ -800,113 +725,194 @@ function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {
   return "text-muted-foreground/40";
 }
 
-function workEntryPreview(
-  workEntry: Pick<TimelineWorkEntry, "detail" | "command" | "changedFiles">,
-) {
-  if (workEntry.command) return workEntry.command;
-  if (workEntry.detail) return workEntry.detail;
-  if ((workEntry.changedFiles?.length ?? 0) === 0) return null;
-  const [firstPath] = workEntry.changedFiles ?? [];
-  if (!firstPath) return null;
-  return workEntry.changedFiles!.length === 1
-    ? firstPath
-    : `${firstPath} +${workEntry.changedFiles!.length - 1} more`;
+// ── Agent task nesting ──────────────────────────────────────────
+
+interface AgentTaskGroup {
+  taskId: string;
+  label: string;
+  detail: string | undefined;
+  status: string | undefined;
+  children: WorkLogEntry[];
 }
 
-function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
-  if (workEntry.requestKind === "command") return TerminalIcon;
-  if (workEntry.requestKind === "file-read") return EyeIcon;
-  if (workEntry.requestKind === "file-change") return SquarePenIcon;
+type WorkSegment =
+  | { kind: "entry"; entry: WorkLogEntry }
+  | { kind: "agent-task"; group: AgentTaskGroup };
 
-  if (workEntry.itemType === "command_execution" || workEntry.command) {
-    return TerminalIcon;
-  }
-  if (workEntry.itemType === "file_change" || (workEntry.changedFiles?.length ?? 0) > 0) {
-    return SquarePenIcon;
-  }
-  if (workEntry.itemType === "web_search") return GlobeIcon;
-  if (workEntry.itemType === "image_view") return EyeIcon;
+/**
+ * Parses a flat list of work entries into segments, grouping entries between
+ * task.started and task.completed into nested agent task groups.
+ */
+function buildWorkSegments(entries: ReadonlyArray<WorkLogEntry>): WorkSegment[] {
+  const segments: WorkSegment[] = [];
+  const openTasks = new Map<string, AgentTaskGroup>();
 
-  switch (workEntry.itemType) {
-    case "mcp_tool_call":
-      return WrenchIcon;
-    case "dynamic_tool_call":
-    case "collab_agent_tool_call":
-      return HammerIcon;
+  for (const entry of entries) {
+    if (entry.agentTaskKind === "started" && entry.agentTaskId) {
+      const group: AgentTaskGroup = {
+        taskId: entry.agentTaskId,
+        label: entry.label,
+        detail: entry.detail,
+        status: undefined,
+        children: [],
+      };
+      openTasks.set(entry.agentTaskId, group);
+      segments.push({ kind: "agent-task", group });
+      continue;
+    }
+
+    if (entry.agentTaskKind === "completed" && entry.agentTaskId) {
+      const group = openTasks.get(entry.agentTaskId);
+      if (group) {
+        group.status = entry.agentTaskStatus ?? "completed";
+        openTasks.delete(entry.agentTaskId);
+      }
+      continue;
+    }
+
+    // Route child entries to their specific parent task by agentTaskId,
+    // not just the most recently opened one (fixes parallel agent nesting).
+    if (entry.agentTaskId && openTasks.has(entry.agentTaskId)) {
+      openTasks.get(entry.agentTaskId)!.children.push(entry);
+      continue;
+    }
+
+    // Fallback: if there's exactly one open task, nest under it.
+    if (openTasks.size === 1) {
+      const onlyTask = openTasks.values().next().value;
+      if (onlyTask) {
+        onlyTask.children.push(entry);
+        continue;
+      }
+    }
+
+    segments.push({ kind: "entry", entry });
   }
 
-  return workToneIcon(workEntry.tone).icon;
+  return segments;
 }
 
-function capitalizePhrase(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) {
-    return value;
-  }
-  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
-}
-
-function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
-  if (!workEntry.toolTitle) {
-    return capitalizePhrase(normalizeCompactToolLabel(workEntry.label));
-  }
-  return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
-}
-
-const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
-  workEntry: TimelineWorkEntry;
-}) {
-  const { workEntry } = props;
-  const iconConfig = workToneIcon(workEntry.tone);
-  const EntryIcon = workEntryIcon(workEntry);
-  const heading = toolWorkEntryHeading(workEntry);
-  const preview = workEntryPreview(workEntry);
-  const displayText = preview ? `${heading} - ${preview}` : heading;
-  const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
-  const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
-
-  return (
-    <div className="rounded-lg px-1 py-1">
-      <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
-        <span
-          className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
-        >
-          <EntryIcon className="size-3" />
-        </span>
-        <div className="min-w-0 flex-1 overflow-hidden">
-          <p
-            className={cn(
-              "truncate text-[11px] leading-5",
-              workToneClass(workEntry.tone),
-              preview ? "text-muted-foreground/70" : "",
-            )}
-            title={displayText}
-          >
-            <span className={cn("text-foreground/80", workToneClass(workEntry.tone))}>
-              {heading}
-            </span>
-            {preview && <span className="text-muted-foreground/55"> - {preview}</span>}
-          </p>
-        </div>
-      </div>
-      {hasChangedFiles && !previewIsChangedFiles && (
-        <div className="mt-1 flex flex-wrap gap-1 pl-6">
-          {workEntry.changedFiles?.slice(0, 4).map((filePath) => (
-            <span
-              key={`${workEntry.id}:${filePath}`}
-              className="rounded-md border border-border/55 bg-background/75 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/75"
-              title={filePath}
-            >
-              {filePath}
-            </span>
+/**
+ * Renders work segments, grouping consecutive agent-task segments into a
+ * responsive grid so parallel agents don't stack vertically.
+ */
+function renderWorkSegments(segments: WorkSegment[]): React.ReactNode[] {
+  const result: React.ReactNode[] = [];
+  let i = 0;
+  while (i < segments.length) {
+    const segment = segments[i]!;
+    if (segment.kind === "entry") {
+      result.push(<WorkEntryRow key={segment.entry.id} entry={segment.entry} />);
+      i++;
+      continue;
+    }
+    // Collect consecutive agent-task segments.
+    const run: AgentTaskGroup[] = [segment.group];
+    let j = i + 1;
+    while (j < segments.length && segments[j]!.kind === "agent-task") {
+      run.push((segments[j] as { kind: "agent-task"; group: AgentTaskGroup }).group);
+      j++;
+    }
+    if (run.length === 1) {
+      result.push(<AgentTaskCard key={run[0]!.taskId} group={run[0]!} />);
+    } else {
+      result.push(
+        <div key={`agent-grid-${run[0]!.taskId}`} className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+          {run.map((group) => (
+            <AgentTaskCard key={group.taskId} group={group} />
           ))}
-          {(workEntry.changedFiles?.length ?? 0) > 4 && (
-            <span className="px-1 text-[10px] text-muted-foreground/55">
-              +{(workEntry.changedFiles?.length ?? 0) - 4}
-            </span>
-          )}
-        </div>
-      )}
+        </div>,
+      );
+    }
+    i = j;
+  }
+  return result;
+}
+
+function WorkEntryRow({ entry }: { entry: WorkLogEntry }) {
+  return (
+    <div className="flex items-start gap-2 py-0.5">
+      <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/30" />
+      <div className="min-w-0 flex-1 py-[2px]">
+        <p className={`text-[11px] leading-relaxed ${workToneClass(entry.tone)}`}>{entry.label}</p>
+        {entry.command && (
+          <pre className="mt-1 overflow-x-auto rounded-md border border-border/70 bg-background/80 px-2 py-1 font-mono text-[11px] leading-relaxed text-foreground/80">
+            {entry.command}
+          </pre>
+        )}
+        {entry.changedFiles && entry.changedFiles.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {entry.changedFiles.slice(0, 6).map((filePath) => (
+              <span
+                key={`${entry.id}:${filePath}`}
+                className="rounded-md border border-border/70 bg-background/65 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/85"
+                title={filePath}
+              >
+                {filePath}
+              </span>
+            ))}
+            {entry.changedFiles.length > 6 && (
+              <span className="px-1 text-[10px] text-muted-foreground/65">
+                +{entry.changedFiles.length - 6} more
+              </span>
+            )}
+          </div>
+        )}
+        {entry.detail && (!entry.command || entry.detail !== entry.command) && (
+          <p
+            className="mt-1 text-[11px] leading-relaxed text-muted-foreground/75"
+            title={entry.detail}
+          >
+            {formatToolDetail(entry.detail)}
+          </p>
+        )}
+      </div>
     </div>
   );
-});
+}
+
+function AgentTaskCard({ group }: { group: AgentTaskGroup }) {
+  const statusIcon =
+    group.status === "failed" ? (
+      <XCircleIcon className="size-3 text-rose-400/70" />
+    ) : group.status ? (
+      <CheckCircleIcon className="size-3 text-emerald-400/60" />
+    ) : null;
+  const statusLabel =
+    group.status === "failed"
+      ? "Failed"
+      : group.status === "stopped"
+        ? "Stopped"
+        : group.status
+          ? "Done"
+          : "Running...";
+
+  return (
+    <Collapsible defaultOpen={!group.status}>
+      <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-muted/40">
+        <BotIcon className="size-3.5 shrink-0 text-indigo-400/70" />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground/70">
+          {group.detail ? formatToolDetail(group.detail) : group.label}
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+          {statusIcon}
+          {statusLabel}
+        </span>
+        <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/40 transition-transform duration-200 [[data-panel-open]_&]:rotate-90" />
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <div className="ml-2 border-l-2 border-indigo-400/20 pl-2">
+          <div className="space-y-0.5">
+            {group.children.length > 0 ? (
+              group.children.map((child) => <WorkEntryRow key={child.id} entry={child} />)
+            ) : (
+              <p className="py-1 text-[10px] italic text-muted-foreground/40">
+                {group.status ? "No recorded actions" : "Working..."}
+              </p>
+            )}
+          </div>
+        </div>
+      </CollapsiblePanel>
+    </Collapsible>
+  );
+}

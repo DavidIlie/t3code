@@ -157,12 +157,13 @@ const validationLayer = it.layer(
 );
 
 validationLayer("CodexAdapterLive validation", (it) => {
-  it.effect("returns validation error for non-codex provider on startSession", () =>
+  it.effect("rejects startSession when provider does not match adapter", () =>
     Effect.gen(function* () {
+      validationManager.startSessionImpl.mockClear();
       const adapter = yield* CodexAdapter;
       const result = yield* adapter
         .startSession({
-          provider: "claudeAgent",
+          provider: "claudeCode",
           threadId: asThreadId("thread-1"),
           runtimeMode: "full-access",
         })
@@ -174,12 +175,13 @@ validationLayer("CodexAdapterLive validation", (it) => {
         new ProviderAdapterValidationError({
           provider: "codex",
           operation: "startSession",
-          issue: "Expected provider 'codex' but received 'claudeAgent'.",
+          issue: "Expected provider 'codex' but received 'claudeCode'.",
         }),
       );
       assert.equal(validationManager.startSessionImpl.mock.calls.length, 0);
     }),
   );
+
   it.effect("maps codex model options before starting a session", () =>
     Effect.gen(function* () {
       validationManager.startSessionImpl.mockClear();
@@ -797,45 +799,6 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         assert.equal(events[4].turnId, "turn-structured-1");
         assert.equal(events[4].payload.planMarkdown, "# Ship it");
       }
-    }),
-  );
-
-  it.effect("prefers manager-assigned turn ids for Codex task events", () =>
-    Effect.gen(function* () {
-      const adapter = yield* CodexAdapter;
-      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
-
-      lifecycleManager.emit("event", {
-        id: asEventId("evt-codex-task-started-parent-turn"),
-        kind: "notification",
-        provider: "codex",
-        threadId: asThreadId("thread-1"),
-        turnId: asTurnId("turn-parent"),
-        createdAt: new Date().toISOString(),
-        method: "codex/event/task_started",
-        payload: {
-          id: "turn-child",
-          msg: {
-            type: "task_started",
-            turn_id: "turn-child",
-            collaboration_mode_kind: "default",
-          },
-          conversationId: "child-provider-thread",
-        },
-      } satisfies ProviderEvent);
-
-      const firstEvent = yield* Fiber.join(firstEventFiber);
-      assert.equal(firstEvent._tag, "Some");
-      if (firstEvent._tag !== "Some") {
-        return;
-      }
-      assert.equal(firstEvent.value.type, "task.started");
-      if (firstEvent.value.type !== "task.started") {
-        return;
-      }
-      assert.equal(firstEvent.value.turnId, "turn-parent");
-      assert.equal(firstEvent.value.providerRefs?.providerTurnId, "turn-parent");
-      assert.equal(firstEvent.value.payload.taskId, "turn-child");
     }),
   );
 });

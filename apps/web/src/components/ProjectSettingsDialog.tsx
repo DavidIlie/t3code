@@ -271,12 +271,7 @@ export default function ProjectSettingsDialog({
 }: ProjectSettingsDialogProps) {
   const { settings, updateSettings } = useAppSettings();
   const queryClient = useQueryClient();
-  // projectIcons was removed from AppSettings schema but may still exist in persisted data
-  const projectIcons = ((settings as Record<string, unknown>).projectIcons ?? {}) as Record<
-    string,
-    { type: string; value: string } | undefined
-  >;
-  const currentIcon = projectIcons[projectId];
+  const currentIcon = settings.projectIcons[projectId];
 
   // ── Icon state ──
   const [iconTab, setIconTab] = useState<"favicon" | "lucide" | "emoji" | "file">(
@@ -299,7 +294,7 @@ export default function ProjectSettingsDialog({
   );
 
   const saveIcon = useCallback(() => {
-    const nextIcons = { ...projectIcons };
+    const nextIcons = { ...settings.projectIcons };
     if (iconTab === "favicon") {
       delete nextIcons[projectId];
     } else if (iconTab === "lucide" && selectedLucideIcon) {
@@ -309,14 +304,14 @@ export default function ProjectSettingsDialog({
     } else if (iconTab === "file" && filePathInput.trim()) {
       nextIcons[projectId] = { type: "file", value: filePathInput.trim() };
     }
-    updateSettings({ projectIcons: nextIcons } as Parameters<typeof updateSettings>[0]);
+    updateSettings({ projectIcons: nextIcons });
   }, [
     iconTab,
     selectedLucideIcon,
     emojiInput,
     filePathInput,
     projectId,
-    projectIcons,
+    settings.projectIcons,
     updateSettings,
   ]);
 
@@ -337,17 +332,7 @@ export default function ProjectSettingsDialog({
     const api = readNativeApi();
     if (!api) return;
     try {
-      // getMcpServers was removed from NativeApi.projects; access dynamically
-      const projects = api.projects as Record<string, unknown>;
-      if (typeof projects.getMcpServers !== "function") {
-        setMcpLoaded(true);
-        return;
-      }
-      const result = await (
-        projects.getMcpServers as (input: {
-          workspaceRoot: string;
-        }) => Promise<{ servers: unknown[] }>
-      )({ workspaceRoot: projectCwd });
+      const result = await api.projects.getMcpServers({ workspaceRoot: projectCwd });
       setMcpServers(result.servers as McpServerInfo[]);
       setMcpLoaded(true);
     } catch {
@@ -367,10 +352,7 @@ export default function ProjectSettingsDialog({
     if (!api || !addName.trim()) return;
     setIsAdding(true);
     try {
-      // addMcpServer was removed from NativeApi.projects; access dynamically
-      const projects = api.projects as Record<string, unknown>;
-      if (typeof projects.addMcpServer !== "function") return;
-      await (projects.addMcpServer as (input: Record<string, unknown>) => Promise<void>)({
+      await api.projects.addMcpServer({
         workspaceRoot: projectCwd,
         scope: addScope,
         name: addName.trim(),
@@ -408,10 +390,7 @@ export default function ProjectSettingsDialog({
       const api = readNativeApi();
       if (!api) return;
       try {
-        // removeMcpServer was removed from NativeApi.projects; access dynamically
-        const projects = api.projects as Record<string, unknown>;
-        if (typeof projects.removeMcpServer !== "function") return;
-        await (projects.removeMcpServer as (input: Record<string, unknown>) => Promise<void>)({
+        await api.projects.removeMcpServer({
           workspaceRoot: projectCwd,
           scope: source === "global" ? "global" : "project",
           name,
@@ -477,11 +456,9 @@ export default function ProjectSettingsDialog({
                         }`}
                         onClick={() => {
                           setSelectedLucideIcon(opt.name);
-                          const nextIcons = { ...projectIcons };
+                          const nextIcons = { ...settings.projectIcons };
                           nextIcons[projectId] = { type: "lucide", value: opt.name };
-                          updateSettings({ projectIcons: nextIcons } as Parameters<
-                            typeof updateSettings
-                          >[0]);
+                          updateSettings({ projectIcons: nextIcons });
                         }}
                         title={opt.name}
                       >
@@ -521,17 +498,12 @@ export default function ProjectSettingsDialog({
                       onClick={async () => {
                         const api = readNativeApi();
                         if (!api) return;
-                        // pickFile was removed from NativeApi.dialogs; access dynamically
-                        const dialogs = api.dialogs as Record<string, unknown>;
-                        if (typeof dialogs.pickFile !== "function") return;
-                        const picked = await (dialogs.pickFile as () => Promise<string | null>)();
+                        const picked = await api.dialogs.pickFile();
                         if (picked) {
                           setFilePathInput(picked);
-                          const nextIcons = { ...projectIcons };
+                          const nextIcons = { ...settings.projectIcons };
                           nextIcons[projectId] = { type: "file", value: picked };
-                          updateSettings({ projectIcons: nextIcons } as Parameters<
-                            typeof updateSettings
-                          >[0]);
+                          updateSettings({ projectIcons: nextIcons });
                         }
                       }}
                     >
@@ -575,11 +547,9 @@ export default function ProjectSettingsDialog({
                   type="button"
                   className="text-xs text-muted-foreground hover:text-foreground"
                   onClick={() => {
-                    const nextIcons = { ...projectIcons };
+                    const nextIcons = { ...settings.projectIcons };
                     delete nextIcons[projectId];
-                    updateSettings({ projectIcons: nextIcons } as Parameters<
-                      typeof updateSettings
-                    >[0]);
+                    updateSettings({ projectIcons: nextIcons });
                   }}
                 >
                   Reset to auto-detected favicon

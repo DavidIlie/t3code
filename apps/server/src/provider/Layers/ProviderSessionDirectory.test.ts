@@ -141,8 +141,8 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
 
       yield* runtimeRepository.upsert({
         threadId,
-        providerName: "claudeAgent",
-        adapterKey: "claudeAgent",
+        providerName: "cursor",
+        adapterKey: "cursor",
         runtimeMode: "full-access",
         status: "running",
         lastSeenAt: new Date().toISOString(),
@@ -211,16 +211,16 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
       const threadId = ThreadId.makeUnsafe("thread-cursor");
 
       yield* directory.upsert({
-        provider: "claudeAgent",
+        provider: "cursor",
         threadId,
       });
 
       const provider = yield* directory.getProvider(threadId);
-      assert.equal(provider, "claudeAgent");
+      assert.equal(provider, "cursor");
       const resolvedBinding = yield* directory.getBinding(threadId);
       assertSome(resolvedBinding, {
         threadId,
-        provider: "claudeAgent",
+        provider: "cursor",
       });
       if (Option.isSome(resolvedBinding)) {
         assert.equal(resolvedBinding.value.threadId, threadId);

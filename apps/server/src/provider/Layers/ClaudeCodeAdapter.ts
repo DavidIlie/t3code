@@ -65,7 +65,7 @@ import {
 import { ClaudeCodeAdapter, type ClaudeCodeAdapterShape } from "../Services/ClaudeCodeAdapter.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
-const PROVIDER = "claudeAgent" as const;
+const PROVIDER = "claudeCode" as const;
 
 /**
  * Build a sanitized environment for the Claude Code child process.
@@ -448,7 +448,7 @@ function titleForTool(itemType: CanonicalItemType, toolName?: string): string {
 
 function buildUserMessage(
   input: ProviderSendTurnInput,
-  deps: { attachmentsDir: string; fileSystem: FileSystem.FileSystem },
+  deps: { stateDir: string; fileSystem: FileSystem.FileSystem },
 ): Effect.Effect<SDKUserMessage, ProviderAdapterRequestError> {
   return Effect.gen(function* () {
     const content: Array<
@@ -463,7 +463,7 @@ function buildUserMessage(
     for (const attachment of input.attachments ?? []) {
       if (attachment.type === "image") {
         const attachmentPath = resolveAttachmentPath({
-          attachmentsDir: deps.attachmentsDir,
+          stateDir: deps.stateDir,
           attachment,
         });
         if (!attachmentPath) {
@@ -1952,14 +1952,12 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
             }),
           );
 
-        const providerOptions = input.providerOptions?.claudeAgent;
+        const providerOptions = input.providerOptions?.claudeCode;
         const permissionMode =
           toPermissionMode(providerOptions?.permissionMode) ??
           (input.runtimeMode === "full-access" ? "bypassPermissions" : undefined);
 
         const resolvedCliPath = providerOptions?.binaryPath ?? resolveClaudeCliPath();
-        // @ts-ignore -- providerOptions fields (thinking, maxTurns, etc.) come from Schema.Unknown
-        // and are passed through to the SDK which handles runtime validation.
         const queryOptions: ClaudeQueryOptions = {
           ...(input.cwd ? { cwd: input.cwd } : {}),
           ...(input.model ? { model: input.model } : {}),
@@ -2240,7 +2238,7 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
         });
 
         const message = yield* buildUserMessage(input, {
-          attachmentsDir: serverConfig.attachmentsDir,
+          stateDir: serverConfig.stateDir,
           fileSystem,
         });
 

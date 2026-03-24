@@ -46,7 +46,6 @@ export async function gitPushWithToast(opts: {
   try {
     const api = ensureNativeApi();
     const result = await api.git.runStackedAction({
-      actionId: crypto.randomUUID(),
       cwd,
       action,
       ...(commitMessage ? { commitMessage } : {}),

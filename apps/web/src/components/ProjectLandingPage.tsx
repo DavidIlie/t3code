@@ -77,9 +77,11 @@ export default function ProjectLandingPage({
   const threads = useStore((s) => s.threads);
   const project = projects.find((p) => p.id === projectId);
   const [prompt, setPrompt] = useState("");
-  const { settings } = useAppSettings();
-  const [selectedProvider, setSelectedProvider] = useState<ProviderKind>("codex");
-  const [selectedModel, setSelectedModel] = useState<ModelSlug>(getDefaultModel("codex"));
+  const { settings, updateSettings } = useAppSettings();
+  const [selectedProvider, setSelectedProvider] = useState<ProviderKind>(settings.defaultProvider);
+  const [selectedModel, setSelectedModel] = useState<ModelSlug>(
+    (settings.defaultModel as ModelSlug) || getDefaultModel(settings.defaultProvider),
+  );
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("full-access");
   const [interactionMode, setInteractionMode] =
     useState<ProviderInteractionMode>(DEFAULT_INTERACTION_MODE);
@@ -93,6 +95,7 @@ export default function ProjectLandingPage({
   const setComposerDraftModel = useComposerDraftStore((s) => s.setModel);
   const setComposerDraftRuntimeMode = useComposerDraftStore((s) => s.setRuntimeMode);
   const setComposerDraftInteractionMode = useComposerDraftStore((s) => s.setInteractionMode);
+  const markAutoSubmit = useComposerDraftStore((s) => s.markAutoSubmit);
   const addDraftImages = useComposerDraftStore((s) => s.addImages);
 
   const { data: gitStatus, isLoading: isGitLoading } = useQuery(
@@ -196,7 +199,7 @@ export default function ProjectLandingPage({
   );
 
   const createThreadWithPrompt = useCallback(
-    async (text: string, _options?: { autoSubmit?: boolean }) => {
+    async (text: string, options?: { autoSubmit?: boolean }) => {
       if (!text.trim() || !project) return;
       const threadId = newThreadId();
       const createdAt = new Date().toISOString();
@@ -215,6 +218,9 @@ export default function ProjectLandingPage({
       setComposerDraftModel(threadId, selectedModel);
       setComposerDraftRuntimeMode(threadId, runtimeMode);
       setComposerDraftInteractionMode(threadId, interactionMode);
+      if (options?.autoSubmit) {
+        markAutoSubmit(threadId);
+      }
 
       await navigate({
         to: "/$threadId",
@@ -230,6 +236,7 @@ export default function ProjectLandingPage({
       setComposerDraftModel,
       setComposerDraftRuntimeMode,
       setComposerDraftInteractionMode,
+      markAutoSubmit,
       selectedProvider,
       selectedModel,
       runtimeMode,
@@ -425,6 +432,7 @@ export default function ProjectLandingPage({
                   onProviderModelChange={(provider, model) => {
                     setSelectedProvider(provider);
                     setSelectedModel(model);
+                    updateSettings({ defaultProvider: provider, defaultModel: model });
                   }}
                 />
                 <button

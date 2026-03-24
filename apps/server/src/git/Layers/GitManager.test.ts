@@ -6,7 +6,6 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, PlatformError, Scope } from "effect";
 import { expect } from "vitest";
-import type { GitActionProgressEvent } from "@t3tools/contracts";
 
 import { GitCommandError, GitHubCliError, TextGenerationError } from "../Errors.ts";
 import { type GitManagerShape } from "../Services/GitManager.ts";
@@ -16,10 +15,10 @@ import {
   GitHubCli,
 } from "../Services/GitHubCli.ts";
 import { type TextGenerationShape, TextGeneration } from "../Services/TextGeneration.ts";
+import { GitServiceLive } from "./GitService.ts";
+import { GitService } from "../Services/GitService.ts";
 import { GitCoreLive } from "./GitCore.ts";
-import { GitCore } from "../Services/GitCore.ts";
 import { makeGitManager } from "./GitManager.ts";
-import { ServerConfig } from "../../config.ts";
 
 interface FakeGhScenario {
   prListSequence?: string[];
@@ -39,31 +38,6 @@ interface FakeGhScenario {
   };
   repositoryCloneUrls?: Record<string, { url: string; sshUrl: string }>;
   failWith?: GitHubCliError;
-}
-
-interface FakeGitTextGeneration {
-  generateCommitMessage: (input: {
-    cwd: string;
-    branch: string | null;
-    stagedSummary: string;
-    stagedPatch: string;
-    includeBranch?: boolean;
-  }) => Effect.Effect<
-    { subject: string; body: string; branch?: string | undefined },
-    TextGenerationError
-  >;
-  generatePrContent: (input: {
-    cwd: string;
-    baseBranch: string;
-    headBranch: string;
-    commitSummary: string;
-    diffSummary: string;
-    diffPatch: string;
-  }) => Effect.Effect<{ title: string; body: string }, TextGenerationError>;
-  generateBranchName: (input: {
-    cwd: string;
-    message: string;
-  }) => Effect.Effect<{ branch: string }, TextGenerationError>;
 }
 
 type FakePullRequest = NonNullable<FakeGhScenario["pullRequest"]>;
@@ -91,6 +65,31 @@ function isGitHubCliError(error: unknown): error is GitHubCliError {
   );
 }
 
+interface FakeGitTextGeneration {
+  generateCommitMessage: (input: {
+    cwd: string;
+    branch: string | null;
+    stagedSummary: string;
+    stagedPatch: string;
+    includeBranch?: boolean;
+  }) => Effect.Effect<
+    { subject: string; body: string; branch?: string | undefined },
+    TextGenerationError
+  >;
+  generatePrContent: (input: {
+    cwd: string;
+    baseBranch: string;
+    headBranch: string;
+    commitSummary: string;
+    diffSummary: string;
+    diffPatch: string;
+  }) => Effect.Effect<{ title: string; body: string }, TextGenerationError>;
+  generateBranchName: (input: {
+    cwd: string;
+    message: string;
+  }) => Effect.Effect<{ branch: string }, TextGenerationError>;
+}
+
 function makeTempDir(
   prefix: string,
 ): Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem | Scope.Scope> {
@@ -107,11 +106,11 @@ function runGit(
 ): Effect.Effect<
   { readonly code: number; readonly stdout: string; readonly stderr: string },
   GitCommandError,
-  GitCore
+  GitService
 > {
   return Effect.gen(function* () {
-    const gitCore = yield* GitCore;
-    return yield* gitCore.execute({
+    const gitService = yield* GitService;
+    return yield* gitService.execute({
       operation: "GitManager.test.runGit",
       cwd,
       args,
@@ -125,7 +124,7 @@ function initRepo(
 ): Effect.Effect<
   void,
   PlatformError.PlatformError | GitCommandError,
-  FileSystem.FileSystem | Scope.Scope | GitCore
+  FileSystem.FileSystem | Scope.Scope | GitService
 > {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -141,7 +140,7 @@ function initRepo(
 function createBareRemote(): Effect.Effect<
   string,
   PlatformError.PlatformError | GitCommandError,
-  FileSystem.FileSystem | Scope.Scope | GitCore
+  FileSystem.FileSystem | Scope.Scope | GitService
 > {
   return Effect.gen(function* () {
     const remoteDir = yield* makeTempDir("t3code-git-remote-");
@@ -450,20 +449,12 @@ function runStackedAction(
   input: {
     cwd: string;
     action: "commit" | "commit_push" | "commit_push_pr";
-    actionId?: string;
     commitMessage?: string;
     featureBranch?: boolean;
     filePaths?: readonly string[];
   },
-  options?: Parameters<GitManagerShape["runStackedAction"]>[1],
 ) {
-  return manager.runStackedAction(
-    {
-      ...input,
-      actionId: input.actionId ?? "test-action-id",
-    },
-    options,
-  );
+  return manager.runStackedAction(input);
 }
 
 function resolvePullRequest(manager: GitManagerShape, input: { cwd: string; reference: string }) {
@@ -483,20 +474,18 @@ function makeManager(input?: {
 }) {
   const { service: gitHubCli, ghCalls } = createGitHubCliWithFakeGh(input?.ghScenario);
   const textGeneration = createTextGeneration(input?.textGeneration);
-  const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
-    prefix: "t3-git-manager-test-",
-  });
 
   const gitCoreLayer = GitCoreLive.pipe(
+    Layer.provideMerge(GitServiceLive),
     Layer.provideMerge(NodeServices.layer),
-    Layer.provideMerge(ServerConfigLayer),
   );
 
   const managerLayer = Layer.mergeAll(
     Layer.succeed(GitHubCli, gitHubCli),
     Layer.succeed(TextGeneration, textGeneration),
     gitCoreLayer,
-  ).pipe(Layer.provideMerge(NodeServices.layer));
+    NodeServices.layer,
+  );
 
   return makeGitManager.pipe(
     Effect.provide(managerLayer),
@@ -504,10 +493,7 @@ function makeManager(input?: {
   );
 }
 
-const GitManagerTestLayer = GitCoreLive.pipe(
-  Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-git-manager-test-" })),
-  Layer.provideMerge(NodeServices.layer),
-);
+const GitManagerTestLayer = Layer.provideMerge(GitServiceLive, NodeServices.layer);
 
 it.layer(GitManagerTestLayer)("GitManager", (it) => {
   it.effect("status includes PR metadata when branch already has an open PR", () =>
@@ -1948,119 +1934,6 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       );
 
       expect(errorMessage).toContain("already checked out in the main repo");
-    }),
-  );
-
-  it.effect("emits ordered progress events for commit hooks", () =>
-    Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
-      yield* initRepo(repoDir);
-      fs.writeFileSync(path.join(repoDir, "hooked.txt"), "hooked\n");
-      fs.writeFileSync(
-        path.join(repoDir, ".git", "hooks", "pre-commit"),
-        '#!/bin/sh\necho "hook: start" >&2\nsleep 1\necho "hook: end" >&2\n',
-        { mode: 0o755 },
-      );
-
-      const { manager } = yield* makeManager();
-      const events: GitActionProgressEvent[] = [];
-
-      const result = yield* runStackedAction(
-        manager,
-        {
-          cwd: repoDir,
-          action: "commit",
-        },
-        {
-          actionId: "action-1",
-          progressReporter: {
-            publish: (event) =>
-              Effect.sync(() => {
-                events.push(event);
-              }),
-          },
-        },
-      );
-
-      expect(result.commit.status).toBe("created");
-      expect(events.map((event) => event.kind)).toContain("action_started");
-      expect(events).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            kind: "phase_started",
-            phase: "commit",
-          }),
-          expect.objectContaining({
-            kind: "hook_started",
-            hookName: "pre-commit",
-          }),
-          expect.objectContaining({
-            kind: "hook_output",
-            text: "hook: start",
-          }),
-          expect.objectContaining({
-            kind: "hook_output",
-            text: "hook: end",
-          }),
-          expect.objectContaining({
-            kind: "hook_finished",
-            hookName: "pre-commit",
-          }),
-          expect.objectContaining({
-            kind: "action_finished",
-          }),
-        ]),
-      );
-    }),
-  );
-
-  it.effect("emits action_failed when a commit hook rejects", () =>
-    Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
-      yield* initRepo(repoDir);
-      fs.writeFileSync(path.join(repoDir, "hook-failure.txt"), "broken\n");
-      fs.writeFileSync(
-        path.join(repoDir, ".git", "hooks", "pre-commit"),
-        '#!/bin/sh\necho "hook: fail" >&2\nexit 1\n',
-        { mode: 0o755 },
-      );
-
-      const { manager } = yield* makeManager();
-      const events: GitActionProgressEvent[] = [];
-
-      const errorMessage = yield* runStackedAction(
-        manager,
-        {
-          cwd: repoDir,
-          action: "commit",
-        },
-        {
-          actionId: "action-2",
-          progressReporter: {
-            publish: (event) =>
-              Effect.sync(() => {
-                events.push(event);
-              }),
-          },
-        },
-      ).pipe(
-        Effect.flip,
-        Effect.map((error) => error.message),
-      );
-
-      expect(errorMessage).toContain("hook: fail");
-      expect(events).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            kind: "hook_started",
-            hookName: "pre-commit",
-          }),
-          expect.objectContaining({
-            kind: "action_failed",
-            phase: "commit",
-          }),
-        ]),
-      );
     }),
   );
 });

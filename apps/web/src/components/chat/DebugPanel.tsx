@@ -15,8 +15,10 @@ function formatProviderLabel(provider: ProviderKind): string {
   switch (provider) {
     case "codex":
       return "Codex";
-    case "claudeAgent":
+    case "claudeCode":
       return "Claude Code";
+    case "cursor":
+      return "Cursor";
     default:
       return provider;
   }

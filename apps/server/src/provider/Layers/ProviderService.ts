@@ -13,19 +13,21 @@ import {
   NonNegativeInt,
   ThreadId,
   ProviderInterruptTurnInput,
+  ProviderReconnectMcpServerInput,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
   ProviderSendTurnInput,
   ProviderSessionStartInput,
   ProviderStopSessionInput,
+  ProviderToggleMcpServerInput,
   type ProviderRuntimeEvent,
   type ProviderSession,
 } from "@t3tools/contracts";
 import { Effect, Layer, Option, PubSub, Queue, Schema, SchemaIssue, Stream } from "effect";
 
-import { ProviderValidationError } from "../Errors.ts";
+import { ProviderUnsupportedError, ProviderValidationError } from "../Errors.ts";
+import { ClaudeCodeAdapter, type ClaudeCodeAdapterShape } from "../Services/ClaudeCodeAdapter.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
-import type { ClaudeCodeAdapterShape } from "../Services/ClaudeCodeAdapter.ts";
 import { ProviderService, type ProviderServiceShape } from "../Services/ProviderService.ts";
 import {
   ProviderSessionDirectory,
@@ -89,36 +91,15 @@ function toRuntimeStatus(session: ProviderSession): "starting" | "running" | "st
 
 function toRuntimePayloadFromSession(
   session: ProviderSession,
-  extra?: {
-    readonly modelOptions?: unknown;
-    readonly providerOptions?: unknown;
-    readonly lastRuntimeEvent?: string;
-    readonly lastRuntimeEventAt?: string;
-  },
+  extra?: { readonly providerOptions?: unknown },
 ): Record<string, unknown> {
   return {
     cwd: session.cwd ?? null,
     model: session.model ?? null,
     activeTurnId: session.activeTurnId ?? null,
     lastError: session.lastError ?? null,
-    ...(extra?.modelOptions !== undefined ? { modelOptions: extra.modelOptions } : {}),
     ...(extra?.providerOptions !== undefined ? { providerOptions: extra.providerOptions } : {}),
-    ...(extra?.lastRuntimeEvent !== undefined ? { lastRuntimeEvent: extra.lastRuntimeEvent } : {}),
-    ...(extra?.lastRuntimeEventAt !== undefined
-      ? { lastRuntimeEventAt: extra.lastRuntimeEventAt }
-      : {}),
   };
-}
-
-function readPersistedModelOptions(
-  runtimePayload: ProviderRuntimeBinding["runtimePayload"],
-): Record<string, unknown> | undefined {
-  if (!runtimePayload || typeof runtimePayload !== "object" || Array.isArray(runtimePayload)) {
-    return undefined;
-  }
-  const raw = "modelOptions" in runtimePayload ? runtimePayload.modelOptions : undefined;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
-  return raw as Record<string, unknown>;
 }
 
 function readPersistedProviderOptions(
@@ -157,6 +138,7 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
 
     const registry = yield* ProviderAdapterRegistry;
     const directory = yield* ProviderSessionDirectory;
+    const claudeAdapter = yield* Effect.serviceOption(ClaudeCodeAdapter);
     const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
     const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
 
@@ -172,12 +154,7 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
     const upsertSessionBinding = (
       session: ProviderSession,
       threadId: ThreadId,
-      extra?: {
-        readonly modelOptions?: unknown;
-        readonly providerOptions?: unknown;
-        readonly lastRuntimeEvent?: string;
-        readonly lastRuntimeEventAt?: string;
-      },
+      extra?: { readonly providerOptions?: unknown },
     ) =>
       directory.upsert({
         threadId,
@@ -192,6 +169,7 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
     const adapters = yield* Effect.forEach(providers, (provider) =>
       registry.getByProvider(provider),
     );
+
     const processRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
       publishRuntimeEvent(event);
 
@@ -239,14 +217,12 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
         }
 
         const persistedCwd = readPersistedCwd(input.binding.runtimePayload);
-        const persistedModelOptions = readPersistedModelOptions(input.binding.runtimePayload);
         const persistedProviderOptions = readPersistedProviderOptions(input.binding.runtimePayload);
 
         const resumed = yield* adapter.startSession({
           threadId: input.binding.threadId,
           provider: input.binding.provider,
           ...(persistedCwd ? { cwd: persistedCwd } : {}),
-          ...(persistedModelOptions ? { modelOptions: persistedModelOptions } : {}),
           ...(persistedProviderOptions ? { providerOptions: persistedProviderOptions } : {}),
           ...(hasResumeCursor ? { resumeCursor: input.binding.resumeCursor } : {}),
           runtimeMode: input.binding.runtimeMode ?? "full-access",
@@ -309,17 +285,8 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
           threadId,
           provider: parsed.provider ?? "codex",
         };
-        const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
-        const effectiveResumeCursor =
-          input.resumeCursor ??
-          (persistedBinding?.provider === input.provider
-            ? persistedBinding.resumeCursor
-            : undefined);
         const adapter = yield* registry.getByProvider(input.provider);
-        const session = yield* adapter.startSession({
-          ...input,
-          ...(effectiveResumeCursor !== undefined ? { resumeCursor: effectiveResumeCursor } : {}),
-        });
+        const session = yield* adapter.startSession(input);
 
         if (session.provider !== adapter.provider) {
           return yield* toValidationError(
@@ -329,7 +296,6 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
         }
 
         yield* upsertSessionBinding(session, threadId, {
-          modelOptions: input.modelOptions,
           providerOptions: input.providerOptions,
         });
         yield* analytics.record("provider.session.started", {
@@ -536,17 +502,6 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
     const runStopAll = () =>
       Effect.gen(function* () {
         const threadIds = yield* directory.listThreadIds();
-        const activeSessions = yield* Effect.forEach(adapters, (adapter) =>
-          adapter.listSessions(),
-        ).pipe(
-          Effect.map((sessionsByAdapter) => sessionsByAdapter.flatMap((sessions) => sessions)),
-        );
-        yield* Effect.forEach(activeSessions, (session) =>
-          upsertSessionBinding(session, session.threadId, {
-            lastRuntimeEvent: "provider.stopAll",
-            lastRuntimeEventAt: new Date().toISOString(),
-          }),
-        ).pipe(Effect.asVoid);
         yield* Effect.forEach(adapters, (adapter) => adapter.stopAll()).pipe(Effect.asVoid);
         yield* Effect.forEach(threadIds, (threadId) =>
           directory.getProvider(threadId).pipe(
@@ -576,34 +531,56 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
       ),
     );
 
-    const getClaudeCodeAdapter = () =>
-      registry
-        .getByProvider("claudeAgent")
-        .pipe(Effect.map((adapter) => adapter as unknown as ClaudeCodeAdapterShape));
+    const requireClaudeAdapter = (): Effect.Effect<
+      ClaudeCodeAdapterShape,
+      ProviderUnsupportedError
+    > =>
+      Option.isSome(claudeAdapter)
+        ? Effect.succeed(claudeAdapter.value)
+        : Effect.fail(
+            new ProviderUnsupportedError({
+              provider: "claudeCode",
+            }),
+          );
 
-    const reconnectMcpServer: ProviderServiceShape["reconnectMcpServer"] = (input) =>
+    const reconnectMcpServer: ProviderServiceShape["reconnectMcpServer"] = (rawInput) =>
       Effect.gen(function* () {
-        const adapter = yield* getClaudeCodeAdapter();
+        const input = yield* decodeInputOrValidationError({
+          operation: "ProviderService.reconnectMcpServer",
+          schema: ProviderReconnectMcpServerInput,
+          payload: rawInput,
+        });
+        const adapter = yield* requireClaudeAdapter();
         yield* adapter.reconnectMcpServer(input.threadId, input.serverName);
       });
 
-    const toggleMcpServer: ProviderServiceShape["toggleMcpServer"] = (input) =>
+    const toggleMcpServer: ProviderServiceShape["toggleMcpServer"] = (rawInput) =>
       Effect.gen(function* () {
-        const adapter = yield* getClaudeCodeAdapter();
+        const input = yield* decodeInputOrValidationError({
+          operation: "ProviderService.toggleMcpServer",
+          schema: ProviderToggleMcpServerInput,
+          payload: rawInput,
+        });
+        const adapter = yield* requireClaudeAdapter();
         yield* adapter.toggleMcpServer(input.threadId, input.serverName, input.enabled);
       });
 
     const listTrackedClaudeSessionIds: ProviderServiceShape["listTrackedClaudeSessionIds"] = () =>
       Effect.gen(function* () {
-        const adapter = yield* getClaudeCodeAdapter();
-        const sessions = yield* adapter.listSessions();
-        return sessions
-          .map((session) => {
-            const cursor = session.resumeCursor as { threadId?: string } | undefined;
-            return cursor?.threadId;
-          })
-          .filter((id): id is string => typeof id === "string");
-      }).pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>));
+        const threadIds = yield* directory.listThreadIds();
+        const sessionIds: string[] = [];
+        for (const threadId of threadIds) {
+          const bindingOption = yield* directory.getBinding(threadId);
+          if (Option.isNone(bindingOption)) continue;
+          const binding = bindingOption.value;
+          if (binding.provider !== "claudeCode") continue;
+          const cursor = binding.resumeCursor as { resume?: string } | null | undefined;
+          if (cursor && typeof cursor.resume === "string") {
+            sessionIds.push(cursor.resume);
+          }
+        }
+        return sessionIds;
+      }).pipe(Effect.catch(() => Effect.succeed([] as ReadonlyArray<string>)));
 
     return {
       startSession,

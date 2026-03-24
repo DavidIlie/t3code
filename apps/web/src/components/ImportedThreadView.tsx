@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ThreadId, ImportedSessionMessage, ImportedContentBlock } from "@t3tools/contracts";
 import { BrainIcon, ChevronRightIcon, SendIcon } from "lucide-react";
+import { readNativeApi } from "../nativeApi";
 import { useStore } from "../store";
 import ChatMarkdown from "./ChatMarkdown";
 import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "./ui/collapsible";
@@ -83,7 +84,7 @@ interface ImportedThreadViewProps {
 export default function ImportedThreadView({ threadId, onResume }: ImportedThreadViewProps) {
   const [messages, setMessages] = useState<ImportedSessionMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, _setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const thread = useStore((s) => s.threads.find((t) => t.id === threadId));
   const project = useStore((s) => s.projects.find((p) => p.id === thread?.projectId));
@@ -91,10 +92,32 @@ export default function ImportedThreadView({ threadId, onResume }: ImportedThrea
   const sessionId = threadId.replace("claude-", "");
 
   useEffect(() => {
-    // getSessionMessages was removed from the NativeApi.
-    // Mark as loaded with empty messages so the view remains functional.
-    setMessages([]);
-    setLoading(false);
+    let cancelled = false;
+    const api = readNativeApi();
+    if (!api || !project) {
+      setLoading(false);
+      return;
+    }
+
+    api.projects
+      .getSessionMessages({
+        sessionId,
+        workspaceRoot: project.cwd,
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setMessages(result as ImportedSessionMessage[]);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load messages");
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, project]);
 
   if (loading) {

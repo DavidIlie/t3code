@@ -11,7 +11,7 @@ export function normalizeAttachmentRelativePath(rawRelativePath: string): string
 }
 
 export function resolveAttachmentRelativePath(input: {
-  readonly attachmentsDir: string;
+  readonly stateDir: string;
   readonly relativePath: string;
 }): string | null {
   const normalizedRelativePath = normalizeAttachmentRelativePath(input.relativePath);
@@ -19,7 +19,7 @@ export function resolveAttachmentRelativePath(input: {
     return null;
   }
 
-  const attachmentsRoot = path.resolve(input.attachmentsDir);
+  const attachmentsRoot = path.resolve(path.join(input.stateDir, "attachments"));
   const filePath = path.resolve(path.join(attachmentsRoot, normalizedRelativePath));
   if (!filePath.startsWith(`${attachmentsRoot}${path.sep}`)) {
     return null;

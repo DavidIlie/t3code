@@ -5,11 +5,9 @@ import {
   ApprovalRequestId,
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
-  DEFAULT_MODEL_BY_PROVIDER,
   EventId,
   MessageId,
   ProjectId,
-  ProviderKind,
   ThreadId,
 } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
@@ -23,11 +21,6 @@ import {
   type OrchestrationIntegrationHarness,
 } from "./OrchestrationEngineHarness.integration.ts";
 import { checkpointRefForThreadTurn } from "../src/checkpointing/Utils.ts";
-import type {
-  CheckpointDiffFinalizedReceipt,
-  TurnProcessingQuiescedReceipt,
-} from "../src/orchestration/Services/RuntimeReceiptBus.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 
 const asMessageId = (value: string): MessageId => MessageId.makeUnsafe(value);
 const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
@@ -39,7 +32,7 @@ const PROJECT_ID = asProjectId("project-1");
 const THREAD_ID = ThreadId.makeUnsafe("thread-1");
 const FIXTURE_TURN_ID = "fixture-turn";
 const APPROVAL_REQUEST_ID = asApprovalRequestId("req-approval-1");
-type IntegrationProvider = ProviderKind;
+type IntegrationProvider = "codex" | "claudeCode";
 
 function nowIso() {
   return new Date().toISOString();
@@ -51,6 +44,8 @@ class IntegrationWaitTimeoutError extends Schema.TaggedErrorClass<IntegrationWai
     description: Schema.String,
   },
 ) {}
+
+const sleep = (ms: number) => Effect.sleep(ms);
 
 function waitForSync<A>(
   read: () => A,
@@ -69,7 +64,7 @@ function waitForSync<A>(
       if (Date.now() >= deadline) {
         return yield* Effect.die(new IntegrationWaitTimeoutError({ description }));
       }
-      yield* Effect.sleep(10);
+      yield* sleep(10);
     }
   });
 }
@@ -90,7 +85,7 @@ function withHarness<A, E>(
     makeOrchestrationIntegrationHarness({ provider }),
     use,
     (harness) => harness.dispose,
-  ).pipe(Effect.provide(NodeServices.layer));
+  );
 }
 
 function withRealCodexHarness<A, E>(
@@ -100,14 +95,12 @@ function withRealCodexHarness<A, E>(
     makeOrchestrationIntegrationHarness({ provider: "codex", realCodex: true }),
     use,
     (harness) => harness.dispose,
-  ).pipe(Effect.provide(NodeServices.layer));
+  );
 }
 
 const seedProjectAndThread = (harness: OrchestrationIntegrationHarness) =>
   Effect.gen(function* () {
     const createdAt = nowIso();
-    const provider = harness.adapterHarness?.provider ?? "codex";
-    const defaultModel = DEFAULT_MODEL_BY_PROVIDER[provider];
 
     yield* harness.engine.dispatch({
       type: "project.create",
@@ -115,7 +108,7 @@ const seedProjectAndThread = (harness: OrchestrationIntegrationHarness) =>
       projectId: PROJECT_ID,
       title: "Integration Project",
       workspaceRoot: harness.workspaceDir,
-      defaultModel,
+      defaultModel: "gpt-5-codex",
       createdAt,
     });
 
@@ -125,7 +118,7 @@ const seedProjectAndThread = (harness: OrchestrationIntegrationHarness) =>
       threadId: THREAD_ID,
       projectId: PROJECT_ID,
       title: "Integration Thread",
-      model: defaultModel,
+      model: "gpt-5-codex",
       interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
       runtimeMode: "approval-required",
       branch: null,
@@ -194,22 +187,6 @@ it.live("runs a single turn end-to-end and persists checkpoint state in sqlite +
         messageId: "msg-user-single",
         text: "Say hello",
       });
-      const finalizedReceipt = yield* harness.waitForReceipt(
-        (receipt): receipt is CheckpointDiffFinalizedReceipt =>
-          receipt.type === "checkpoint.diff.finalized" &&
-          receipt.threadId === THREAD_ID &&
-          receipt.checkpointTurnCount === 1,
-      );
-      if (finalizedReceipt.type !== "checkpoint.diff.finalized") {
-        throw new Error("Expected checkpoint.diff.finalized receipt.");
-      }
-      assert.equal(finalizedReceipt.status, "ready");
-      yield* harness.waitForReceipt(
-        (receipt): receipt is TurnProcessingQuiescedReceipt =>
-          receipt.type === "turn.processing.quiesced" &&
-          receipt.threadId === THREAD_ID &&
-          receipt.checkpointTurnCount === 1,
-      );
 
       const thread = yield* harness.waitForThread(
         THREAD_ID,
@@ -230,6 +207,8 @@ it.live("runs a single turn end-to-end and persists checkpoint state in sqlite +
       assert.equal(checkpointRows[0]?.checkpointTurnCount, 1);
       assert.equal(checkpointRows[0]?.status, "ready");
       assert.deepEqual(checkpointRows[0]?.files, []);
+
+      yield* harness.waitForDomainEvent((event) => event.type === "thread.turn-diff-completed");
 
       const ref0 = checkpointRefForThreadTurn(THREAD_ID, 0);
       const ref1 = checkpointRefForThreadTurn(THREAD_ID, 1);
@@ -388,12 +367,6 @@ it.live("runs multi-turn file edits and persists checkpoint diffs", () =>
         messageId: "msg-user-multi-1",
         text: "Make first edit",
       });
-      yield* harness.waitForReceipt(
-        (receipt): receipt is CheckpointDiffFinalizedReceipt =>
-          receipt.type === "checkpoint.diff.finalized" &&
-          receipt.threadId === THREAD_ID &&
-          receipt.checkpointTurnCount === 1,
-      );
 
       yield* harness.waitForThread(
         THREAD_ID,
@@ -435,22 +408,6 @@ it.live("runs multi-turn file edits and persists checkpoint diffs", () =>
         messageId: "msg-user-multi-2",
         text: "Make second edit",
       });
-      const secondReceipt = yield* harness.waitForReceipt(
-        (receipt): receipt is CheckpointDiffFinalizedReceipt =>
-          receipt.type === "checkpoint.diff.finalized" &&
-          receipt.threadId === THREAD_ID &&
-          receipt.checkpointTurnCount === 2,
-      );
-      if (secondReceipt.type !== "checkpoint.diff.finalized") {
-        throw new Error("Expected checkpoint.diff.finalized receipt.");
-      }
-      assert.equal(secondReceipt.status, "ready");
-      yield* harness.waitForReceipt(
-        (receipt): receipt is TurnProcessingQuiescedReceipt =>
-          receipt.type === "turn.processing.quiesced" &&
-          receipt.threadId === THREAD_ID &&
-          receipt.checkpointTurnCount === 2,
-      );
 
       const secondTurnThread = yield* harness.waitForThread(
         THREAD_ID,
@@ -886,7 +843,7 @@ it.live(
     ),
 );
 
-it.live("starts a claudeAgent session on first turn when provider is requested", () =>
+it.live("starts a claudeCode session on first turn when provider is requested", () =>
   withHarness(
     (harness) =>
       Effect.gen(function* () {
@@ -896,20 +853,20 @@ it.live("starts a claudeAgent session on first turn when provider is requested",
           events: [
             {
               type: "turn.started",
-              ...runtimeBase("evt-claude-start-1", "2026-02-24T10:10:00.000Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-start-1", "2026-02-24T10:10:00.000Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
             },
             {
               type: "message.delta",
-              ...runtimeBase("evt-claude-start-2", "2026-02-24T10:10:00.050Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-start-2", "2026-02-24T10:10:00.050Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               delta: "Claude first turn.\n",
             },
             {
               type: "turn.completed",
-              ...runtimeBase("evt-claude-start-3", "2026-02-24T10:10:00.100Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-start-3", "2026-02-24T10:10:00.100Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               status: "completed",
@@ -922,25 +879,25 @@ it.live("starts a claudeAgent session on first turn when provider is requested",
           commandId: "cmd-turn-start-claude-initial",
           messageId: "msg-user-claude-initial",
           text: "Use Claude",
-          provider: "claudeAgent",
+          provider: "claudeCode",
         });
 
         const thread = yield* harness.waitForThread(
           THREAD_ID,
           (entry) =>
-            entry.session?.providerName === "claudeAgent" &&
+            entry.session?.providerName === "claudeCode" &&
             entry.session.status === "ready" &&
             entry.messages.some(
               (message) => message.role === "assistant" && message.text === "Claude first turn.\n",
             ),
         );
-        assert.equal(thread.session?.providerName, "claudeAgent");
+        assert.equal(thread.session?.providerName, "claudeCode");
       }),
-    "claudeAgent",
+    "claudeCode",
   ),
 );
 
-it.live("recovers claudeAgent sessions after provider stopAll using persisted resume state", () =>
+it.live("recovers claudeCode sessions after provider stopAll using persisted resume state", () =>
   withHarness(
     (harness) =>
       Effect.gen(function* () {
@@ -950,20 +907,20 @@ it.live("recovers claudeAgent sessions after provider stopAll using persisted re
           events: [
             {
               type: "turn.started",
-              ...runtimeBase("evt-claude-recover-1", "2026-02-24T10:11:00.000Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-recover-1", "2026-02-24T10:11:00.000Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
             },
             {
               type: "message.delta",
-              ...runtimeBase("evt-claude-recover-2", "2026-02-24T10:11:00.050Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-recover-2", "2026-02-24T10:11:00.050Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               delta: "Turn before restart.\n",
             },
             {
               type: "turn.completed",
-              ...runtimeBase("evt-claude-recover-3", "2026-02-24T10:11:00.100Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-recover-3", "2026-02-24T10:11:00.100Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               status: "completed",
@@ -976,7 +933,7 @@ it.live("recovers claudeAgent sessions after provider stopAll using persisted re
           commandId: "cmd-turn-start-claude-recover-1",
           messageId: "msg-user-claude-recover-1",
           text: "Before restart",
-          provider: "claudeAgent",
+          provider: "claudeCode",
         });
 
         yield* harness.waitForThread(
@@ -985,7 +942,10 @@ it.live("recovers claudeAgent sessions after provider stopAll using persisted re
             entry.latestTurn?.turnId === "turn-1" && entry.session?.threadId === "thread-1",
         );
 
-        yield* harness.adapterHarness!.adapter.stopAll();
+        const activeSessions = yield* harness.providerService.listSessions();
+        yield* Effect.forEach(activeSessions, (session) =>
+          harness.providerService.stopSession({ threadId: session.threadId }),
+        );
         yield* waitForSync(
           () => harness.adapterHarness!.listActiveSessionIds(),
           (sessionIds) => sessionIds.length === 0,
@@ -996,20 +956,20 @@ it.live("recovers claudeAgent sessions after provider stopAll using persisted re
           events: [
             {
               type: "turn.started",
-              ...runtimeBase("evt-claude-recover-4", "2026-02-24T10:11:01.000Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-recover-4", "2026-02-24T10:11:01.000Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
             },
             {
               type: "message.delta",
-              ...runtimeBase("evt-claude-recover-5", "2026-02-24T10:11:01.050Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-recover-5", "2026-02-24T10:11:01.050Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               delta: "Turn after restart.\n",
             },
             {
               type: "turn.completed",
-              ...runtimeBase("evt-claude-recover-6", "2026-02-24T10:11:01.100Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-recover-6", "2026-02-24T10:11:01.100Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               status: "completed",
@@ -1032,20 +992,20 @@ it.live("recovers claudeAgent sessions after provider stopAll using persisted re
         const recoveredThread = yield* harness.waitForThread(
           THREAD_ID,
           (entry) =>
-            entry.session?.providerName === "claudeAgent" &&
+            entry.session?.providerName === "claudeCode" &&
             entry.messages.some(
               (message) => message.role === "user" && message.text === "After restart",
             ) &&
             !entry.activities.some((activity) => activity.kind === "provider.turn.start.failed"),
         );
-        assert.equal(recoveredThread.session?.providerName, "claudeAgent");
+        assert.equal(recoveredThread.session?.providerName, "claudeCode");
         assert.equal(recoveredThread.session?.threadId, "thread-1");
       }),
-    "claudeAgent",
+    "claudeCode",
   ),
 );
 
-it.live("forwards claudeAgent approval responses to the provider session", () =>
+it.live("forwards claudeCode approval responses to the provider session", () =>
   withHarness(
     (harness) =>
       Effect.gen(function* () {
@@ -1055,13 +1015,13 @@ it.live("forwards claudeAgent approval responses to the provider session", () =>
           events: [
             {
               type: "turn.started",
-              ...runtimeBase("evt-claude-approval-1", "2026-02-24T10:12:00.000Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-approval-1", "2026-02-24T10:12:00.000Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
             },
             {
               type: "approval.requested",
-              ...runtimeBase("evt-claude-approval-2", "2026-02-24T10:12:00.050Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-approval-2", "2026-02-24T10:12:00.050Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               requestId: APPROVAL_REQUEST_ID,
@@ -1070,7 +1030,7 @@ it.live("forwards claudeAgent approval responses to the provider session", () =>
             },
             {
               type: "turn.completed",
-              ...runtimeBase("evt-claude-approval-3", "2026-02-24T10:12:00.100Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-approval-3", "2026-02-24T10:12:00.100Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               status: "completed",
@@ -1083,7 +1043,7 @@ it.live("forwards claudeAgent approval responses to the provider session", () =>
           commandId: "cmd-turn-start-claude-approval",
           messageId: "msg-user-claude-approval",
           text: "Need approval",
-          provider: "claudeAgent",
+          provider: "claudeCode",
         });
 
         const thread = yield* harness.waitForThread(THREAD_ID, (entry) =>
@@ -1112,11 +1072,11 @@ it.live("forwards claudeAgent approval responses to the provider session", () =>
         );
         assert.equal(approvalResponses[0]?.decision, "accept");
       }),
-    "claudeAgent",
+    "claudeCode",
   ),
 );
 
-it.live("forwards thread.turn.interrupt to claudeAgent provider sessions", () =>
+it.live("forwards thread.turn.interrupt to claudeCode provider sessions", () =>
   withHarness(
     (harness) =>
       Effect.gen(function* () {
@@ -1126,20 +1086,20 @@ it.live("forwards thread.turn.interrupt to claudeAgent provider sessions", () =>
           events: [
             {
               type: "turn.started",
-              ...runtimeBase("evt-claude-interrupt-1", "2026-02-24T10:13:00.000Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-interrupt-1", "2026-02-24T10:13:00.000Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
             },
             {
               type: "message.delta",
-              ...runtimeBase("evt-claude-interrupt-2", "2026-02-24T10:13:00.050Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-interrupt-2", "2026-02-24T10:13:00.050Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               delta: "Long running output.\n",
             },
             {
               type: "turn.completed",
-              ...runtimeBase("evt-claude-interrupt-3", "2026-02-24T10:13:00.100Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-interrupt-3", "2026-02-24T10:13:00.100Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               status: "completed",
@@ -1152,7 +1112,7 @@ it.live("forwards thread.turn.interrupt to claudeAgent provider sessions", () =>
           commandId: "cmd-turn-start-claude-interrupt",
           messageId: "msg-user-claude-interrupt",
           text: "Start long turn",
-          provider: "claudeAgent",
+          provider: "claudeCode",
         });
 
         const thread = yield* harness.waitForThread(
@@ -1178,11 +1138,11 @@ it.live("forwards thread.turn.interrupt to claudeAgent provider sessions", () =>
         );
         assert.equal(interruptCalls.length, 1);
       }),
-    "claudeAgent",
+    "claudeCode",
   ),
 );
 
-it.live("reverts claudeAgent turns and rolls back provider conversation state", () =>
+it.live("reverts claudeCode turns and rolls back provider conversation state", () =>
   withHarness(
     (harness) =>
       Effect.gen(function* () {
@@ -1192,20 +1152,20 @@ it.live("reverts claudeAgent turns and rolls back provider conversation state", 
           events: [
             {
               type: "turn.started",
-              ...runtimeBase("evt-claude-revert-1", "2026-02-24T10:14:00.000Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-revert-1", "2026-02-24T10:14:00.000Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
             },
             {
               type: "message.delta",
-              ...runtimeBase("evt-claude-revert-2", "2026-02-24T10:14:00.050Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-revert-2", "2026-02-24T10:14:00.050Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               delta: "README -> v2\n",
             },
             {
               type: "turn.completed",
-              ...runtimeBase("evt-claude-revert-3", "2026-02-24T10:14:00.100Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-revert-3", "2026-02-24T10:14:00.100Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               status: "completed",
@@ -1222,7 +1182,7 @@ it.live("reverts claudeAgent turns and rolls back provider conversation state", 
           commandId: "cmd-turn-start-claude-revert-1",
           messageId: "msg-user-claude-revert-1",
           text: "First Claude edit",
-          provider: "claudeAgent",
+          provider: "claudeCode",
         });
 
         yield* harness.waitForThread(
@@ -1235,20 +1195,20 @@ it.live("reverts claudeAgent turns and rolls back provider conversation state", 
           events: [
             {
               type: "turn.started",
-              ...runtimeBase("evt-claude-revert-4", "2026-02-24T10:14:01.000Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-revert-4", "2026-02-24T10:14:01.000Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
             },
             {
               type: "message.delta",
-              ...runtimeBase("evt-claude-revert-5", "2026-02-24T10:14:01.050Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-revert-5", "2026-02-24T10:14:01.050Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               delta: "README -> v3\n",
             },
             {
               type: "turn.completed",
-              ...runtimeBase("evt-claude-revert-6", "2026-02-24T10:14:01.100Z", "claudeAgent"),
+              ...runtimeBase("evt-claude-revert-6", "2026-02-24T10:14:01.100Z", "claudeCode"),
               threadId: THREAD_ID,
               turnId: FIXTURE_TURN_ID,
               status: "completed",
@@ -1272,7 +1232,7 @@ it.live("reverts claudeAgent turns and rolls back provider conversation state", 
           (entry) =>
             entry.latestTurn?.turnId === "turn-2" &&
             entry.checkpoints.length === 2 &&
-            entry.session?.providerName === "claudeAgent",
+            entry.session?.providerName === "claudeCode",
         );
 
         yield* harness.engine.dispatch({
@@ -1299,6 +1259,6 @@ it.live("reverts claudeAgent turns and rolls back provider conversation state", 
         );
         assert.deepEqual(harness.adapterHarness!.getRollbackCalls(THREAD_ID), [1]);
       }),
-    "claudeAgent",
+    "claudeCode",
   ),
 );

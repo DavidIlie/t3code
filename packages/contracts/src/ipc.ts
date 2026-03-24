@@ -1,7 +1,10 @@
 import type {
   GitCheckoutInput,
-  GitActionProgressEvent,
   GitCreateBranchInput,
+  GitGenerateCommitMessageInput,
+  GitGenerateCommitMessageResult,
+  GitLogInput,
+  GitLogResult,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullRequestRefInput,
@@ -18,10 +21,18 @@ import type {
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
+  GitShowCommitDiffInput,
+  GitShowCommitDiffResult,
   GitStatusInput,
   GitStatusResult,
 } from "./git";
 import type {
+  ProjectAddMcpServerInput,
+  ProjectGetMcpServersInput,
+  ProjectGetSessionMessagesInput,
+  ProjectImportHistoryInput,
+  ProjectImportHistoryResult,
+  ProjectRemoveMcpServerInput,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
   ProjectWriteFileInput,
@@ -49,6 +60,8 @@ import type {
   OrchestrationReadModel,
 } from "./orchestration";
 import { EditorId } from "./editor";
+import type { ThreadId } from "./baseSchemas";
+import type { WsProviderAccountUpdatedPayload, WsProviderSessionConfiguredPayload } from "./ws";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -67,6 +80,7 @@ export type DesktopUpdateStatus =
   | "error";
 
 export type DesktopRuntimeArch = "arm64" | "x64" | "other";
+
 export type DesktopTheme = "light" | "dark" | "system";
 
 export interface DesktopRuntimeInfo {
@@ -100,6 +114,7 @@ export interface DesktopUpdateActionResult {
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   pickFolder: () => Promise<string | null>;
+  pickFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
@@ -112,11 +127,58 @@ export interface DesktopBridge {
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
+  isShellCommandInstalled: () => Promise<boolean>;
+  installShellCommand: () => Promise<void>;
+  uninstallShellCommand: () => Promise<void>;
+  onOpenProject: (listener: (projectPath: string) => void) => () => void;
+  setTrayEnabled: (enabled: boolean) => void;
+  getTrayState: () => Promise<DesktopTrayState | null>;
+  setTrayState: (state: DesktopTrayState) => void;
+  onTrayMessage: (listener: (message: DesktopTrayMessage) => void) => () => void;
+}
+
+export interface DesktopTrayThread {
+  id: string;
+  name: string;
+  needsAttention: boolean;
+  lastUpdated: number;
+}
+
+export interface DesktopTrayState {
+  threads: DesktopTrayThread[];
+}
+
+export type DesktopTrayMessage = {
+  type: "thread-click";
+  threadId: ThreadId;
+};
+
+// ── Provider Usage ────────────────────────────────────────────────
+
+export interface ProviderUsageTier {
+  key: string;
+  label: string;
+  utilization: number;
+  resetsAt: string | null;
+}
+
+export interface ProviderUsageProviderData {
+  available: boolean;
+  plan: string | null;
+  tiers: ProviderUsageTier[];
+  extraUsage: { enabled: boolean; spent: number; limit: number } | null;
+  error: string | null;
+}
+
+export interface ProviderUsageResult {
+  claudeCode: ProviderUsageProviderData;
+  codex: ProviderUsageProviderData;
 }
 
 export interface NativeApi {
   dialogs: {
     pickFolder: () => Promise<string | null>;
+    pickFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>;
     confirm: (message: string) => Promise<boolean>;
   };
   terminal: {
@@ -126,11 +188,22 @@ export interface NativeApi {
     clear: (input: TerminalClearInput) => Promise<void>;
     restart: (input: TerminalRestartInput) => Promise<TerminalSessionSnapshot>;
     close: (input: TerminalCloseInput) => Promise<void>;
+    listShells: () => Promise<{
+      shells: Array<{ path: string; label: string }>;
+      defaultShell: string;
+    }>;
     onEvent: (callback: (event: TerminalEvent) => void) => () => void;
   };
   projects: {
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
+    importHistory: (input: ProjectImportHistoryInput) => Promise<ProjectImportHistoryResult>;
+    getSessionMessages: (input: ProjectGetSessionMessagesInput) => Promise<unknown>;
+    getMcpServers: (input: ProjectGetMcpServersInput) => Promise<{
+      servers: Array<{ name: string; type: string; status: string }>;
+    }>;
+    addMcpServer: (input: ProjectAddMcpServerInput) => Promise<{ ok: boolean }>;
+    removeMcpServer: (input: ProjectRemoveMcpServerInput) => Promise<{ ok: boolean }>;
   };
   shell: {
     openInEditor: (cwd: string, editor: EditorId) => Promise<void>;
@@ -153,13 +226,30 @@ export interface NativeApi {
     pull: (input: GitPullInput) => Promise<GitPullResult>;
     status: (input: GitStatusInput) => Promise<GitStatusResult>;
     runStackedAction: (input: GitRunStackedActionInput) => Promise<GitRunStackedActionResult>;
-    onActionProgress: (callback: (event: GitActionProgressEvent) => void) => () => void;
+    log: (input: GitLogInput) => Promise<GitLogResult>;
+    showCommitDiff: (input: GitShowCommitDiffInput) => Promise<GitShowCommitDiffResult>;
+    generateCommitMessage: (
+      input: GitGenerateCommitMessageInput,
+    ) => Promise<GitGenerateCommitMessageResult>;
   };
   contextMenu: {
     show: <T extends string>(
       items: readonly ContextMenuItem<T>[],
       position?: { x: number; y: number },
     ) => Promise<T | null>;
+  };
+  provider: {
+    getUsage: () => Promise<ProviderUsageResult>;
+    reconnectMcpServer: (input: { threadId: string; serverName: string }) => Promise<void>;
+    toggleMcpServer: (input: {
+      threadId: string;
+      serverName: string;
+      enabled: boolean;
+    }) => Promise<void>;
+    onAccountUpdated: (callback: (payload: WsProviderAccountUpdatedPayload) => void) => () => void;
+    onSessionConfigured: (
+      callback: (payload: WsProviderSessionConfiguredPayload) => void,
+    ) => () => void;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;

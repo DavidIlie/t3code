@@ -5,7 +5,6 @@ export const EDITORS = [
   { id: "cursor", label: "Cursor", command: "cursor" },
   { id: "vscode", label: "VS Code", command: "code" },
   { id: "zed", label: "Zed", command: "zed" },
-  { id: "antigravity", label: "Antigravity", command: "agy" },
   { id: "file-manager", label: "File Manager", command: null },
   { id: "terminal", label: "Terminal", command: null },
   { id: "iterm2", label: "iTerm2", command: null },

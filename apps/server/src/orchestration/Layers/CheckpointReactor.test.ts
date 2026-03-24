@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-import type { ProviderKind, ProviderRuntimeEvent, ProviderSession } from "@t3tools/contracts";
+import type { ProviderRuntimeEvent, ProviderSession } from "@t3tools/contracts";
 import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -19,11 +19,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CheckpointStoreLive } from "../../checkpointing/Layers/CheckpointStore.ts";
 import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts";
-import { GitCoreLive } from "../../git/Layers/GitCore.ts";
 import { CheckpointReactorLive } from "./CheckpointReactor.ts";
+import { RuntimeReceiptBusLive } from "./RuntimeReceiptBus.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
-import { RuntimeReceiptBusLive } from "./RuntimeReceiptBus.ts";
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
@@ -45,7 +44,7 @@ const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
 type LegacyProviderRuntimeEvent = {
   readonly type: string;
   readonly eventId: EventId;
-  readonly provider: ProviderKind;
+  readonly provider: "codex" | "claudeCode" | "cursor";
   readonly createdAt: string;
   readonly threadId: ThreadId;
   readonly turnId?: string | undefined;
@@ -117,7 +116,7 @@ async function waitForThread(
     checkpoints: ReadonlyArray<{ checkpointTurnCount: number }>;
     activities: ReadonlyArray<{ kind: string }>;
   }) => boolean,
-  timeoutMs = 5000,
+  timeoutMs = 2000,
 ) {
   const deadline = Date.now() + timeoutMs;
   const poll = async (): Promise<{
@@ -142,7 +141,7 @@ async function waitForThread(
 async function waitForEvent(
   engine: OrchestrationEngineShape,
   predicate: (event: { type: string }) => boolean,
-  timeoutMs = 5000,
+  timeoutMs = 2000,
 ) {
   const deadline = Date.now() + timeoutMs;
   const poll = async () => {
@@ -193,7 +192,7 @@ function gitShowFileAtRef(cwd: string, ref: string, filePath: string): string {
   return runGit(cwd, ["show", `${ref}:${filePath}`]);
 }
 
-async function waitForGitRefExists(cwd: string, ref: string, timeoutMs = 5000) {
+async function waitForGitRefExists(cwd: string, ref: string, timeoutMs = 2000) {
   const deadline = Date.now() + timeoutMs;
   const poll = async (): Promise<void> => {
     if (gitRefExists(cwd, ref)) {
@@ -239,7 +238,7 @@ describe("CheckpointReactor", () => {
     readonly projectWorkspaceRoot?: string;
     readonly threadWorktreePath?: string | null;
     readonly providerSessionCwd?: string;
-    readonly providerName?: ProviderKind;
+    readonly providerName?: "codex" | "claudeCode";
   }) {
     const cwd = createGitRepository();
     tempDirs.push(cwd);
@@ -256,16 +255,12 @@ describe("CheckpointReactor", () => {
       Layer.provide(SqlitePersistenceMemory),
     );
 
-    const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
-      prefix: "t3-checkpoint-reactor-test-",
-    });
-
     const layer = CheckpointReactorLive.pipe(
       Layer.provideMerge(orchestrationLayer),
-      Layer.provideMerge(RuntimeReceiptBusLive),
       Layer.provideMerge(Layer.succeed(ProviderService, provider.service)),
-      Layer.provideMerge(CheckpointStoreLive.pipe(Layer.provide(GitCoreLive))),
-      Layer.provideMerge(ServerConfigLayer),
+      Layer.provideMerge(CheckpointStoreLive),
+      Layer.provideMerge(RuntimeReceiptBusLive),
+      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
       Layer.provideMerge(NodeServices.layer),
     );
 
@@ -275,7 +270,7 @@ describe("CheckpointReactor", () => {
     const checkpointStore = await runtime.runPromise(Effect.service(CheckpointStore));
     scope = await Effect.runPromise(Scope.make("sequential"));
     await Effect.runPromise(reactor.start.pipe(Scope.provide(scope)));
-    const drain = () => Effect.runPromise(reactor.drain);
+    await Effect.runPromise(Effect.sleep("10 millis"));
 
     const createdAt = new Date().toISOString();
     await Effect.runPromise(
@@ -332,7 +327,6 @@ describe("CheckpointReactor", () => {
       engine,
       provider,
       cwd,
-      drain,
     };
   }
 
@@ -461,7 +455,7 @@ describe("CheckpointReactor", () => {
       payload: { state: "completed" },
     });
 
-    await harness.drain();
+    await Effect.runPromise(Effect.sleep("40 millis"));
     const midReadModel = await Effect.runPromise(harness.engine.getReadModel());
     const midThread = midReadModel.threads.find(
       (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
@@ -486,10 +480,10 @@ describe("CheckpointReactor", () => {
     expect(thread.checkpoints[0]?.checkpointTurnCount).toBe(1);
   });
 
-  it("captures pre-turn and completion checkpoints for claude runtime events", async () => {
+  it("captures pre-turn and completion checkpoints for claudeCode runtime events", async () => {
     const harness = await createHarness({
       seedFilesystemCheckpoints: false,
-      providerName: "claudeAgent",
+      providerName: "claudeCode",
     });
     const createdAt = new Date().toISOString();
 
@@ -501,7 +495,7 @@ describe("CheckpointReactor", () => {
         session: {
           threadId: ThreadId.makeUnsafe("thread-1"),
           status: "ready",
-          providerName: "claudeAgent",
+          providerName: "claudeCode",
           runtimeMode: "approval-required",
           activeTurnId: null,
           lastError: null,
@@ -514,7 +508,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.started",
       eventId: EventId.makeUnsafe("evt-turn-started-claude-1"),
-      provider: "claudeAgent",
+      provider: "claudeCode",
       createdAt: new Date().toISOString(),
       threadId: ThreadId.makeUnsafe("thread-1"),
       turnId: asTurnId("turn-claude-1"),
@@ -528,7 +522,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.completed",
       eventId: EventId.makeUnsafe("evt-turn-completed-claude-1"),
-      provider: "claudeAgent",
+      provider: "claudeCode",
       createdAt: new Date().toISOString(),
       threadId: ThreadId.makeUnsafe("thread-1"),
       turnId: asTurnId("turn-claude-1"),
@@ -716,7 +710,7 @@ describe("CheckpointReactor", () => {
       status: "completed",
     });
 
-    await harness.drain();
+    await Effect.runPromise(Effect.sleep("40 millis"));
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(thread?.checkpoints.some((checkpoint) => checkpoint.checkpointTurnCount === 3)).toBe(
@@ -862,8 +856,8 @@ describe("CheckpointReactor", () => {
     ).toBe(false);
   });
 
-  it("executes provider revert and emits thread.reverted for claude sessions", async () => {
-    const harness = await createHarness({ providerName: "claudeAgent" });
+  it("executes provider revert and emits thread.reverted for claudeCode sessions", async () => {
+    const harness = await createHarness({ providerName: "claudeCode" });
     const createdAt = new Date().toISOString();
 
     await Effect.runPromise(
@@ -874,7 +868,7 @@ describe("CheckpointReactor", () => {
         session: {
           threadId: ThreadId.makeUnsafe("thread-1"),
           status: "ready",
-          providerName: "claudeAgent",
+          providerName: "claudeCode",
           runtimeMode: "approval-required",
           activeTurnId: null,
           lastError: null,

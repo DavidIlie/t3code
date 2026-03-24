@@ -26,6 +26,16 @@ function getStored(): Theme {
   return "system";
 }
 
+function syncDesktopTheme(theme: Theme) {
+  if (theme === lastDesktopTheme) return;
+  lastDesktopTheme = theme;
+  try {
+    window.desktopBridge?.setTheme(theme);
+  } catch {
+    // Ignore errors from desktop bridge
+  }
+}
+
 function applyTheme(theme: Theme, suppressTransitions = false) {
   if (suppressTransitions) {
     document.documentElement.classList.add("no-transitions");
@@ -41,20 +51,6 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
       document.documentElement.classList.remove("no-transitions");
     });
   }
-}
-
-function syncDesktopTheme(theme: Theme) {
-  const bridge = window.desktopBridge;
-  if (!bridge || lastDesktopTheme === theme) {
-    return;
-  }
-
-  lastDesktopTheme = theme;
-  void bridge.setTheme(theme).catch(() => {
-    if (lastDesktopTheme === theme) {
-      lastDesktopTheme = null;
-    }
-  });
 }
 
 // Apply immediately on module load to prevent flash

@@ -109,14 +109,6 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function toTurnId(value: string | undefined): TurnId | undefined {
-  return value?.trim() ? TurnId.makeUnsafe(value) : undefined;
-}
-
-function toProviderItemId(value: string | undefined): ProviderItemId | undefined {
-  return value?.trim() ? ProviderItemId.makeUnsafe(value) : undefined;
-}
-
 function toTurnStatus(value: unknown): "completed" | "failed" | "cancelled" | "interrupted" {
   switch (value) {
     case "completed":
@@ -172,7 +164,7 @@ function itemTitle(itemType: CanonicalItemType): string | undefined {
     case "plan":
       return "Plan";
     case "command_execution":
-      return "Ran command";
+      return "Command run";
     case "file_change":
       return "File change";
     case "mcp_tool_call":
@@ -423,27 +415,27 @@ function codexEventBase(
 ): Omit<ProviderRuntimeEvent, "type" | "payload"> {
   const payload = asObject(event.payload);
   const msg = codexEventMessage(payload);
-  const turnId = event.turnId ?? toTurnId(asString(msg?.turn_id) ?? asString(msg?.turnId));
-  const itemId = event.itemId ?? toProviderItemId(asString(msg?.item_id) ?? asString(msg?.itemId));
+  const turnId = asString(msg?.turn_id) ?? asString(msg?.turnId);
+  const itemId = asString(msg?.item_id) ?? asString(msg?.itemId);
   const requestId = asString(msg?.request_id) ?? asString(msg?.requestId);
   const base = runtimeEventBase(event, canonicalThreadId);
   const providerRefs = base.providerRefs
     ? {
         ...base.providerRefs,
         ...(turnId ? { providerTurnId: turnId } : {}),
-        ...(itemId ? { providerItemId: itemId } : {}),
+        ...(itemId ? { providerItemId: ProviderItemId.makeUnsafe(itemId) } : {}),
         ...(requestId ? { providerRequestId: requestId } : {}),
       }
     : {
         ...(turnId ? { providerTurnId: turnId } : {}),
-        ...(itemId ? { providerItemId: itemId } : {}),
+        ...(itemId ? { providerItemId: ProviderItemId.makeUnsafe(itemId) } : {}),
         ...(requestId ? { providerRequestId: requestId } : {}),
       };
 
   return {
     ...base,
-    ...(turnId ? { turnId } : {}),
-    ...(itemId ? { itemId: asRuntimeItemId(itemId) } : {}),
+    ...(turnId ? { turnId: TurnId.makeUnsafe(turnId) } : {}),
+    ...(itemId ? { itemId: asRuntimeItemId(ProviderItemId.makeUnsafe(itemId)) } : {}),
     ...(requestId ? { requestId: asRuntimeRequestId(requestId) } : {}),
     ...(Object.keys(providerRefs).length > 0 ? { providerRefs } : {}),
   };
@@ -1335,7 +1327,7 @@ const makeCodexAdapter = (options?: CodexAdapterLiveOptions) =>
           (attachment) =>
             Effect.gen(function* () {
               const attachmentPath = resolveAttachmentPath({
-                attachmentsDir: serverConfig.attachmentsDir,
+                stateDir: serverConfig.stateDir,
                 attachment,
               });
               if (!attachmentPath) {

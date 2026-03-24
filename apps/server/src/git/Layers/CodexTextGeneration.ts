@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { DEFAULT_GIT_TEXT_GENERATION_MODEL } from "@t3tools/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -18,6 +17,7 @@ import {
   TextGeneration,
 } from "../Services/TextGeneration.ts";
 
+const CODEX_MODEL = "gpt-5.3-codex";
 const CODEX_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
 
@@ -163,7 +163,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         }
 
         const resolvedPath = resolveAttachmentPath({
-          attachmentsDir: serverConfig.attachmentsDir,
+          stateDir: serverConfig.stateDir,
           attachment,
         });
         if (!resolvedPath || !path.isAbsolute(resolvedPath)) {
@@ -187,7 +187,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     outputSchemaJson,
     imagePaths = [],
     cleanupPaths = [],
-    model,
   }: {
     operation: "generateCommitMessage" | "generatePrContent" | "generateBranchName";
     cwd: string;
@@ -195,7 +194,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     outputSchemaJson: S;
     imagePaths?: ReadonlyArray<string>;
     cleanupPaths?: ReadonlyArray<string>;
-    model?: string;
   }): Effect.Effect<S["Type"], TextGenerationError, S["DecodingServices"]> =>
     Effect.gen(function* () {
       const schemaPath = yield* writeTempFile(
@@ -214,7 +212,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             "-s",
             "read-only",
             "--model",
-            model ?? DEFAULT_GIT_TEXT_GENERATION_MODEL,
+            CODEX_MODEL,
             "--config",
             `model_reasoning_effort="${CODEX_REASONING_EFFORT}"`,
             "--output-schema",
@@ -316,7 +314,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
 
   const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = (input) => {
     const wantsBranch = input.includeBranch === true;
-    const userInstructions = (input as any).commitMessageInstructions?.trim() ?? "";
+    const userInstructions = input.commitMessageInstructions?.trim() ?? "";
 
     const prompt = [
       "You write concise git commit messages.",
@@ -359,7 +357,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       cwd: input.cwd,
       prompt,
       outputSchemaJson,
-      ...(input.model ? { model: input.model } : {}),
     }).pipe(
       Effect.map(
         (generated) =>
@@ -405,7 +402,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         title: Schema.String,
         body: Schema.String,
       }),
-      ...(input.model ? { model: input.model } : {}),
     }).pipe(
       Effect.map(
         (generated) =>
@@ -457,7 +453,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
           branch: Schema.String,
         }),
         imagePaths,
-        ...(input.model ? { model: input.model } : {}),
       });
 
       return {

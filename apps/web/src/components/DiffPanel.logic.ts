@@ -2,10 +2,10 @@ import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs";
 import { type FileDiffMetadata } from "@pierre/diffs/react";
 import { type ThreadId, type TurnId } from "@t3tools/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useComposerDraftStore } from "../composerDraftStore";
 import {
   type DiffContextCommentSide,
   type DiffContextCommentDraft,
-  type DiffContextCommentDraftUpdate,
 } from "../lib/diffContextComments";
 import { randomUUID } from "../lib/utils";
 
@@ -130,16 +130,15 @@ export function useDiffContextCommentDrafts(args: {
   renderableFiles: ReadonlyArray<FileDiffMetadata>;
 }) {
   const { activeThreadId, selectedTurnId, renderableFiles } = args;
-  const addDiffContextComment = useCallback(
-    (_threadId: ThreadId, _comment: DiffContextCommentDraft) => {},
-    [],
+  const addDiffContextComment = useComposerDraftStore((store) => store.addDiffContextComment);
+  const updateDiffContextComment = useComposerDraftStore((store) => store.updateDiffContextComment);
+  const removeDiffContextComment = useComposerDraftStore((store) => store.removeDiffContextComment);
+  const pendingDiffContextComments = useComposerDraftStore((state) =>
+    activeThreadId
+      ? (state.draftsByThreadId[activeThreadId]?.diffContextComments ??
+        EMPTY_PENDING_DIFF_CONTEXT_COMMENTS)
+      : EMPTY_PENDING_DIFF_CONTEXT_COMMENTS,
   );
-  const updateDiffContextComment = useCallback(
-    (_threadId: ThreadId, _commentId: string, _update: DiffContextCommentDraftUpdate) => {},
-    [],
-  );
-  const removeDiffContextComment = useCallback((_threadId: ThreadId, _commentId: string) => {}, []);
-  const pendingDiffContextComments = useMemo<DiffContextCommentDraft[]>(() => [], []);
   const [manualCommentSelection, setManualCommentSelection] = useState<DiffCommentSelection | null>(
     null,
   );

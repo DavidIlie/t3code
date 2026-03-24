@@ -8,7 +8,7 @@ import { Effect, Exit, Layer, PlatformError, PubSub, Scope, Stream } from "effec
 import { describe, expect, it, afterEach, vi } from "vitest";
 import { createServer } from "./wsServer";
 import WebSocket from "ws";
-import { deriveServerPaths, ServerConfig, type ServerConfigShape } from "./config";
+import { ServerConfig, type ServerConfigShape } from "./config";
 import { makeServerProviderLayer, makeServerRuntimeServicesLayer } from "./serverLayers";
 
 import {
@@ -27,8 +27,6 @@ import {
   type ServerProviderStatus,
   type KeybindingsConfig,
   type ResolvedKeybindingsConfig,
-  type WsPushChannel,
-  type WsPushMessage,
   type WsPush,
 } from "@t3tools/contracts";
 import { compileResolvedKeybindingRule, DEFAULT_KEYBINDINGS } from "./keybindings";
@@ -53,6 +51,13 @@ import { GitCore } from "./git/Services/GitCore.ts";
 import { GitCommandError, GitManagerError } from "./git/Errors.ts";
 import { MigrationError } from "@effect/sql-sqlite-bun/SqliteMigrator";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService.ts";
+
+interface PendingMessages {
+  queue: unknown[];
+  waiters: Array<(message: unknown) => void>;
+}
+
+const pendingBySocket = new WeakMap<WebSocket, PendingMessages>();
 
 const asEventId = (value: string): EventId => EventId.makeUnsafe(value);
 const asProviderItemId = (value: string): ProviderItemId => ProviderItemId.makeUnsafe(value);
@@ -209,67 +214,42 @@ class MockTerminalManager implements TerminalManagerShape {
   readonly dispose: TerminalManagerShape["dispose"] = Effect.void;
 }
 
-// ---------------------------------------------------------------------------
-// WebSocket test harness
-//
-// Incoming messages are split into two channels:
-//   - pushChannel: server push envelopes (type === "push")
-//   - responseChannel: request/response envelopes (have an "id" field)
-//
-// This means sendRequest never has to skip push messages and waitForPush
-// never has to skip response messages, eliminating a class of ordering bugs.
-// ---------------------------------------------------------------------------
+function connectWs(port: number, token?: string): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    const query = token ? `?token=${encodeURIComponent(token)}` : "";
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/${query}`);
+    const pending: PendingMessages = { queue: [], waiters: [] };
+    pendingBySocket.set(ws, pending);
 
-interface MessageChannel<T> {
-  queue: T[];
-  waiters: Array<{
-    resolve: (value: T) => void;
-    reject: (error: Error) => void;
-    timeoutId: ReturnType<typeof setTimeout> | null;
-  }>;
+    ws.on("message", (raw) => {
+      const parsed = JSON.parse(String(raw));
+      const waiter = pending.waiters.shift();
+      if (waiter) {
+        waiter(parsed);
+        return;
+      }
+      pending.queue.push(parsed);
+    });
+
+    ws.once("open", () => resolve(ws));
+    ws.once("error", () => reject(new Error("WebSocket connection failed")));
+  });
 }
 
-interface SocketChannels {
-  push: MessageChannel<WsPush>;
-  response: MessageChannel<WebSocketResponse>;
-}
-
-const channelsBySocket = new WeakMap<WebSocket, SocketChannels>();
-
-function enqueue<T>(channel: MessageChannel<T>, item: T) {
-  const waiter = channel.waiters.shift();
-  if (waiter) {
-    if (waiter.timeoutId !== null) clearTimeout(waiter.timeoutId);
-    waiter.resolve(item);
-    return;
+function waitForMessage(ws: WebSocket): Promise<unknown> {
+  const pending = pendingBySocket.get(ws);
+  if (!pending) {
+    return Promise.reject(new Error("WebSocket not initialized"));
   }
-  channel.queue.push(item);
-}
 
-function dequeue<T>(channel: MessageChannel<T>, timeoutMs: number): Promise<T> {
-  const queued = channel.queue.shift();
+  const queued = pending.queue.shift();
   if (queued !== undefined) {
     return Promise.resolve(queued);
   }
 
-  return new Promise((resolve, reject) => {
-    const waiter = {
-      resolve,
-      reject,
-      timeoutId: setTimeout(() => {
-        const index = channel.waiters.indexOf(waiter);
-        if (index >= 0) channel.waiters.splice(index, 1);
-        reject(new Error(`Timed out waiting for WebSocket message after ${timeoutMs}ms`));
-      }, timeoutMs) as ReturnType<typeof setTimeout>,
-    };
-    channel.waiters.push(waiter);
+  return new Promise((resolve) => {
+    pending.waiters.push(resolve);
   });
-}
-
-function isWsPushEnvelope(message: unknown): message is WsPush {
-  if (typeof message !== "object" || message === null) return false;
-  if (!("type" in message) || !("channel" in message)) return false;
-  return (message as { type?: unknown }).type === "push";
 }
 
 function asWebSocketResponse(message: unknown): WebSocketResponse | null {
@@ -280,68 +260,11 @@ function asWebSocketResponse(message: unknown): WebSocketResponse | null {
   return message as WebSocketResponse;
 }
 
-function connectWsOnce(port: number, token?: string): Promise<WebSocket> {
-  return new Promise((resolve, reject) => {
-    const query = token ? `?token=${encodeURIComponent(token)}` : "";
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/${query}`);
-    const channels: SocketChannels = {
-      push: { queue: [], waiters: [] },
-      response: { queue: [], waiters: [] },
-    };
-    channelsBySocket.set(ws, channels);
-
-    ws.on("message", (raw) => {
-      const parsed = JSON.parse(String(raw));
-      if (isWsPushEnvelope(parsed)) {
-        enqueue(channels.push, parsed);
-      } else {
-        const response = asWebSocketResponse(parsed);
-        if (response) {
-          enqueue(channels.response, response);
-        }
-      }
-    });
-
-    ws.once("open", () => resolve(ws));
-    ws.once("error", () => reject(new Error("WebSocket connection failed")));
-  });
-}
-
-async function connectWs(port: number, token?: string, attempts = 5): Promise<WebSocket> {
-  let lastError: unknown = new Error("WebSocket connection failed");
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      return await connectWsOnce(port, token);
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-    }
-  }
-
-  throw lastError;
-}
-
-/** Connect and wait for the server.welcome push. Returns [ws, welcomeData]. */
-async function connectAndAwaitWelcome(
-  port: number,
-  token?: string,
-): Promise<[WebSocket, WsPushMessage<typeof WS_CHANNELS.serverWelcome>]> {
-  const ws = await connectWs(port, token);
-  const welcome = await waitForPush(ws, WS_CHANNELS.serverWelcome);
-  return [ws, welcome];
-}
-
 async function sendRequest(
   ws: WebSocket,
   method: string,
   params?: unknown,
 ): Promise<WebSocketResponse> {
-  const channels = channelsBySocket.get(ws);
-  if (!channels) throw new Error("WebSocket not initialized");
-
   const id = crypto.randomUUID();
   const body =
     method === ORCHESTRATION_WS_METHODS.dispatchCommand
@@ -349,53 +272,44 @@ async function sendRequest(
       : params && typeof params === "object" && !Array.isArray(params)
         ? { _tag: method, ...(params as Record<string, unknown>) }
         : { _tag: method };
-  ws.send(JSON.stringify({ id, body }));
+  const message = JSON.stringify({ id, body });
+  ws.send(message);
 
-  // Response channel only contains responses — no push filtering needed
+  // Wait for response with matching id
   while (true) {
-    const response = await dequeue(channels.response, 60_000);
-    if (response.id === id || response.id === "unknown") {
-      return response;
+    const parsed = asWebSocketResponse(await waitForMessage(ws));
+    if (!parsed) {
+      continue;
+    }
+    if (parsed.id === id) {
+      return parsed;
+    }
+    if (parsed.id === "unknown") {
+      return parsed;
     }
   }
 }
 
-async function waitForPush<C extends WsPushChannel>(
+async function waitForPush(
   ws: WebSocket,
-  channel: C,
-  predicate?: (push: WsPushMessage<C>) => boolean,
+  channel: string,
+  predicate?: (push: WsPush) => boolean,
   maxMessages = 120,
-  idleTimeoutMs = 5_000,
-): Promise<WsPushMessage<C>> {
-  const channels = channelsBySocket.get(ws);
-  if (!channels) throw new Error("WebSocket not initialized");
-
-  for (let remaining = maxMessages; remaining > 0; remaining--) {
-    const push = await dequeue(channels.push, idleTimeoutMs);
-    if (push.channel !== channel) continue;
-    const typed = push as WsPushMessage<C>;
-    if (!predicate || predicate(typed)) return typed;
-  }
-  throw new Error(`Timed out waiting for push on ${channel}`);
-}
-
-async function rewriteKeybindingsAndWaitForPush(
-  ws: WebSocket,
-  keybindingsPath: string,
-  contents: string,
-  predicate: (push: WsPushMessage<typeof WS_CHANNELS.serverConfigUpdated>) => boolean,
-  attempts = 3,
-): Promise<WsPushMessage<typeof WS_CHANNELS.serverConfigUpdated>> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    fs.writeFileSync(keybindingsPath, contents, "utf8");
-    try {
-      return await waitForPush(ws, WS_CHANNELS.serverConfigUpdated, predicate, 20, 3_000);
-    } catch (error) {
-      lastError = error;
+): Promise<WsPush> {
+  const take = async (remaining: number): Promise<WsPush> => {
+    if (remaining <= 0) {
+      throw new Error(`Timed out waiting for push on ${channel}`);
     }
-  }
-  throw lastError;
+    const message = (await waitForMessage(ws)) as WsPush;
+    if (message.type !== "push" || message.channel !== channel) {
+      return take(remaining - 1);
+    }
+    if (!predicate || predicate(message)) {
+      return message;
+    }
+    return take(remaining - 1);
+  };
+  return take(maxMessages);
 }
 
 async function requestPath(
@@ -451,16 +365,6 @@ function expectAvailableEditors(value: unknown): void {
   }
 }
 
-function ensureParentDir(filePath: string): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-}
-
-function deriveServerPathsSync(baseDir: string, devUrl: URL | undefined) {
-  return Effect.runSync(
-    deriveServerPaths(baseDir, devUrl).pipe(Effect.provide(NodeServices.layer)),
-  );
-}
-
 describe("WebSocket Server", () => {
   let server: Http.Server | null = null;
   let serverScope: Scope.Closeable | null = null;
@@ -484,7 +388,7 @@ describe("WebSocket Server", () => {
       logWebSocketEvents?: boolean;
       devUrl?: string;
       authToken?: string;
-      baseDir?: string;
+      stateDir?: string;
       staticDir?: string;
       providerLayer?: Layer.Layer<ProviderService, never>;
       providerHealth?: ProviderHealthShape;
@@ -498,9 +402,7 @@ describe("WebSocket Server", () => {
       throw new Error("Test server is already running");
     }
 
-    const baseDir = options.baseDir ?? makeTempDir("t3code-ws-base-");
-    const devUrl = options.devUrl ? new URL(options.devUrl) : undefined;
-    const derivedPaths = deriveServerPathsSync(baseDir, devUrl);
+    const stateDir = options.stateDir ?? makeTempDir("t3code-ws-state-");
     const scope = await Effect.runPromise(Scope.make("sequential"));
     const persistenceLayer = options.persistenceLayer ?? SqlitePersistenceMemory;
     const providerLayer = options.providerLayer ?? makeServerProviderLayer();
@@ -514,10 +416,10 @@ describe("WebSocket Server", () => {
       port: 0,
       host: undefined,
       cwd: options.cwd ?? "/test/project",
-      baseDir,
-      ...derivedPaths,
+      keybindingsConfigPath: path.join(stateDir, "keybindings.json"),
+      stateDir,
       staticDir: options.staticDir,
-      devUrl,
+      devUrl: options.devUrl ? new URL(options.devUrl) : undefined,
       noBrowser: true,
       authToken: options.authToken,
       autoBootstrapProjectFromCwd: options.autoBootstrapProjectFromCwd ?? false,
@@ -587,28 +489,30 @@ describe("WebSocket Server", () => {
 
   it("sends welcome message on connect", async () => {
     server = await createTestServer({ cwd: "/test/project" });
+    // Get the actual port after listen
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
     expect(port).toBeGreaterThan(0);
 
-    const [ws, welcome] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
 
-    expect(welcome.type).toBe("push");
-    expect(welcome.data).toEqual({
+    const message = (await waitForMessage(ws)) as WsPush;
+    expect(message.type).toBe("push");
+    expect(message.channel).toBe(WS_CHANNELS.serverWelcome);
+    expect(message.data).toMatchObject({
       cwd: "/test/project",
       projectName: "project",
     });
   });
 
   it("serves persisted attachments from stateDir", async () => {
-    const baseDir = makeTempDir("t3code-state-attachments-");
-    const { attachmentsDir } = deriveServerPathsSync(baseDir, undefined);
-    const attachmentPath = path.join(attachmentsDir, "thread-a", "message-a", "0.png");
+    const stateDir = makeTempDir("t3code-state-attachments-");
+    const attachmentPath = path.join(stateDir, "attachments", "thread-a", "message-a", "0.png");
     fs.mkdirSync(path.dirname(attachmentPath), { recursive: true });
     fs.writeFileSync(attachmentPath, Buffer.from("hello-attachment"));
 
-    server = await createTestServer({ cwd: "/test/project", baseDir });
+    server = await createTestServer({ cwd: "/test/project", stateDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
     expect(port).toBeGreaterThan(0);
@@ -621,10 +525,10 @@ describe("WebSocket Server", () => {
   });
 
   it("serves persisted attachments for URL-encoded paths", async () => {
-    const baseDir = makeTempDir("t3code-state-attachments-encoded-");
-    const { attachmentsDir } = deriveServerPathsSync(baseDir, undefined);
+    const stateDir = makeTempDir("t3code-state-attachments-encoded-");
     const attachmentPath = path.join(
-      attachmentsDir,
+      stateDir,
+      "attachments",
       "thread%20folder",
       "message%20folder",
       "file%20name.png",
@@ -632,7 +536,7 @@ describe("WebSocket Server", () => {
     fs.mkdirSync(path.dirname(attachmentPath), { recursive: true });
     fs.writeFileSync(attachmentPath, Buffer.from("hello-encoded-attachment"));
 
-    server = await createTestServer({ cwd: "/test/project", baseDir });
+    server = await createTestServer({ cwd: "/test/project", stateDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
     expect(port).toBeGreaterThan(0);
@@ -647,11 +551,11 @@ describe("WebSocket Server", () => {
   });
 
   it("serves static index for root path", async () => {
-    const baseDir = makeTempDir("t3code-state-static-root-");
+    const stateDir = makeTempDir("t3code-state-static-root-");
     const staticDir = makeTempDir("t3code-static-root-");
     fs.writeFileSync(path.join(staticDir, "index.html"), "<h1>static-root</h1>", "utf8");
 
-    server = await createTestServer({ cwd: "/test/project", baseDir, staticDir });
+    server = await createTestServer({ cwd: "/test/project", stateDir, staticDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
     expect(port).toBeGreaterThan(0);
@@ -662,11 +566,11 @@ describe("WebSocket Server", () => {
   });
 
   it("rejects static path traversal attempts", async () => {
-    const baseDir = makeTempDir("t3code-state-static-traversal-");
+    const stateDir = makeTempDir("t3code-state-static-traversal-");
     const staticDir = makeTempDir("t3code-static-traversal-");
     fs.writeFileSync(path.join(staticDir, "index.html"), "<h1>safe</h1>", "utf8");
 
-    server = await createTestServer({ cwd: "/test/project", baseDir, staticDir });
+    server = await createTestServer({ cwd: "/test/project", stateDir, staticDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
     expect(port).toBeGreaterThan(0);
@@ -685,8 +589,10 @@ describe("WebSocket Server", () => {
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
     expect(port).toBeGreaterThan(0);
 
-    const [ws, welcome] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    const welcome = (await waitForMessage(ws)) as WsPush; // welcome
+    expect(welcome.channel).toBe(WS_CHANNELS.serverWelcome);
     expect(welcome.data).toEqual(
       expect.objectContaining({
         cwd: "/test/bootstrap-workspace",
@@ -744,16 +650,15 @@ describe("WebSocket Server", () => {
   });
 
   it("includes bootstrap ids in welcome when cwd project and thread already exist", async () => {
-    const baseDir = makeTempDir("t3code-state-bootstrap-existing-");
-    const { dbPath } = deriveServerPathsSync(baseDir, undefined);
-    const persistenceLayer = makeSqlitePersistenceLive(dbPath).pipe(
+    const stateDir = makeTempDir("t3code-state-bootstrap-existing-");
+    const persistenceLayer = makeSqlitePersistenceLive(path.join(stateDir, "state.sqlite")).pipe(
       Layer.provide(NodeServices.layer),
     );
     const cwd = "/test/bootstrap-existing";
 
     server = await createTestServer({
       cwd,
-      baseDir,
+      stateDir,
       persistenceLayer,
       autoBootstrapProjectFromCwd: true,
     });
@@ -761,8 +666,9 @@ describe("WebSocket Server", () => {
     let port = typeof addr === "object" && addr !== null ? addr.port : 0;
     expect(port).toBeGreaterThan(0);
 
-    const [firstWs, firstWelcome] = await connectAndAwaitWelcome(port);
+    const firstWs = await connectWs(port);
     connections.push(firstWs);
+    const firstWelcome = (await waitForMessage(firstWs)) as WsPush;
     const firstBootstrapProjectId = (firstWelcome.data as { bootstrapProjectId?: string })
       .bootstrapProjectId;
     const firstBootstrapThreadId = (firstWelcome.data as { bootstrapThreadId?: string })
@@ -776,7 +682,7 @@ describe("WebSocket Server", () => {
 
     server = await createTestServer({
       cwd,
-      baseDir,
+      stateDir,
       persistenceLayer,
       autoBootstrapProjectFromCwd: true,
     });
@@ -784,8 +690,10 @@ describe("WebSocket Server", () => {
     port = typeof addr === "object" && addr !== null ? addr.port : 0;
     expect(port).toBeGreaterThan(0);
 
-    const [secondWs, secondWelcome] = await connectAndAwaitWelcome(port);
+    const secondWs = await connectWs(port);
     connections.push(secondWs);
+    const secondWelcome = (await waitForMessage(secondWs)) as WsPush;
+    expect(secondWelcome.channel).toBe(WS_CHANNELS.serverWelcome);
     expect(secondWelcome.data).toEqual(
       expect.objectContaining({
         cwd,
@@ -809,8 +717,9 @@ describe("WebSocket Server", () => {
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
     expect(port).toBeGreaterThan(0);
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     expect(
       logSpy.mock.calls.some(([message]) => {
@@ -825,17 +734,19 @@ describe("WebSocket Server", () => {
   });
 
   it("responds to server.getConfig", async () => {
-    const baseDir = makeTempDir("t3code-state-get-config-");
-    const { keybindingsConfigPath: keybindingsPath } = deriveServerPathsSync(baseDir, undefined);
-    ensureParentDir(keybindingsPath);
+    const stateDir = makeTempDir("t3code-state-get-config-");
+    const keybindingsPath = path.join(stateDir, "keybindings.json");
     fs.writeFileSync(keybindingsPath, "[]", "utf8");
 
-    server = await createTestServer({ cwd: "/my/workspace", baseDir });
+    server = await createTestServer({ cwd: "/my/workspace", stateDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+
+    // Consume welcome message
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.serverGetConfig);
     expect(response.error).toBeUndefined();
@@ -851,16 +762,17 @@ describe("WebSocket Server", () => {
   });
 
   it("bootstraps default keybindings file when missing", async () => {
-    const baseDir = makeTempDir("t3code-state-bootstrap-keybindings-");
-    const { keybindingsConfigPath: keybindingsPath } = deriveServerPathsSync(baseDir, undefined);
+    const stateDir = makeTempDir("t3code-state-bootstrap-keybindings-");
+    const keybindingsPath = path.join(stateDir, "keybindings.json");
     expect(fs.existsSync(keybindingsPath)).toBe(false);
 
-    server = await createTestServer({ cwd: "/my/workspace", baseDir });
+    server = await createTestServer({ cwd: "/my/workspace", stateDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.serverGetConfig);
     expect(response.error).toBeUndefined();
@@ -881,17 +793,17 @@ describe("WebSocket Server", () => {
   });
 
   it("falls back to defaults and reports malformed keybindings config issues", async () => {
-    const baseDir = makeTempDir("t3code-state-malformed-keybindings-");
-    const { keybindingsConfigPath: keybindingsPath } = deriveServerPathsSync(baseDir, undefined);
-    ensureParentDir(keybindingsPath);
+    const stateDir = makeTempDir("t3code-state-malformed-keybindings-");
+    const keybindingsPath = path.join(stateDir, "keybindings.json");
     fs.writeFileSync(keybindingsPath, "{ not-json", "utf8");
 
-    server = await createTestServer({ cwd: "/my/workspace", baseDir });
+    server = await createTestServer({ cwd: "/my/workspace", stateDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.serverGetConfig);
     expect(response.error).toBeUndefined();
@@ -913,9 +825,8 @@ describe("WebSocket Server", () => {
   });
 
   it("ignores invalid keybinding entries but keeps valid entries and reports issues", async () => {
-    const baseDir = makeTempDir("t3code-state-partial-invalid-keybindings-");
-    const { keybindingsConfigPath: keybindingsPath } = deriveServerPathsSync(baseDir, undefined);
-    ensureParentDir(keybindingsPath);
+    const stateDir = makeTempDir("t3code-state-partial-invalid-keybindings-");
+    const keybindingsPath = path.join(stateDir, "keybindings.json");
     fs.writeFileSync(
       keybindingsPath,
       JSON.stringify([
@@ -926,12 +837,13 @@ describe("WebSocket Server", () => {
       "utf8",
     );
 
-    server = await createTestServer({ cwd: "/my/workspace", baseDir });
+    server = await createTestServer({ cwd: "/my/workspace", stateDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.serverGetConfig);
     expect(response.error).toBeUndefined();
@@ -965,38 +877,37 @@ describe("WebSocket Server", () => {
   });
 
   it("pushes server.configUpdated issues when keybindings file changes", async () => {
-    const baseDir = makeTempDir("t3code-state-keybindings-watch-");
-    const { keybindingsConfigPath: keybindingsPath } = deriveServerPathsSync(baseDir, undefined);
-    ensureParentDir(keybindingsPath);
+    const stateDir = makeTempDir("t3code-state-keybindings-watch-");
+    const keybindingsPath = path.join(stateDir, "keybindings.json");
     fs.writeFileSync(keybindingsPath, "[]", "utf8");
 
-    server = await createTestServer({ cwd: "/my/workspace", baseDir });
+    server = await createTestServer({ cwd: "/my/workspace", stateDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
-    const malformedPush = await rewriteKeybindingsAndWaitForPush(
-      ws,
-      keybindingsPath,
-      "{ not-json",
-      (push) =>
-        Array.isArray(push.data.issues) &&
-        Boolean(push.data.issues[0]) &&
-        push.data.issues[0]!.kind === "keybindings.malformed-config",
-    );
+    fs.writeFileSync(keybindingsPath, "{ not-json", "utf8");
+    const malformedPush = await waitForPush(ws, WS_CHANNELS.serverConfigUpdated, (push) => {
+      const data = push.data as unknown as { issues?: Array<{ kind: string }> };
+      return (
+        Array.isArray(data.issues) &&
+        Boolean(data.issues[0]) &&
+        data.issues[0]!.kind === "keybindings.malformed-config"
+      );
+    });
     expect(malformedPush.data).toEqual({
       issues: [{ kind: "keybindings.malformed-config", message: expect.any(String) }],
       providers: defaultProviderStatuses,
     });
 
-    const successPush = await rewriteKeybindingsAndWaitForPush(
-      ws,
-      keybindingsPath,
-      "[]",
-      (push) => Array.isArray(push.data.issues) && push.data.issues.length === 0,
-    );
+    fs.writeFileSync(keybindingsPath, "[]", "utf8");
+    const successPush = await waitForPush(ws, WS_CHANNELS.serverConfigUpdated, (push) => {
+      const data = push.data as unknown as { issues?: unknown[] };
+      return Array.isArray(data.issues) && data.issues.length === 0;
+    });
     expect(successPush.data).toEqual({ issues: [], providers: defaultProviderStatuses });
   });
 
@@ -1014,8 +925,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.shellOpenInEditor, {
       cwd: "/my/workspace",
@@ -1026,9 +938,8 @@ describe("WebSocket Server", () => {
   });
 
   it("reads keybindings from the configured state directory", async () => {
-    const baseDir = makeTempDir("t3code-state-keybindings-");
-    const { keybindingsConfigPath: keybindingsPath } = deriveServerPathsSync(baseDir, undefined);
-    ensureParentDir(keybindingsPath);
+    const stateDir = makeTempDir("t3code-state-keybindings-");
+    const keybindingsPath = path.join(stateDir, "keybindings.json");
     fs.writeFileSync(
       keybindingsPath,
       JSON.stringify([
@@ -1038,12 +949,14 @@ describe("WebSocket Server", () => {
       ]),
       "utf8",
     );
-    server = await createTestServer({ cwd: "/my/workspace", baseDir });
+    server = await createTestServer({ cwd: "/my/workspace", stateDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.serverGetConfig);
     expect(response.error).toBeUndefined();
@@ -1062,21 +975,21 @@ describe("WebSocket Server", () => {
   });
 
   it("upserts keybinding rules and updates cached server config", async () => {
-    const baseDir = makeTempDir("t3code-state-upsert-keybinding-");
-    const { keybindingsConfigPath: keybindingsPath } = deriveServerPathsSync(baseDir, undefined);
-    ensureParentDir(keybindingsPath);
+    const stateDir = makeTempDir("t3code-state-upsert-keybinding-");
+    const keybindingsPath = path.join(stateDir, "keybindings.json");
     fs.writeFileSync(
       keybindingsPath,
       JSON.stringify([{ key: "mod+j", command: "terminal.toggle" }]),
       "utf8",
     );
 
-    server = await createTestServer({ cwd: "/my/workspace", baseDir });
+    server = await createTestServer({ cwd: "/my/workspace", stateDir });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const upsertResponse = await sendRequest(ws, WS_METHODS.serverUpsertKeybinding, {
       key: "mod+shift+r",
@@ -1116,8 +1029,11 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+
+    // Consume welcome push
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, "nonexistent.method");
     expect(response.error).toBeDefined();
@@ -1129,8 +1045,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, ORCHESTRATION_WS_METHODS.getTurnDiff, {
       threadId: "thread-missing",
@@ -1146,8 +1063,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, ORCHESTRATION_WS_METHODS.getTurnDiff, {
       threadId: "thread-any",
@@ -1165,8 +1083,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, ORCHESTRATION_WS_METHODS.getFullThreadDiff, {
       threadId: "thread-missing",
@@ -1181,8 +1100,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const workspaceRoot = makeTempDir("t3code-ws-diff-project-");
     const createdAt = new Date().toISOString();
@@ -1262,8 +1182,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const workspaceRoot = makeTempDir("t3code-ws-project-");
     const createdAt = new Date().toISOString();
@@ -1354,8 +1275,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const open = await sendRequest(ws, WS_METHODS.terminalOpen, {
       threadId: "thread-1",
@@ -1408,13 +1330,8 @@ describe("WebSocket Server", () => {
     };
     terminalManager.emitEvent(manualEvent);
 
-    const push = await waitForPush(
-      ws,
-      WS_CHANNELS.terminalEvent,
-      (candidate) => (candidate.data as TerminalEvent).type === "output",
-    );
-    expect(push.type).toBe("push");
-    expect(push.channel).toBe(WS_CHANNELS.terminalEvent);
+    const push = await waitForPush(ws, WS_CHANNELS.terminalEvent);
+    expect((push.data as TerminalEvent).type).toBe("output");
   });
 
   it("detaches terminal event listener on stop for injected manager", async () => {
@@ -1437,8 +1354,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.terminalOpen, {
       threadId: "",
@@ -1454,17 +1372,21 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+
+    // Consume welcome
+    await waitForMessage(ws);
 
     // Send garbage
     ws.send("not json at all");
 
-    // Error response goes to the response channel
-    const channels = channelsBySocket.get(ws)!;
     let response: WebSocketResponse | null = null;
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const message = await dequeue(channels.response, 5_000);
+      const message = asWebSocketResponse(await waitForMessage(ws));
+      if (!message) {
+        continue;
+      }
       if (message.id === "unknown") {
         response = message;
         break;
@@ -1497,8 +1419,9 @@ describe("WebSocket Server", () => {
       const addr = server.address();
       const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-      const [ws] = await connectAndAwaitWelcome(port);
+      const ws = await connectWs(port);
       connections.push(ws);
+      await waitForMessage(ws);
 
       ws.send(
         JSON.stringify({
@@ -1537,31 +1460,6 @@ describe("WebSocket Server", () => {
     }
   });
 
-  it("returns errors for removed projects CRUD methods", async () => {
-    server = await createTestServer({ cwd: "/test" });
-    const addr = server.address();
-    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
-
-    const [ws] = await connectAndAwaitWelcome(port);
-    connections.push(ws);
-
-    const listResponse = await sendRequest(ws, WS_METHODS.projectsList);
-    expect(listResponse.result).toBeUndefined();
-    expect(listResponse.error?.message).toContain("Invalid request format");
-
-    const addResponse = await sendRequest(ws, WS_METHODS.projectsAdd, {
-      cwd: "/tmp/project-a",
-    });
-    expect(addResponse.result).toBeUndefined();
-    expect(addResponse.error?.message).toContain("Invalid request format");
-
-    const removeResponse = await sendRequest(ws, WS_METHODS.projectsRemove, {
-      id: "project-a",
-    });
-    expect(removeResponse.result).toBeUndefined();
-    expect(removeResponse.error?.message).toContain("Invalid request format");
-  });
-
   it("supports projects.searchEntries", async () => {
     const workspace = makeTempDir("t3code-ws-workspace-entries-");
     fs.mkdirSync(path.join(workspace, "src", "components"), { recursive: true });
@@ -1578,8 +1476,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.projectsSearchEntries, {
       cwd: workspace,
@@ -1603,8 +1502,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.projectsWriteFile, {
       cwd: workspace,
@@ -1628,8 +1528,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.projectsWriteFile, {
       cwd: workspace,
@@ -1675,8 +1576,9 @@ describe("WebSocket Server", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const listResponse = await sendRequest(ws, WS_METHODS.gitListBranches, { cwd: "/repo/path" });
     expect(listResponse.error).toBeUndefined();
@@ -1717,14 +1619,16 @@ describe("WebSocket Server", () => {
       resolvePullRequest,
       preparePullRequestThread,
       runStackedAction,
+      generateCommitMessage: vi.fn(() => Effect.succeed({ subject: "", body: "" })),
     };
 
     server = await createTestServer({ cwd: "/test", gitManager });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.gitStatus, {
       cwd: "/test",
@@ -1756,14 +1660,16 @@ describe("WebSocket Server", () => {
       resolvePullRequest: vi.fn(() => Effect.succeed(resolvePullRequestResult)),
       preparePullRequestThread: vi.fn(() => Effect.succeed(preparePullRequestThreadResult)),
       runStackedAction: vi.fn(() => Effect.void as any),
+      generateCommitMessage: vi.fn(() => Effect.succeed({ subject: "", body: "" })),
     };
 
     server = await createTestServer({ cwd: "/test", gitManager });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const resolveResponse = await sendRequest(ws, WS_METHODS.gitResolvePullRequest, {
       cwd: "/test",
@@ -1804,104 +1710,27 @@ describe("WebSocket Server", () => {
       resolvePullRequest: vi.fn(() => Effect.void as any),
       preparePullRequestThread: vi.fn(() => Effect.void as any),
       runStackedAction,
+      generateCommitMessage: vi.fn(() => Effect.succeed({ subject: "", body: "" })),
     };
 
     server = await createTestServer({ cwd: "/test", gitManager });
     const addr = server.address();
     const port = typeof addr === "object" && addr !== null ? addr.port : 0;
 
-    const [ws] = await connectAndAwaitWelcome(port);
+    const ws = await connectWs(port);
     connections.push(ws);
+    await waitForMessage(ws);
 
     const response = await sendRequest(ws, WS_METHODS.gitRunStackedAction, {
-      actionId: "client-action-1",
       cwd: "/test",
       action: "commit_push",
     });
     expect(response.result).toBeUndefined();
     expect(response.error?.message).toContain("detached HEAD");
-    expect(runStackedAction).toHaveBeenCalledWith(
-      {
-        actionId: "client-action-1",
-        cwd: "/test",
-        action: "commit_push",
-      },
-      expect.objectContaining({
-        actionId: "client-action-1",
-        progressReporter: expect.any(Object),
-      }),
-    );
-  });
-
-  it("publishes git action progress only to the initiating websocket", async () => {
-    const runStackedAction = vi.fn(
-      (_input, options) =>
-        options?.progressReporter
-          ?.publish({
-            actionId: options.actionId ?? "action-1",
-            cwd: "/test",
-            action: "commit",
-            kind: "phase_started",
-            phase: "commit",
-            label: "Committing...",
-          })
-          .pipe(
-            Effect.flatMap(() =>
-              Effect.succeed({
-                action: "commit" as const,
-                branch: { status: "skipped_not_requested" as const },
-                commit: {
-                  status: "created" as const,
-                  commitSha: "abc1234",
-                  subject: "Test commit",
-                },
-                push: { status: "skipped_not_requested" as const },
-                pr: { status: "skipped_not_requested" as const },
-              }),
-            ),
-          ) ?? Effect.void,
-    );
-    const gitManager: GitManagerShape = {
-      status: vi.fn(() => Effect.void as any),
-      resolvePullRequest: vi.fn(() => Effect.void as any),
-      preparePullRequestThread: vi.fn(() => Effect.void as any),
-      runStackedAction,
-    };
-
-    server = await createTestServer({ cwd: "/test", gitManager });
-    const addr = server.address();
-    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
-
-    const [initiatingWs] = await connectAndAwaitWelcome(port);
-    const [otherWs] = await connectAndAwaitWelcome(port);
-    connections.push(initiatingWs, otherWs);
-
-    const responsePromise = sendRequest(initiatingWs, WS_METHODS.gitRunStackedAction, {
-      actionId: "client-action-2",
+    expect(runStackedAction).toHaveBeenCalledWith({
       cwd: "/test",
-      action: "commit",
+      action: "commit_push",
     });
-    const progressPush = await waitForPush(initiatingWs, WS_CHANNELS.gitActionProgress);
-
-    expect(progressPush.data).toEqual({
-      actionId: "client-action-2",
-      cwd: "/test",
-      action: "commit",
-      kind: "phase_started",
-      phase: "commit",
-      label: "Committing...",
-    });
-
-    await expect(
-      waitForPush(otherWs, WS_CHANNELS.gitActionProgress, undefined, 10, 100),
-    ).rejects.toThrow("Timed out waiting for WebSocket message after 100ms");
-    await expect(responsePromise).resolves.toEqual(
-      expect.objectContaining({
-        result: expect.objectContaining({
-          action: "commit",
-        }),
-      }),
-    );
   });
 
   it("rejects websocket connections without a valid auth token", async () => {
@@ -1911,7 +1740,9 @@ describe("WebSocket Server", () => {
 
     await expect(connectWs(port)).rejects.toThrow("WebSocket connection failed");
 
-    const [authorizedWs] = await connectAndAwaitWelcome(port, "secret-token");
+    const authorizedWs = await connectWs(port, "secret-token");
     connections.push(authorizedWs);
+    const welcome = (await waitForMessage(authorizedWs)) as WsPush;
+    expect(welcome.channel).toBe(WS_CHANNELS.serverWelcome);
   });
 });

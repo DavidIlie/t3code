@@ -66,17 +66,17 @@ export function attachmentRelativePath(attachment: ChatAttachment): string {
 }
 
 export function resolveAttachmentPath(input: {
-  readonly attachmentsDir: string;
+  readonly stateDir: string;
   readonly attachment: ChatAttachment;
 }): string | null {
   return resolveAttachmentRelativePath({
-    attachmentsDir: input.attachmentsDir,
+    stateDir: input.stateDir,
     relativePath: attachmentRelativePath(input.attachment),
   });
 }
 
 export function resolveAttachmentPathById(input: {
-  readonly attachmentsDir: string;
+  readonly stateDir: string;
   readonly attachmentId: string;
 }): string | null {
   const normalizedId = normalizeAttachmentRelativePath(input.attachmentId);
@@ -85,7 +85,7 @@ export function resolveAttachmentPathById(input: {
   }
   for (const extension of ATTACHMENT_FILENAME_EXTENSIONS) {
     const maybePath = resolveAttachmentRelativePath({
-      attachmentsDir: input.attachmentsDir,
+      stateDir: input.stateDir,
       relativePath: `${normalizedId}${extension}`,
     });
     if (maybePath && existsSync(maybePath)) {

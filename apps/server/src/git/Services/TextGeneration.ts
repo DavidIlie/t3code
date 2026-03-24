@@ -19,8 +19,8 @@ export interface CommitMessageGenerationInput {
   stagedPatch: string;
   /** When true, the model also returns a semantic branch name for the change. */
   includeBranch?: boolean;
-  /** Model to use for generation. Defaults to gpt-5.4-mini if not specified. */
-  model?: string;
+  /** Optional user-provided instructions to guide the commit message style/content. */
+  commitMessageInstructions?: string;
 }
 
 export interface CommitMessageGenerationResult {
@@ -37,8 +37,6 @@ export interface PrContentGenerationInput {
   commitSummary: string;
   diffSummary: string;
   diffPatch: string;
-  /** Model to use for generation. Defaults to gpt-5.4-mini if not specified. */
-  model?: string;
 }
 
 export interface PrContentGenerationResult {
@@ -50,8 +48,6 @@ export interface BranchNameGenerationInput {
   cwd: string;
   message: string;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
-  /** Model to use for generation. Defaults to gpt-5.4-mini if not specified. */
-  model?: string;
 }
 
 export interface BranchNameGenerationResult {

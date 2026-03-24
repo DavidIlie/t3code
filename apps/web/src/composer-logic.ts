@@ -1,7 +1,10 @@
 import { splitPromptIntoComposerSegments } from "./composer-editor-mentions";
-import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
 
-export type ComposerTriggerKind = "path" | "slash-command" | "slash-model";
+export type ComposerTriggerKind =
+  | "path"
+  | "slash-command"
+  | "slash-model"
+  | "provider-slash-command";
 export type ComposerSlashCommand = "model" | "plan" | "default";
 
 export interface ComposerTrigger {
@@ -12,9 +15,6 @@ export interface ComposerTrigger {
 }
 
 const SLASH_COMMANDS: readonly ComposerSlashCommand[] = ["model", "plan", "default"];
-const isInlineTokenSegment = (
-  segment: { type: "text"; text: string } | { type: "mention" } | { type: "terminal-context" },
-): boolean => segment.type !== "text";
 
 function clampCursor(text: string, cursor: number): number {
   if (!Number.isFinite(cursor)) return text.length;
@@ -22,13 +22,7 @@ function clampCursor(text: string, cursor: number): number {
 }
 
 function isWhitespace(char: string): boolean {
-  return (
-    char === " " ||
-    char === "\n" ||
-    char === "\t" ||
-    char === "\r" ||
-    char === INLINE_TERMINAL_CONTEXT_PLACEHOLDER
-  );
+  return char === " " || char === "\n" || char === "\t" || char === "\r";
 }
 
 function tokenStartForCursor(text: string, cursor: number): number {
@@ -59,14 +53,6 @@ export function expandCollapsedComposerCursor(text: string, cursorInput: number)
       expandedCursor += expandedLength;
       continue;
     }
-    if (segment.type === "terminal-context") {
-      if (remaining <= 1) {
-        return expandedCursor + remaining;
-      }
-      remaining -= 1;
-      expandedCursor += 1;
-      continue;
-    }
 
     const segmentLength = segment.text.length;
     if (remaining <= segmentLength) {
@@ -80,18 +66,13 @@ export function expandCollapsedComposerCursor(text: string, cursorInput: number)
 }
 
 function collapsedSegmentLength(
-  segment: { type: "text"; text: string } | { type: "mention" } | { type: "terminal-context" },
+  segment: { type: "text"; text: string } | { type: "mention" },
 ): number {
-  if (segment.type === "text") {
-    return segment.text.length;
-  }
-  return 1;
+  return segment.type === "mention" ? 1 : segment.text.length;
 }
 
-function clampCollapsedComposerCursorForSegments(
-  segments: ReadonlyArray<
-    { type: "text"; text: string } | { type: "mention" } | { type: "terminal-context" }
-  >,
+function clampCollapsedComposerCursor(
+  segments: ReadonlyArray<{ type: "text"; text: string } | { type: "mention" }>,
   cursorInput: number,
 ): number {
   const collapsedLength = segments.reduce(
@@ -104,71 +85,21 @@ function clampCollapsedComposerCursorForSegments(
   return Math.max(0, Math.min(collapsedLength, Math.floor(cursorInput)));
 }
 
-export function clampCollapsedComposerCursor(text: string, cursorInput: number): number {
-  return clampCollapsedComposerCursorForSegments(
-    splitPromptIntoComposerSegments(text),
-    cursorInput,
-  );
-}
-
-export function collapseExpandedComposerCursor(text: string, cursorInput: number): number {
-  const expandedCursor = clampCursor(text, cursorInput);
-  const segments = splitPromptIntoComposerSegments(text);
-  if (segments.length === 0) {
-    return expandedCursor;
-  }
-
-  let remaining = expandedCursor;
-  let collapsedCursor = 0;
-
-  for (const segment of segments) {
-    if (segment.type === "mention") {
-      const expandedLength = segment.path.length + 1;
-      if (remaining === 0) {
-        return collapsedCursor;
-      }
-      if (remaining <= expandedLength) {
-        return collapsedCursor + 1;
-      }
-      remaining -= expandedLength;
-      collapsedCursor += 1;
-      continue;
-    }
-    if (segment.type === "terminal-context") {
-      if (remaining <= 1) {
-        return collapsedCursor + remaining;
-      }
-      remaining -= 1;
-      collapsedCursor += 1;
-      continue;
-    }
-
-    const segmentLength = segment.text.length;
-    if (remaining <= segmentLength) {
-      return collapsedCursor + remaining;
-    }
-    remaining -= segmentLength;
-    collapsedCursor += segmentLength;
-  }
-
-  return collapsedCursor;
-}
-
-export function isCollapsedCursorAdjacentToInlineToken(
+export function isCollapsedCursorAdjacentToMention(
   text: string,
   cursorInput: number,
   direction: "left" | "right",
 ): boolean {
   const segments = splitPromptIntoComposerSegments(text);
-  if (!segments.some(isInlineTokenSegment)) {
+  if (!segments.some((segment) => segment.type === "mention")) {
     return false;
   }
 
-  const cursor = clampCollapsedComposerCursorForSegments(segments, cursorInput);
+  const cursor = clampCollapsedComposerCursor(segments, cursorInput);
   let collapsedOffset = 0;
 
   for (const segment of segments) {
-    if (isInlineTokenSegment(segment)) {
+    if (segment.type === "mention") {
       if (direction === "left" && cursor === collapsedOffset + 1) {
         return true;
       }
@@ -181,8 +112,6 @@ export function isCollapsedCursorAdjacentToInlineToken(
 
   return false;
 }
-
-export const isCollapsedCursorAdjacentToMention = isCollapsedCursorAdjacentToInlineToken;
 
 export function detectComposerTrigger(text: string, cursorInput: number): ComposerTrigger | null {
   const cursor = clampCursor(text, cursorInput);
@@ -209,7 +138,13 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
           rangeEnd: cursor,
         };
       }
-      return null;
+      // Fall through to provider slash commands (skills)
+      return {
+        kind: "provider-slash-command",
+        query: commandQuery,
+        rangeStart: lineStart,
+        rangeEnd: cursor,
+      };
     }
 
     const modelMatch = /^\/model(?:\s+(.*))?$/.exec(linePrefix);

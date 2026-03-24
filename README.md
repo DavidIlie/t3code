@@ -1,28 +1,29 @@
-# T3 Code
+# T3 Gurt
 
-T3 Code is a minimal web GUI for coding agents (currently Codex and Claude, more coming soon).
+An opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code) by [Ping](https://ping.gg). No hate, no bans pls — just for my personal use.
 
-## How to use
+![Home](docs/screenshots/home.png)
 
-> [!WARNING]
-> You need to have [Codex CLI](https://github.com/openai/codex) installed and authorized for T3 Code to work.
+## What's different
 
-```bash
-npx t3
-```
+- **Claude Code support** alongside Codex
+- **Rebranded** to "T3 Gurt"
+- **Automated unsigned releases** on every push to main
+- Imported session rendering, bug fixes, and other QOL improvements
 
-You can also just install the desktop app. It's cooler.
+## Screenshots
 
-Install the [desktop app from the Releases page](https://github.com/pingdotgg/t3code/releases)
+|                                               |                                                    |
+| --------------------------------------------- | -------------------------------------------------- |
+| ![Project view](docs/screenshots/project.png) | ![Conversation](docs/screenshots/conversation.png) |
+| ![Terminal](docs/screenshots/terminal.png)    |                                                    |
 
-## Some notes
+## Upstream
 
-We are very very early in this project. Expect bugs.
+This fork tracks [pingdotgg/t3code](https://github.com/pingdotgg/t3code). See [UPSTREAM.md](./UPSTREAM.md) for sync status.
 
-We are not accepting contributions yet.
+## Install
 
-## If you REALLY want to contribute still.... read this first
+Download the [desktop app from the Releases page](https://github.com/DavidIlie/t3code/releases).
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or PR.
-
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+For more info about the original project, see the [upstream repo](https://github.com/pingdotgg/t3code).

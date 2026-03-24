@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 
 import { Effect, FileSystem, Layer, Path } from "effect";
-import type { GitActionProgressEvent, GitActionProgressPhase } from "@t3tools/contracts";
 import {
   resolveAutoFeatureBranchName,
   sanitizeBranchFragment,
@@ -10,20 +9,10 @@ import {
 } from "@t3tools/shared/git";
 
 import { GitManagerError } from "../Errors.ts";
-import {
-  GitManager,
-  type GitActionProgressReporter,
-  type GitManagerShape,
-  type GitRunStackedActionOptions,
-} from "../Services/GitManager.ts";
+import { GitManager, type GitManagerShape } from "../Services/GitManager.ts";
 import { GitCore } from "../Services/GitCore.ts";
 import { GitHubCli } from "../Services/GitHubCli.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
-
-const COMMIT_TIMEOUT_MS = 10 * 60_000;
-const MAX_PROGRESS_TEXT_LENGTH = 500;
-type StripProgressContext<T> = T extends any ? Omit<T, "actionId" | "cwd" | "action"> : never;
-type GitActionProgressPayload = StripProgressContext<GitActionProgressEvent>;
 
 interface OpenPrInfo {
   number: number;
@@ -36,6 +25,167 @@ interface OpenPrInfo {
 interface PullRequestInfo extends OpenPrInfo {
   state: "open" | "closed" | "merged";
   updatedAt: string | null;
+}
+
+function parsePullRequestList(raw: unknown): PullRequestInfo[] {
+  if (!Array.isArray(raw)) return [];
+
+  const parsed: PullRequestInfo[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const number = record.number;
+    const title = record.title;
+    const url = record.url;
+    const baseRefName = record.baseRefName;
+    const headRefName = record.headRefName;
+    const state = record.state;
+    const mergedAt = record.mergedAt;
+    const updatedAt = record.updatedAt;
+    if (typeof number !== "number" || !Number.isInteger(number) || number <= 0) {
+      continue;
+    }
+    if (
+      typeof title !== "string" ||
+      typeof url !== "string" ||
+      typeof baseRefName !== "string" ||
+      typeof headRefName !== "string"
+    ) {
+      continue;
+    }
+
+    let normalizedState: "open" | "closed" | "merged";
+    if ((typeof mergedAt === "string" && mergedAt.trim().length > 0) || state === "MERGED") {
+      normalizedState = "merged";
+    } else if (state === "OPEN" || state === undefined || state === null) {
+      normalizedState = "open";
+    } else if (state === "CLOSED") {
+      normalizedState = "closed";
+    } else {
+      continue;
+    }
+
+    parsed.push({
+      number,
+      title,
+      url,
+      baseRefName,
+      headRefName,
+      state: normalizedState,
+      updatedAt: typeof updatedAt === "string" && updatedAt.trim().length > 0 ? updatedAt : null,
+    });
+  }
+  return parsed;
+}
+
+function gitManagerError(operation: string, detail: string, cause?: unknown): GitManagerError {
+  return new GitManagerError({
+    operation,
+    detail,
+    ...(cause !== undefined ? { cause } : {}),
+  });
+}
+
+function limitContext(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, maxChars)}\n\n[truncated]`;
+}
+
+function sanitizeCommitMessage(generated: {
+  subject: string;
+  body: string;
+  branch?: string | undefined;
+}): {
+  subject: string;
+  body: string;
+  branch?: string | undefined;
+} {
+  const rawSubject = generated.subject.trim().split(/\r?\n/g)[0]?.trim() ?? "";
+  const subject = rawSubject.replace(/[.]+$/g, "").trim();
+  const safeSubject = subject.length > 0 ? subject.slice(0, 72).trimEnd() : "Update project files";
+  return {
+    subject: safeSubject,
+    body: generated.body.trim(),
+    ...(generated.branch !== undefined ? { branch: generated.branch } : {}),
+  };
+}
+
+interface CommitAndBranchSuggestion {
+  subject: string;
+  body: string;
+  branch?: string | undefined;
+  commitMessage: string;
+}
+
+function formatCommitMessage(subject: string, body: string): string {
+  const trimmedBody = body.trim();
+  if (trimmedBody.length === 0) {
+    return subject;
+  }
+  return `${subject}\n\n${trimmedBody}`;
+}
+
+function parseCustomCommitMessage(raw: string): { subject: string; body: string } | null {
+  const normalized = raw.replace(/\r\n/g, "\n").trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  const [firstLine, ...rest] = normalized.split("\n");
+  const subject = firstLine?.trim() ?? "";
+  if (subject.length === 0) {
+    return null;
+  }
+
+  return {
+    subject,
+    body: rest.join("\n").trim(),
+  };
+}
+
+function extractBranchFromRef(ref: string): string {
+  const normalized = ref.trim();
+
+  if (normalized.startsWith("refs/remotes/")) {
+    const withoutPrefix = normalized.slice("refs/remotes/".length);
+    const firstSlash = withoutPrefix.indexOf("/");
+    if (firstSlash === -1) {
+      return withoutPrefix.trim();
+    }
+    return withoutPrefix.slice(firstSlash + 1).trim();
+  }
+
+  const firstSlash = normalized.indexOf("/");
+  if (firstSlash === -1) {
+    return normalized;
+  }
+  return normalized.slice(firstSlash + 1).trim();
+}
+
+function appendUnique(values: string[], next: string | null | undefined): void {
+  const trimmed = next?.trim() ?? "";
+  if (trimmed.length === 0 || values.includes(trimmed)) {
+    return;
+  }
+  values.push(trimmed);
+}
+
+function toStatusPr(pr: PullRequestInfo): {
+  number: number;
+  title: string;
+  url: string;
+  baseBranch: string;
+  headBranch: string;
+  state: "open" | "closed" | "merged";
+} {
+  return {
+    number: pr.number,
+    title: pr.title,
+    url: pr.url,
+    baseBranch: pr.baseRefName,
+    headBranch: pr.headRefName,
+    state: pr.state,
+  };
 }
 
 interface ResolvedPullRequest {
@@ -128,178 +278,6 @@ function parseRepositoryOwnerLogin(nameWithOwner: string | null): string | null 
   return normalizedOwnerLogin.length > 0 ? normalizedOwnerLogin : null;
 }
 
-function parsePullRequestList(raw: unknown): PullRequestInfo[] {
-  if (!Array.isArray(raw)) return [];
-
-  const parsed: PullRequestInfo[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== "object") continue;
-    const record = entry as Record<string, unknown>;
-    const number = record.number;
-    const title = record.title;
-    const url = record.url;
-    const baseRefName = record.baseRefName;
-    const headRefName = record.headRefName;
-    const state = record.state;
-    const mergedAt = record.mergedAt;
-    const updatedAt = record.updatedAt;
-    if (typeof number !== "number" || !Number.isInteger(number) || number <= 0) {
-      continue;
-    }
-    if (
-      typeof title !== "string" ||
-      typeof url !== "string" ||
-      typeof baseRefName !== "string" ||
-      typeof headRefName !== "string"
-    ) {
-      continue;
-    }
-
-    let normalizedState: "open" | "closed" | "merged";
-    if ((typeof mergedAt === "string" && mergedAt.trim().length > 0) || state === "MERGED") {
-      normalizedState = "merged";
-    } else if (state === "OPEN" || state === undefined || state === null) {
-      normalizedState = "open";
-    } else if (state === "CLOSED") {
-      normalizedState = "closed";
-    } else {
-      continue;
-    }
-
-    parsed.push({
-      number,
-      title,
-      url,
-      baseRefName,
-      headRefName,
-      state: normalizedState,
-      updatedAt: typeof updatedAt === "string" && updatedAt.trim().length > 0 ? updatedAt : null,
-    });
-  }
-  return parsed;
-}
-
-function gitManagerError(operation: string, detail: string, cause?: unknown): GitManagerError {
-  return new GitManagerError({
-    operation,
-    detail,
-    ...(cause !== undefined ? { cause } : {}),
-  });
-}
-
-function limitContext(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value;
-  return `${value.slice(0, maxChars)}\n\n[truncated]`;
-}
-
-function sanitizeCommitMessage(generated: {
-  subject: string;
-  body: string;
-  branch?: string | undefined;
-}): {
-  subject: string;
-  body: string;
-  branch?: string | undefined;
-} {
-  const rawSubject = generated.subject.trim().split(/\r?\n/g)[0]?.trim() ?? "";
-  const subject = rawSubject.replace(/[.]+$/g, "").trim();
-  const safeSubject = subject.length > 0 ? subject.slice(0, 72).trimEnd() : "Update project files";
-  return {
-    subject: safeSubject,
-    body: generated.body.trim(),
-    ...(generated.branch !== undefined ? { branch: generated.branch } : {}),
-  };
-}
-
-function sanitizeProgressText(value: string): string | null {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-  if (trimmed.length <= MAX_PROGRESS_TEXT_LENGTH) {
-    return trimmed;
-  }
-  return trimmed.slice(0, MAX_PROGRESS_TEXT_LENGTH).trimEnd();
-}
-
-interface CommitAndBranchSuggestion {
-  subject: string;
-  body: string;
-  branch?: string | undefined;
-  commitMessage: string;
-}
-
-function formatCommitMessage(subject: string, body: string): string {
-  const trimmedBody = body.trim();
-  if (trimmedBody.length === 0) {
-    return subject;
-  }
-  return `${subject}\n\n${trimmedBody}`;
-}
-
-function parseCustomCommitMessage(raw: string): { subject: string; body: string } | null {
-  const normalized = raw.replace(/\r\n/g, "\n").trim();
-  if (normalized.length === 0) {
-    return null;
-  }
-
-  const [firstLine, ...rest] = normalized.split("\n");
-  const subject = firstLine?.trim() ?? "";
-  if (subject.length === 0) {
-    return null;
-  }
-
-  return {
-    subject,
-    body: rest.join("\n").trim(),
-  };
-}
-
-function extractBranchFromRef(ref: string): string {
-  const normalized = ref.trim();
-
-  if (normalized.startsWith("refs/remotes/")) {
-    const withoutPrefix = normalized.slice("refs/remotes/".length);
-    const firstSlash = withoutPrefix.indexOf("/");
-    if (firstSlash === -1) {
-      return withoutPrefix.trim();
-    }
-    return withoutPrefix.slice(firstSlash + 1).trim();
-  }
-
-  const firstSlash = normalized.indexOf("/");
-  if (firstSlash === -1) {
-    return normalized;
-  }
-  return normalized.slice(firstSlash + 1).trim();
-}
-
-function appendUnique(values: string[], next: string | null | undefined): void {
-  const trimmed = next?.trim() ?? "";
-  if (trimmed.length === 0 || values.includes(trimmed)) {
-    return;
-  }
-  values.push(trimmed);
-}
-
-function toStatusPr(pr: PullRequestInfo): {
-  number: number;
-  title: string;
-  url: string;
-  baseBranch: string;
-  headBranch: string;
-  state: "open" | "closed" | "merged";
-} {
-  return {
-    number: pr.number,
-    title: pr.title,
-    url: pr.url,
-    baseBranch: pr.baseRefName,
-    headBranch: pr.headRefName,
-    state: pr.state,
-  };
-}
-
 function normalizePullRequestReference(reference: string): string {
   const trimmed = reference.trim();
   const hashNumber = /^#(\d+)$/.exec(trimmed);
@@ -358,29 +336,6 @@ export const makeGitManager = Effect.gen(function* () {
   const gitCore = yield* GitCore;
   const gitHubCli = yield* GitHubCli;
   const textGeneration = yield* TextGeneration;
-
-  const createProgressEmitter = (
-    input: { cwd: string; action: "commit" | "commit_push" | "commit_push_pr" },
-    options?: GitRunStackedActionOptions,
-  ) => {
-    const actionId = options?.actionId ?? randomUUID();
-    const reporter = options?.progressReporter;
-
-    const emit = (event: GitActionProgressPayload) =>
-      reporter
-        ? reporter.publish({
-            actionId,
-            cwd: input.cwd,
-            action: input.action,
-            ...event,
-          } as GitActionProgressEvent)
-        : Effect.void;
-
-    return {
-      actionId,
-      emit,
-    };
-  };
 
   const configurePullRequestHeadUpstream = (
     cwd: string,
@@ -477,6 +432,7 @@ export const makeGitManager = Effect.gen(function* () {
         }),
       ),
     );
+
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
@@ -684,7 +640,7 @@ export const makeGitManager = Effect.gen(function* () {
     /** When true, also produce a semantic feature branch name. */
     includeBranch?: boolean;
     filePaths?: readonly string[];
-    model?: string;
+    commitMessageInstructions?: string;
   }) =>
     Effect.gen(function* () {
       const context = yield* gitCore.prepareCommitContext(input.cwd, input.filePaths);
@@ -711,7 +667,9 @@ export const makeGitManager = Effect.gen(function* () {
           stagedSummary: limitContext(context.stagedSummary, 8_000),
           stagedPatch: limitContext(context.stagedPatch, 50_000),
           ...(input.includeBranch ? { includeBranch: true } : {}),
-          ...(input.model ? { model: input.model } : {}),
+          ...(input.commitMessageInstructions
+            ? { commitMessageInstructions: input.commitMessageInstructions }
+            : {}),
         })
         .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
 
@@ -725,111 +683,27 @@ export const makeGitManager = Effect.gen(function* () {
 
   const runCommitStep = (
     cwd: string,
-    action: "commit" | "commit_push" | "commit_push_pr",
     branch: string | null,
     commitMessage?: string,
     preResolvedSuggestion?: CommitAndBranchSuggestion,
     filePaths?: readonly string[],
-    model?: string,
-    progressReporter?: GitActionProgressReporter,
-    actionId?: string,
+    commitMessageInstructions?: string,
   ) =>
     Effect.gen(function* () {
-      const emit = (event: GitActionProgressPayload) =>
-        progressReporter && actionId
-          ? progressReporter.publish({
-              actionId,
-              cwd,
-              action,
-              ...event,
-            } as GitActionProgressEvent)
-          : Effect.void;
-
-      let suggestion: CommitAndBranchSuggestion | null | undefined = preResolvedSuggestion;
-      if (!suggestion) {
-        const needsGeneration = !commitMessage?.trim();
-        if (needsGeneration) {
-          yield* emit({
-            kind: "phase_started",
-            phase: "commit",
-            label: "Generating commit message...",
-          });
-        }
-        suggestion = yield* resolveCommitAndBranchSuggestion({
+      const suggestion =
+        preResolvedSuggestion ??
+        (yield* resolveCommitAndBranchSuggestion({
           cwd,
           branch,
           ...(commitMessage ? { commitMessage } : {}),
           ...(filePaths ? { filePaths } : {}),
-          ...(model ? { model } : {}),
-        });
-      }
+          ...(commitMessageInstructions ? { commitMessageInstructions } : {}),
+        }));
       if (!suggestion) {
         return { status: "skipped_no_changes" as const };
       }
 
-      yield* emit({
-        kind: "phase_started",
-        phase: "commit",
-        label: "Committing...",
-      });
-
-      let currentHookName: string | null = null;
-      const commitProgress =
-        progressReporter && actionId
-          ? {
-              onOutputLine: ({ stream, text }: { stream: "stdout" | "stderr"; text: string }) => {
-                const sanitized = sanitizeProgressText(text);
-                if (!sanitized) {
-                  return Effect.void;
-                }
-                return emit({
-                  kind: "hook_output",
-                  hookName: currentHookName,
-                  stream,
-                  text: sanitized,
-                });
-              },
-              onHookStarted: (hookName: string) => {
-                currentHookName = hookName;
-                return emit({
-                  kind: "hook_started",
-                  hookName,
-                });
-              },
-              onHookFinished: ({
-                hookName,
-                exitCode,
-                durationMs,
-              }: {
-                hookName: string;
-                exitCode: number | null;
-                durationMs: number | null;
-              }) => {
-                if (currentHookName === hookName) {
-                  currentHookName = null;
-                }
-                return emit({
-                  kind: "hook_finished",
-                  hookName,
-                  exitCode,
-                  durationMs,
-                });
-              },
-            }
-          : null;
-      const { commitSha } = yield* gitCore.commit(cwd, suggestion.subject, suggestion.body, {
-        timeoutMs: COMMIT_TIMEOUT_MS,
-        ...(commitProgress ? { progress: commitProgress } : {}),
-      });
-      if (currentHookName !== null) {
-        yield* emit({
-          kind: "hook_finished",
-          hookName: currentHookName,
-          exitCode: 0,
-          durationMs: null,
-        });
-        currentHookName = null;
-      }
+      const { commitSha } = yield* gitCore.commit(cwd, suggestion.subject, suggestion.body);
       return {
         status: "created" as const,
         commitSha,
@@ -837,7 +711,7 @@ export const makeGitManager = Effect.gen(function* () {
       };
     });
 
-  const runPrStep = (cwd: string, fallbackBranch: string | null, model?: string) =>
+  const runPrStep = (cwd: string, fallbackBranch: string | null) =>
     Effect.gen(function* () {
       const details = yield* gitCore.statusDetails(cwd);
       const branch = details.branch ?? fallbackBranch;
@@ -881,7 +755,6 @@ export const makeGitManager = Effect.gen(function* () {
         commitSummary: limitContext(rangeContext.commitSummary, 20_000),
         diffSummary: limitContext(rangeContext.diffSummary, 20_000),
         diffPatch: limitContext(rangeContext.diffPatch, 60_000),
-        ...(model ? { model } : {}),
       });
 
       const bodyFile = path.join(tempDir, `t3code-pr-body-${process.pid}-${randomUUID()}.md`);
@@ -1106,7 +979,7 @@ export const makeGitManager = Effect.gen(function* () {
     branch: string | null,
     commitMessage?: string,
     filePaths?: readonly string[],
-    model?: string,
+    commitMessageInstructions?: string,
   ) =>
     Effect.gen(function* () {
       const suggestion = yield* resolveCommitAndBranchSuggestion({
@@ -1114,8 +987,8 @@ export const makeGitManager = Effect.gen(function* () {
         branch,
         ...(commitMessage ? { commitMessage } : {}),
         ...(filePaths ? { filePaths } : {}),
+        ...(commitMessageInstructions ? { commitMessageInstructions } : {}),
         includeBranch: true,
-        ...(model ? { model } : {}),
       });
       if (!suggestion) {
         return yield* gitManagerError(
@@ -1139,135 +1012,106 @@ export const makeGitManager = Effect.gen(function* () {
     });
 
   const runStackedAction: GitManagerShape["runStackedAction"] = Effect.fnUntraced(
-    function* (input, options) {
-      const progress = createProgressEmitter(input, options);
-      const phases: GitActionProgressPhase[] = [
-        ...(input.featureBranch ? (["branch"] as const) : []),
-        "commit",
-        ...(input.action !== "commit" ? (["push"] as const) : []),
-        ...(input.action === "commit_push_pr" ? (["pr"] as const) : []),
-      ];
-      let currentPhase: GitActionProgressPhase | null = null;
-
-      const runAction = Effect.gen(function* () {
-        yield* progress.emit({
-          kind: "action_started",
-          phases,
-        });
-
-        const wantsPush = input.action !== "commit";
-        const wantsPr = input.action === "commit_push_pr";
-
-        const initialStatus = yield* gitCore.statusDetails(input.cwd);
-        if (!input.featureBranch && wantsPush && !initialStatus.branch) {
+    function* (input) {
+      // Push-only: skip commit/branch/PR steps entirely.
+      if (input.action === "push") {
+        const status = yield* gitCore.statusDetails(input.cwd);
+        if (!status.branch) {
           return yield* gitManagerError("runStackedAction", "Cannot push from detached HEAD.");
         }
-        if (!input.featureBranch && wantsPr && !initialStatus.branch) {
-          return yield* gitManagerError(
-            "runStackedAction",
-            "Cannot create a pull request from detached HEAD.",
-          );
-        }
-
-        let branchStep: { status: "created" | "skipped_not_requested"; name?: string };
-        let commitMessageForStep = input.commitMessage;
-        let preResolvedCommitSuggestion: CommitAndBranchSuggestion | undefined = undefined;
-
-        if (input.featureBranch) {
-          currentPhase = "branch";
-          yield* progress.emit({
-            kind: "phase_started",
-            phase: "branch",
-            label: "Preparing feature branch...",
-          });
-          const result = yield* runFeatureBranchStep(
-            input.cwd,
-            initialStatus.branch,
-            input.commitMessage,
-            input.filePaths,
-            input.textGenerationModel,
-          );
-          branchStep = result.branchStep;
-          commitMessageForStep = result.resolvedCommitMessage;
-          preResolvedCommitSuggestion = result.resolvedCommitSuggestion;
-        } else {
-          branchStep = { status: "skipped_not_requested" as const };
-        }
-
-        const currentBranch = branchStep.name ?? initialStatus.branch;
-
-        currentPhase = "commit";
-        const commit = yield* runCommitStep(
-          input.cwd,
-          input.action,
-          currentBranch,
-          commitMessageForStep,
-          preResolvedCommitSuggestion,
-          input.filePaths,
-          input.textGenerationModel,
-          options?.progressReporter,
-          progress.actionId,
-        );
-
-        const push = wantsPush
-          ? yield* progress
-              .emit({
-                kind: "phase_started",
-                phase: "push",
-                label: "Pushing...",
-              })
-              .pipe(
-                Effect.flatMap(() =>
-                  Effect.gen(function* () {
-                    currentPhase = "push";
-                    return yield* gitCore.pushCurrentBranch(input.cwd, currentBranch);
-                  }),
-                ),
-              )
-          : { status: "skipped_not_requested" as const };
-
-        const pr = wantsPr
-          ? yield* progress
-              .emit({
-                kind: "phase_started",
-                phase: "pr",
-                label: "Creating PR...",
-              })
-              .pipe(
-                Effect.flatMap(() =>
-                  Effect.gen(function* () {
-                    currentPhase = "pr";
-                    return yield* runPrStep(input.cwd, currentBranch, input.textGenerationModel);
-                  }),
-                ),
-              )
-          : { status: "skipped_not_requested" as const };
-
-        const result = {
+        const push = yield* gitCore.pushCurrentBranch(input.cwd, status.branch);
+        return {
           action: input.action,
-          branch: branchStep,
-          commit,
+          branch: { status: "skipped_not_requested" as const },
+          commit: { status: "skipped_no_changes" as const },
           push,
-          pr,
+          pr: { status: "skipped_not_requested" as const },
         };
-        yield* progress.emit({
-          kind: "action_finished",
-          result,
-        });
-        return result;
-      });
+      }
 
-      return yield* runAction.pipe(
-        Effect.catch((error) =>
-          progress
-            .emit({
-              kind: "action_failed",
-              phase: currentPhase,
-              message: error.message,
-            })
-            .pipe(Effect.flatMap(() => Effect.fail(error))),
-        ),
+      const wantsPush = input.action !== "commit";
+      const wantsPr = input.action === "commit_push_pr";
+
+      const initialStatus = yield* gitCore.statusDetails(input.cwd);
+      if (!input.featureBranch && wantsPush && !initialStatus.branch) {
+        return yield* gitManagerError("runStackedAction", "Cannot push from detached HEAD.");
+      }
+      if (!input.featureBranch && wantsPr && !initialStatus.branch) {
+        return yield* gitManagerError(
+          "runStackedAction",
+          "Cannot create a pull request from detached HEAD.",
+        );
+      }
+
+      let branchStep: { status: "created" | "skipped_not_requested"; name?: string };
+      let commitMessageForStep = input.commitMessage;
+      let preResolvedCommitSuggestion: CommitAndBranchSuggestion | undefined = undefined;
+
+      if (input.featureBranch) {
+        const result = yield* runFeatureBranchStep(
+          input.cwd,
+          initialStatus.branch,
+          input.commitMessage,
+          input.filePaths,
+          input.commitMessageInstructions,
+        );
+        branchStep = result.branchStep;
+        commitMessageForStep = result.resolvedCommitMessage;
+        preResolvedCommitSuggestion = result.resolvedCommitSuggestion;
+      } else {
+        branchStep = { status: "skipped_not_requested" as const };
+      }
+
+      const currentBranch = branchStep.name ?? initialStatus.branch;
+
+      const commit = yield* runCommitStep(
+        input.cwd,
+        currentBranch,
+        commitMessageForStep,
+        preResolvedCommitSuggestion,
+        input.filePaths,
+        input.commitMessageInstructions,
       );
+
+      const push = wantsPush
+        ? yield* gitCore.pushCurrentBranch(input.cwd, currentBranch)
+        : { status: "skipped_not_requested" as const };
+
+      const pr = wantsPr
+        ? yield* runPrStep(input.cwd, currentBranch)
+        : { status: "skipped_not_requested" as const };
+
+      return {
+        action: input.action,
+        branch: branchStep,
+        commit,
+        push,
+        pr,
+      };
+    },
+  );
+
+  const generateCommitMessage: GitManagerShape["generateCommitMessage"] = Effect.fnUntraced(
+    function* (input) {
+      const details = yield* gitCore.statusDetails(input.cwd);
+      const context = yield* gitCore.prepareCommitContext(input.cwd, input.filePaths);
+      if (!context) {
+        return { subject: "", body: "" };
+      }
+
+      const generated = yield* textGeneration
+        .generateCommitMessage({
+          cwd: input.cwd,
+          branch: details.branch,
+          stagedSummary: limitContext(context.stagedSummary, 8_000),
+          stagedPatch: limitContext(context.stagedPatch, 50_000),
+          ...(input.commitMessageInstructions
+            ? { commitMessageInstructions: input.commitMessageInstructions }
+            : {}),
+        })
+        .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
+
+      return { subject: generated.subject, body: generated.body };
     },
   );
 
@@ -1276,6 +1120,7 @@ export const makeGitManager = Effect.gen(function* () {
     resolvePullRequest,
     preparePullRequestThread,
     runStackedAction,
+    generateCommitMessage,
   } satisfies GitManagerShape;
 });
 
