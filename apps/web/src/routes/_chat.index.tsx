@@ -486,8 +486,7 @@ function HomePage() {
     });
   }, [homeProject, navigate, setProjectDraftThreadId]);
 
-  const workingDirectory =
-    ((settings as Record<string, unknown>).workingDirectory as string) || "~";
+  const workingDirectory = settings.workingDirectory || "~";
 
   const handleClone = useCallback(
     async (e?: { preventDefault: () => void }) => {
@@ -500,11 +499,7 @@ function HomePage() {
 
       try {
         const api = ensureNativeApi();
-        // git.clone is not yet in the NativeApi type but is available at runtime via WS
-        const gitApi = api.git as typeof api.git & {
-          clone: (input: { url: string; cwd: string }) => Promise<{ path: string }>;
-        };
-        const result = await gitApi.clone({
+        const result = await api.git.clone({
           url: trimmedUrl,
           cwd: workingDirectory,
         });

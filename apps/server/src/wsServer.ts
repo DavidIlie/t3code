@@ -341,9 +341,13 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       (attachment) =>
         Effect.gen(function* () {
           const parsed = parseBase64DataUrl(attachment.dataUrl);
-          if (!parsed || !parsed.mimeType.startsWith("image/")) {
+          if (
+            !parsed ||
+            !parsed.mimeType.startsWith("image/") ||
+            parsed.mimeType === "image/svg+xml"
+          ) {
             return yield* new RouteRequestError({
-              message: `Invalid image attachment payload for '${attachment.name}'.`,
+              message: `Invalid or unsupported image attachment for '${attachment.name}'.`,
             });
           }
 
@@ -840,6 +844,11 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       case WS_METHODS.gitInit: {
         const body = stripRequestTag(request.body);
         return yield* git.initRepo(body);
+      }
+
+      case WS_METHODS.gitClone: {
+        const body = stripRequestTag(request.body);
+        return yield* git.cloneRepo(body);
       }
 
       case WS_METHODS.terminalOpen: {
