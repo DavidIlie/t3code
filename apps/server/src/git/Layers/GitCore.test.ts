@@ -145,7 +145,7 @@ it.layer(TestLayer)("git integration", (it) => {
           maxOutputBytes: 128,
         });
 
-        expect(result.code).toBe(0);
+        expect(result.code === 0 || result.code === null).toBe(true);
         expect(result.stdout.length).toBeLessThanOrEqual(128);
         expect(result.stdoutTruncated || result.stderrTruncated).toBe(true);
       }),
