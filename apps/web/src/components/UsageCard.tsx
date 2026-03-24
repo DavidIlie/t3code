@@ -337,7 +337,7 @@ export function UsageCard() {
     for (const key of Object.keys(usageByProvider) as ProviderKind[]) {
       providers.add(key);
     }
-    // Always show claudeCode
+    // Always show Claude
     providers.add("claudeAgent");
     return providers;
   }, [threads, usageByProvider]);

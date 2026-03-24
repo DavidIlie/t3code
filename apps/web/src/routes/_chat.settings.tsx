@@ -425,7 +425,7 @@ function SettingsRouteView() {
             <SettingsSection title="General">
               <SettingsRow
                 title="Theme"
-                description="Choose how T3 Code looks across the app."
+                description="Choose how T3 Gurt looks across the app."
                 resetAction={
                   theme !== "system" ? (
                     <SettingResetButton label="theme" onClick={() => setTheme("system")} />
@@ -597,6 +597,21 @@ function SettingsRouteView() {
                   />
                 }
               />
+            </SettingsSection>
+
+            <SettingsSection title="Workspace">
+              <SettingsRow
+                title="Working directory"
+                description="New repos cloned from the home page are placed here. Leave blank to use your home directory."
+              >
+                <Input
+                  value={settings.workingDirectory}
+                  onChange={(event) => updateSettings({ workingDirectory: event.target.value })}
+                  placeholder="~/dev"
+                  spellCheck={false}
+                  className="max-w-xs"
+                />
+              </SettingsRow>
             </SettingsSection>
 
             <SettingsSection title="Models">
