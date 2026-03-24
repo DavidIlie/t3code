@@ -3,7 +3,11 @@ import Layout from "../layouts/Layout.astro";
 ---
 
 <Layout>
-  <h1 class="tagline">T3 Gurt is the best way to code with AI.</h1>
+  <h1 class="tagline">The best way to code with Claude.</h1>
+
+  <p class="subtitle">
+    A fork of <a href="https://github.com/pingdotgg/t3code" target="_blank" rel="noopener noreferrer" class="subtle-link">T3 Code</a> with full Claude Code and Codex support. Available for macOS, Windows, and Linux.
+  </p>
 
   <a
     id="download-btn"
@@ -18,51 +22,169 @@ import Layout from "../layouts/Layout.astro";
 
   <a href="/download" class="other-platforms">Other platforms</a>
 
+  <!-- macOS arch picker dialog -->
+  <dialog id="mac-dialog" class="mac-dialog">
+    <div class="mac-dialog-content">
+      <h2 class="mac-dialog-title">Choose your Mac</h2>
+      <p class="mac-dialog-desc">Not sure? Go to  &gt; About This Mac. Apple Silicon includes M1, M2, M3, and M4 chips.</p>
+      <div class="mac-dialog-buttons">
+        <a id="mac-arm64-btn" href="#" class="mac-dialog-btn">
+          <span class="mac-dialog-btn-label">Apple Silicon</span>
+          <span class="mac-dialog-btn-sub">M1, M2, M3, M4</span>
+        </a>
+        <a id="mac-x64-btn" href="#" class="mac-dialog-btn">
+          <span class="mac-dialog-btn-label">Intel</span>
+          <span class="mac-dialog-btn-sub">x86_64</span>
+        </a>
+      </div>
+      <button id="mac-dialog-close" class="mac-dialog-close" type="button">&times;</button>
+    </div>
+  </dialog>
+
   <div class="screenshot-wrap">
-    <img src="/screenshot.jpeg" alt="T3 Gurt" class="screenshot" />
+    <img src="/screenshot-home.png" alt="T3 Gurt — Home" class="screenshot" />
   </div>
+
+  <section class="features">
+    <div class="feature-grid">
+      <div class="feature-card">
+        <img src="/screenshot-project.png" alt="Project view with quick actions" class="feature-img" />
+        <h3 class="feature-title">Project Dashboard</h3>
+        <p class="feature-desc">Quick actions, recent threads, git integration, and multi-project management at a glance.</p>
+      </div>
+      <div class="feature-card">
+        <img src="/screenshot-conversation.png" alt="Conversation with diff viewer" class="feature-img" />
+        <h3 class="feature-title">Conversations & Diffs</h3>
+        <p class="feature-desc">Chat with Claude Code or Codex and review code changes inline with the built-in diff viewer.</p>
+      </div>
+      <div class="feature-card feature-card--wide">
+        <img src="/screenshot-terminal.png" alt="Integrated terminal" class="feature-img" />
+        <h3 class="feature-title">Integrated Terminal</h3>
+        <p class="feature-desc">Full terminal access within each project workspace. Split terminals, run commands, and watch your agent work.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="capabilities">
+    <h2 class="capabilities-heading">Everything you need, built in.</h2>
+    <div class="capabilities-grid">
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m11-7h-6m-6 0H1m15.36-5.36l-4.24 4.24m-2.24-2.24L5.64 5.64m12.72 12.72l-4.24-4.24m-2.24 2.24l-4.24 4.24"/></svg>
+        </div>
+        <h3 class="capability-title">Command Palette</h3>
+        <p class="capability-desc">Press <kbd>Cmd+K</kbd> to quickly navigate between projects, threads, and actions.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z"/></svg>
+        </div>
+        <h3 class="capability-title">Plan Mode</h3>
+        <p class="capability-desc">Switch between chat and plan mode. Have your agent draft a plan before executing, with a dedicated sidebar to track progress.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h3 class="capability-title">Supervised Mode</h3>
+        <p class="capability-desc">Toggle between full-access and approval-required modes. Review and approve each action before the agent executes it.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65S8.93 17.38 9 18v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+        </div>
+        <h3 class="capability-title">Git History</h3>
+        <p class="capability-desc">Browse commit history, view diffs for any commit, and manage branches — all without leaving the app.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+        </div>
+        <h3 class="capability-title">Commit, Push & PR</h3>
+        <p class="capability-desc">Commit with AI-generated messages, push to remote, and create pull requests — one click from the toolbar.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+        </div>
+        <h3 class="capability-title">Worktree Isolation</h3>
+        <p class="capability-desc">Run each thread on its own git branch in an isolated worktree. Work on multiple tasks in parallel without conflicts.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h3 class="capability-title">PR Review Threads</h3>
+        <p class="capability-desc">Check out any pull request into a thread with full context. Review, discuss, and iterate on PRs inside the app.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+        </div>
+        <h3 class="capability-title">Project Scripts</h3>
+        <p class="capability-desc">Define custom scripts per project with keyboard shortcuts. Run builds, tests, and linters from the toolbar.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><path d="M12 7v5l3 3"/></svg>
+        </div>
+        <h3 class="capability-title">Checkpoints & Revert</h3>
+        <p class="capability-desc">Every turn creates a checkpoint. View per-turn diffs and revert to any previous state if something goes wrong.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+        </div>
+        <h3 class="capability-title">Custom Keybindings</h3>
+        <p class="capability-desc">Fully customizable keyboard shortcuts. Remap any action or add chord bindings to match your workflow.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </div>
+        <h3 class="capability-title">Themes</h3>
+        <p class="capability-desc">Light, dark, and system-aware themes. The terminal, diff viewer, and UI all follow your preference.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+        </div>
+        <h3 class="capability-title">MCP Support</h3>
+        <p class="capability-desc">Full Model Context Protocol integration. Connect external tools and data sources to your agent sessions.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+        </div>
+        <h3 class="capability-title">Image Attachments</h3>
+        <p class="capability-desc">Paste or drag images directly into the composer. Send screenshots, diagrams, and mockups to your agent.</p>
+      </div>
+      <div class="capability">
+        <div class="capability-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        </div>
+        <h3 class="capability-title">Auto Updates</h3>
+        <p class="capability-desc">Automatic update checks with one-click install. Always stay on the latest version without manual downloads.</p>
+      </div>
+    </div>
+  </section>
 </Layout>
 
 <script>
   import { fetchLatestRelease, RELEASES_URL, type ReleaseAsset } from "../lib/releases";
 
-  type Platform = { os: "mac" | "win" | "linux"; label: string; arch?: string };
+  type Platform = { os: "mac" | "win" | "linux"; label: string };
 
   function detectPlatform(): Platform | null {
     const ua = navigator.userAgent;
     if (/Win/i.test(ua)) return { os: "win", label: "Download for Windows" };
-    if (/Mac/i.test(ua)) {
-      return {
-        os: "mac",
-        label: `Download for macOS`,
-        arch: "arm64",
-      };
-    }
+    if (/Mac/i.test(ua)) return { os: "mac", label: "Download for macOS" };
     if (/Linux/i.test(ua)) return { os: "linux", label: "Download for Linux" };
     return null;
   }
 
-  function pickAsset(assets: ReleaseAsset[], platform: Platform): string | null {
-    if (platform.os === "win") {
-      return (
-        assets.find((a) => a.name.endsWith("-x64.exe"))
-          ?.browser_download_url ?? null
-      );
-    }
-    if (platform.os === "mac") {
-      const preferred = assets.find((a) =>
-        a.name.endsWith(`-${platform.arch}.dmg`),
-      );
-      const fallback = assets.find((a) => a.name.endsWith(".dmg"));
-      return (preferred ?? fallback)?.browser_download_url ?? null;
-    }
-    if (platform.os === "linux") {
-      return (
-        assets.find((a) => a.name.endsWith(".AppImage"))
-          ?.browser_download_url ?? null
-      );
-    }
-    return null;
+  function findAsset(assets: ReleaseAsset[], suffix: string): string | null {
+    return assets.find((a) => a.name.endsWith(`-${suffix}`))?.browser_download_url ?? null;
   }
 
   async function init() {
@@ -78,11 +200,43 @@ import Layout from "../layouts/Layout.astro";
 
     try {
       const release = await fetchLatestRelease();
-      const url = pickAsset(release.assets ?? [], platform);
-      if (url) {
-        btn.href = url;
-        btn.removeAttribute("target");
-        btn.removeAttribute("rel");
+      const assets = release.assets ?? [];
+
+      if (platform.os === "mac") {
+        // Show arch picker dialog on click instead of direct download
+        const dialog = document.getElementById("mac-dialog") as HTMLDialogElement | null;
+        const arm64Btn = document.getElementById("mac-arm64-btn") as HTMLAnchorElement | null;
+        const x64Btn = document.getElementById("mac-x64-btn") as HTMLAnchorElement | null;
+        const closeBtn = document.getElementById("mac-dialog-close");
+
+        if (dialog && arm64Btn && x64Btn) {
+          arm64Btn.href = findAsset(assets, "arm64.dmg") ?? RELEASES_URL;
+          x64Btn.href = findAsset(assets, "x64.dmg") ?? RELEASES_URL;
+
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            dialog.showModal();
+          });
+
+          closeBtn?.addEventListener("click", () => dialog.close());
+          dialog.addEventListener("click", (e) => {
+            if (e.target === dialog) dialog.close();
+          });
+        }
+      } else if (platform.os === "win") {
+        const url = findAsset(assets, "x64.exe");
+        if (url) {
+          btn.href = url;
+          btn.removeAttribute("target");
+          btn.removeAttribute("rel");
+        }
+      } else if (platform.os === "linux") {
+        const url = findAsset(assets, "x86_64.AppImage");
+        if (url) {
+          btn.href = url;
+          btn.removeAttribute("target");
+          btn.removeAttribute("rel");
+        }
       }
     } catch {
       btn.href = RELEASES_URL;
@@ -102,12 +256,41 @@ import Layout from "../layouts/Layout.astro";
   .tagline {
     font-weight: 500;
     font-size: clamp(2rem, 5vw, 3.5rem);
-    letter-spacing: -0.035em;
-    line-height: 1.15;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
     text-align: center;
-    margin: 0 0 6vh;
+    max-width: 700px;
+    padding: 0 1rem;
     opacity: 0;
     animation: fade-in 1s ease-out forwards;
+  }
+
+  /* ── Subtitle ── */
+
+  .subtitle {
+    font-size: 0.925rem;
+    color: var(--fg-muted);
+    text-align: center;
+    line-height: 1.6;
+    max-width: 500px;
+    padding: 0 1rem;
+    margin-top: 1.25rem;
+    margin-bottom: 2.5rem;
+    opacity: 0;
+    animation: fade-in 1s ease-out 0.08s forwards;
+  }
+
+  .subtle-link {
+    color: var(--fg-muted);
+    text-decoration: underline;
+    text-decoration-color: rgba(161, 161, 170, 0.4);
+    text-underline-offset: 3px;
+    transition: color 0.3s ease, text-decoration-color 0.3s ease;
+  }
+
+  .subtle-link:hover {
+    color: var(--fg);
+    text-decoration-color: var(--fg);
   }
 
   /* ── Hero button ── */
@@ -115,10 +298,10 @@ import Layout from "../layouts/Layout.astro";
   .hero-button {
     display: inline-flex;
     align-items: center;
-    gap: 0.55rem;
-    background: #fafafa;
-    color: #09090b;
-    padding: 0.75rem 2rem;
+    gap: 0.45rem;
+    background: var(--fg);
+    color: var(--bg);
+    padding: 0.7rem 2rem;
     border-radius: 999px;
     font-weight: 600;
     font-size: 0.9rem;
@@ -129,8 +312,8 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .hero-button:hover {
-    transform: scale(1.03);
-    box-shadow: 0 0 24px rgba(255, 255, 255, 0.08);
+    transform: scale(1.04);
+    box-shadow: 0 0 40px rgba(255, 255, 255, 0.08);
   }
 
   .hero-button:active {
@@ -178,45 +361,248 @@ import Layout from "../layouts/Layout.astro";
   /* ── Screenshot ── */
 
   .screenshot-wrap {
-    margin: 0 auto;
-    width: min(95vw, 1400px);
+    width: min(92vw, 1200px);
     opacity: 0;
-    transform: scale(0.98);
-    animation: screenshot-in 1s ease-out 0.15s forwards;
+    transform: scale(0.97) translateY(12px);
+    animation: screenshot-in 1s ease-out 0.4s forwards;
   }
 
   .screenshot {
     width: 100%;
-    display: block;
-    border-radius: 16px;
+    border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.06);
-    mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
-  }
-
-  .screenshot-wrap::after {
-    content: "";
-    display: block;
-    width: 100%;
-    height: 120px;
-    background: inherit;
-    margin-top: -1px;
-    opacity: 0.04;
-    transform: scaleY(-1);
-    mask-image: linear-gradient(to bottom, black 0%, transparent 60%);
-    -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 60%);
-    pointer-events: none;
+    box-shadow:
+      0 40px 80px -20px rgba(0, 0, 0, 0.6),
+      0 0 0 1px rgba(255, 255, 255, 0.03);
   }
 
   @keyframes screenshot-in {
     from {
       opacity: 0;
-      transform: scale(0.98);
+      transform: scale(0.97) translateY(12px);
     }
     to {
       opacity: 1;
-      transform: scale(1);
+      transform: scale(1) translateY(0);
     }
+  }
+
+  /* ── Features ── */
+
+  .features {
+    width: min(92vw, 1100px);
+    margin: 4rem 0;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .feature-card {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.015);
+    transition: border-color 0.3s ease, background 0.3s ease;
+    opacity: 0;
+    animation: fade-in 0.8s ease-out 0.5s forwards;
+  }
+
+  .feature-card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .feature-card--wide {
+    grid-column: 1 / -1;
+  }
+
+  .feature-img {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    margin-bottom: 0.85rem;
+  }
+
+  .feature-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+  }
+
+  .feature-desc {
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    line-height: 1.55;
+  }
+
+  /* ── Capabilities ── */
+
+  .capabilities {
+    width: min(92vw, 1100px);
+    margin-bottom: 4rem;
+  }
+
+  .capabilities-heading {
+    font-size: clamp(1.25rem, 3vw, 1.75rem);
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    text-align: center;
+    margin-bottom: 2.5rem;
+    color: var(--fg);
+    opacity: 0;
+    animation: fade-in 0.8s ease-out 0.6s forwards;
+  }
+
+  .capabilities-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--border);
+    opacity: 0;
+    animation: fade-in 0.8s ease-out 0.7s forwards;
+  }
+
+  .capability {
+    padding: 1.25rem;
+    background: var(--bg);
+    transition: background 0.3s ease;
+  }
+
+  .capability:hover {
+    background: rgba(255, 255, 255, 0.025);
+  }
+
+  .capability-icon {
+    color: var(--fg-dim);
+    margin-bottom: 0.65rem;
+  }
+
+  .capability-title {
+    font-size: 0.825rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+  }
+
+  .capability-desc {
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    line-height: 1.55;
+  }
+
+  .capability-desc kbd {
+    display: inline-block;
+    padding: 0.05em 0.35em;
+    font-size: 0.7rem;
+    font-family: inherit;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    line-height: 1.4;
+  }
+
+  /* ── macOS dialog ── */
+
+  .mac-dialog {
+    border: none;
+    border-radius: 16px;
+    background: #18181b;
+    color: var(--fg);
+    padding: 0;
+    max-width: 420px;
+    width: calc(100vw - 2rem);
+    box-shadow: 0 40px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+  }
+
+  .mac-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+  }
+
+  .mac-dialog-content {
+    padding: 2rem;
+    position: relative;
+  }
+
+  .mac-dialog-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .mac-dialog-desc {
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+  }
+
+  .mac-dialog-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .mac-dialog-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 1rem;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    text-align: center;
+  }
+
+  .mac-dialog-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .mac-dialog-btn:active {
+    transform: translateY(0);
+  }
+
+  .mac-dialog-btn-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  .mac-dialog-btn-sub {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+  }
+
+  .mac-dialog-close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    color: var(--fg-dim);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    transition: color 0.2s, background 0.2s;
+  }
+
+  .mac-dialog-close:hover {
+    color: var(--fg);
+    background: rgba(255, 255, 255, 0.08);
   }
 
   /* ── Mobile ── */
@@ -227,11 +613,19 @@ import Layout from "../layouts/Layout.astro";
     }
 
     .tagline {
-      margin-bottom: 4vh;
+      font-size: clamp(1.5rem, 7vw, 2.5rem);
     }
 
     .screenshot-wrap {
       width: 95vw;
+    }
+
+    .feature-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .capabilities-grid {
+      grid-template-columns: 1fr;
     }
   }
 </style>
