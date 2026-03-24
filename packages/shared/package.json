@@ -31,10 +31,6 @@
     "./schemaJson": {
       "types": "./src/schemaJson.ts",
       "import": "./src/schemaJson.ts"
-    },
-    "./sanitize": {
-      "types": "./src/sanitize.ts",
-      "import": "./src/sanitize.ts"
     }
   },
   "scripts": {

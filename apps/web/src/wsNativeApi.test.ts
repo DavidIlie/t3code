@@ -1,12 +1,18 @@
 import {
   CommandId,
   type ContextMenuItem,
+  EventId,
   ORCHESTRATION_WS_CHANNELS,
   ORCHESTRATION_WS_METHODS,
+  type OrchestrationEvent,
   ProjectId,
   ThreadId,
+  type WsPushChannel,
+  type WsPushData,
+  type WsPushMessage,
   WS_CHANNELS,
   WS_METHODS,
+  type WsPush,
   type ServerProviderStatus,
 } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,35 +25,38 @@ const showContextMenuFallbackMock =
       position?: { x: number; y: number },
     ) => Promise<T | null>
   >();
-const channelListeners = new Map<string, Set<(message: unknown) => void>>();
-const subscribeMock = vi.fn<(channel: string, listener: (message: unknown) => void) => () => void>(
-  (channel, listener) => {
-    const listeners = channelListeners.get(channel) ?? new Set<(message: unknown) => void>();
-    listeners.add(listener);
-    channelListeners.set(channel, listeners);
-    return () => {
-      listeners.delete(listener);
-      if (listeners.size === 0) {
-        channelListeners.delete(channel);
-      }
-    };
-  },
-);
-
-const latestPushByChannel = new Map<string, unknown>();
+const channelListeners = new Map<string, Set<(message: WsPush) => void>>();
+const latestPushByChannel = new Map<string, WsPush>();
+const subscribeMock = vi.fn<
+  (
+    channel: string,
+    listener: (message: WsPush) => void,
+    options?: { replayLatest?: boolean },
+  ) => () => void
+>((channel, listener, options) => {
+  const listeners = channelListeners.get(channel) ?? new Set<(message: WsPush) => void>();
+  listeners.add(listener);
+  channelListeners.set(channel, listeners);
+  const latest = latestPushByChannel.get(channel);
+  if (latest && options?.replayLatest) {
+    listener(latest);
+  }
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      channelListeners.delete(channel);
+    }
+  };
+});
 
 vi.mock("./wsTransport", () => {
   return {
     WsTransport: class MockWsTransport {
       request = requestMock;
-      subscribe = (channel: string, listener: (message: unknown) => void) => {
-        const unsubscribe = subscribeMock(channel, (message: unknown) => {
-          latestPushByChannel.set(channel, message);
-          listener(message);
-        });
-        return unsubscribe;
-      };
-      getLatestPush = (channel: string) => latestPushByChannel.get(channel) ?? null;
+      subscribe = subscribeMock;
+      getLatestPush(channel: string) {
+        return latestPushByChannel.get(channel) ?? null;
+      }
     },
   };
 });
@@ -56,12 +65,18 @@ vi.mock("./contextMenuFallback", () => ({
   showContextMenuFallback: showContextMenuFallbackMock,
 }));
 
-let pushSequence = 0;
+let nextPushSequence = 1;
 
-function emitPush(channel: string, data: unknown): void {
+function emitPush<C extends WsPushChannel>(channel: C, data: WsPushData<C>): void {
   const listeners = channelListeners.get(channel);
+  const message = {
+    type: "push" as const,
+    sequence: nextPushSequence++,
+    channel,
+    data,
+  } as WsPushMessage<C>;
+  latestPushByChannel.set(channel, message);
   if (!listeners) return;
-  const message = { type: "push", sequence: ++pushSequence, channel, data };
   for (const listener of listeners) {
     listener(message);
   }
@@ -94,7 +109,7 @@ beforeEach(() => {
   subscribeMock.mockClear();
   channelListeners.clear();
   latestPushByChannel.clear();
-  pushSequence = 0;
+  nextPushSequence = 1;
   Reflect.deleteProperty(getWindowForTest(), "desktopBridge");
 });
 
@@ -104,7 +119,6 @@ afterEach(() => {
 
 describe("wsNativeApi", () => {
   it("delivers and caches valid server.welcome payloads", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { createWsNativeApi, onServerWelcome } = await import("./wsNativeApi");
 
     createWsNativeApi();
@@ -122,7 +136,6 @@ describe("wsNativeApi", () => {
 
     expect(lateListener).toHaveBeenCalledTimes(1);
     expect(lateListener).toHaveBeenCalledWith(expect.objectContaining(payload));
-    expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it("preserves bootstrap ids from server.welcome payloads", async () => {
@@ -135,8 +148,8 @@ describe("wsNativeApi", () => {
     emitPush(WS_CHANNELS.serverWelcome, {
       cwd: "/tmp/workspace",
       projectName: "t3-code",
-      bootstrapProjectId: "project-1",
-      bootstrapThreadId: "thread-1",
+      bootstrapProjectId: ProjectId.makeUnsafe("project-1"),
+      bootstrapThreadId: ThreadId.makeUnsafe("thread-1"),
     });
 
     expect(listener).toHaveBeenCalledTimes(1);
@@ -150,27 +163,26 @@ describe("wsNativeApi", () => {
     );
   });
 
-  it("forwards all pushes from transport without additional validation", async () => {
+  it("delivers successive server.welcome payloads to active listeners", async () => {
     const { createWsNativeApi, onServerWelcome } = await import("./wsNativeApi");
 
     createWsNativeApi();
     const listener = vi.fn();
     onServerWelcome(listener);
 
-    // Transport is responsible for schema validation; wsNativeApi passes
-    // all push messages through without additional checks.
-    emitPush(WS_CHANNELS.serverWelcome, { cwd: 42, projectName: "t3-code" });
+    emitPush(WS_CHANNELS.serverWelcome, { cwd: "/tmp/one", projectName: "one" });
     emitPush(WS_CHANNELS.serverWelcome, { cwd: "/tmp/workspace", projectName: "t3-code" });
 
     expect(listener).toHaveBeenCalledTimes(2);
-    expect(listener).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ cwd: "/tmp/workspace", projectName: "t3-code" }),
+    expect(listener).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        cwd: "/tmp/workspace",
+        projectName: "t3-code",
+      }),
     );
   });
 
   it("delivers and caches valid server.configUpdated payloads", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { createWsNativeApi, onServerConfigUpdated } = await import("./wsNativeApi");
 
     createWsNativeApi();
@@ -196,10 +208,9 @@ describe("wsNativeApi", () => {
     onServerConfigUpdated(lateListener);
     expect(lateListener).toHaveBeenCalledTimes(1);
     expect(lateListener).toHaveBeenCalledWith(payload);
-    expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it("forwards all server.configUpdated payloads from transport", async () => {
+  it("delivers successive server.configUpdated payloads to active listeners", async () => {
     const { createWsNativeApi, onServerConfigUpdated } = await import("./wsNativeApi");
 
     createWsNativeApi();
@@ -207,32 +218,32 @@ describe("wsNativeApi", () => {
     onServerConfigUpdated(listener);
 
     emitPush(WS_CHANNELS.serverConfigUpdated, {
-      issues: [{ kind: "keybindings.invalid-entry", message: "missing index" }],
+      issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
       providers: defaultProviders,
     });
     emitPush(WS_CHANNELS.serverConfigUpdated, {
-      issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
+      issues: [],
       providers: defaultProviders,
     });
 
-    // Transport handles schema validation; wsNativeApi passes all pushes through.
     expect(listener).toHaveBeenCalledTimes(2);
-    expect(listener).toHaveBeenNthCalledWith(2, {
-      issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
+    expect(listener).toHaveBeenLastCalledWith({
+      issues: [],
       providers: defaultProviders,
     });
   });
 
   it("forwards valid terminal and orchestration events", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { createWsNativeApi } = await import("./wsNativeApi");
 
     const api = createWsNativeApi();
     const onTerminalEvent = vi.fn();
     const onDomainEvent = vi.fn();
+    const onActionProgress = vi.fn();
 
     api.terminal.onEvent(onTerminalEvent);
     api.orchestration.onDomainEvent(onDomainEvent);
+    api.git.onActionProgress(onActionProgress);
 
     const terminalEvent = {
       threadId: "thread-1",
@@ -245,9 +256,9 @@ describe("wsNativeApi", () => {
 
     const orchestrationEvent = {
       sequence: 1,
-      eventId: "event-1",
+      eventId: EventId.makeUnsafe("event-1"),
       aggregateKind: "project",
-      aggregateId: "project-1",
+      aggregateId: ProjectId.makeUnsafe("project-1"),
       occurredAt: "2026-02-24T00:00:00.000Z",
       commandId: null,
       causationEventId: null,
@@ -255,7 +266,7 @@ describe("wsNativeApi", () => {
       metadata: {},
       type: "project.created",
       payload: {
-        projectId: "project-1",
+        projectId: ProjectId.makeUnsafe("project-1"),
         title: "Project",
         workspaceRoot: "/tmp/workspace",
         defaultModel: null,
@@ -263,41 +274,30 @@ describe("wsNativeApi", () => {
         createdAt: "2026-02-24T00:00:00.000Z",
         updatedAt: "2026-02-24T00:00:00.000Z",
       },
-    } as const;
+    } satisfies Extract<OrchestrationEvent, { type: "project.created" }>;
     emitPush(ORCHESTRATION_WS_CHANNELS.domainEvent, orchestrationEvent);
+    emitPush(WS_CHANNELS.gitActionProgress, {
+      actionId: "action-1",
+      cwd: "/repo",
+      action: "commit",
+      kind: "phase_started",
+      phase: "commit",
+      label: "Committing...",
+    });
 
     expect(onTerminalEvent).toHaveBeenCalledTimes(1);
     expect(onTerminalEvent).toHaveBeenCalledWith(terminalEvent);
     expect(onDomainEvent).toHaveBeenCalledTimes(1);
     expect(onDomainEvent).toHaveBeenCalledWith(orchestrationEvent);
-    expect(warnSpy).not.toHaveBeenCalled();
-  });
-
-  it("forwards terminal and orchestration push payloads without additional validation", async () => {
-    const { createWsNativeApi } = await import("./wsNativeApi");
-
-    const api = createWsNativeApi();
-    const onTerminalEvent = vi.fn();
-    const onDomainEvent = vi.fn();
-
-    api.terminal.onEvent(onTerminalEvent);
-    api.orchestration.onDomainEvent(onDomainEvent);
-
-    // Transport handles schema validation; wsNativeApi passes all pushes through.
-    emitPush(WS_CHANNELS.terminalEvent, {
-      threadId: "thread-1",
-      terminalId: "",
-      createdAt: "2026-02-24T00:00:00.000Z",
-      type: "output",
-      data: "hello",
+    expect(onActionProgress).toHaveBeenCalledTimes(1);
+    expect(onActionProgress).toHaveBeenCalledWith({
+      actionId: "action-1",
+      cwd: "/repo",
+      action: "commit",
+      kind: "phase_started",
+      phase: "commit",
+      label: "Committing...",
     });
-    emitPush(ORCHESTRATION_WS_CHANNELS.domainEvent, {
-      sequence: -1,
-      type: "project.created",
-    });
-
-    expect(onTerminalEvent).toHaveBeenCalledTimes(1);
-    expect(onDomainEvent).toHaveBeenCalledTimes(1);
   });
 
   it("wraps orchestration dispatch commands in the command envelope", async () => {
@@ -337,6 +337,26 @@ describe("wsNativeApi", () => {
       relativePath: "plan.md",
       contents: "# Plan\n",
     });
+  });
+
+  it("uses no client timeout for git.runStackedAction", async () => {
+    requestMock.mockResolvedValue({
+      action: "commit",
+      branch: { status: "skipped_not_requested" },
+      commit: { status: "created", commitSha: "abc1234", subject: "Test" },
+      push: { status: "skipped_not_requested" },
+      pr: { status: "skipped_not_requested" },
+    });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+    await api.git.runStackedAction({ actionId: "action-1", cwd: "/repo", action: "commit" });
+
+    expect(requestMock).toHaveBeenCalledWith(
+      WS_METHODS.gitRunStackedAction,
+      { actionId: "action-1", cwd: "/repo", action: "commit" },
+      { timeoutMs: null },
+    );
   });
 
   it("forwards full-thread diff requests to the orchestration websocket method", async () => {

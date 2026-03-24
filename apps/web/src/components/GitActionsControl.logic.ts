@@ -121,9 +121,15 @@ export function buildMenuItems(
   const hasChanges = gitStatus.hasWorkingTreeChanges;
   const hasOpenPr = gitStatus.pr?.state === "open";
   const isBehind = gitStatus.behindCount > 0;
+  const canPushWithoutUpstream = hasOriginRemote && !gitStatus.hasUpstream;
   const canCommit = !isBusy && hasChanges;
   const canPush =
-    !isBusy && hasBranch && !hasChanges && !isBehind && gitStatus.aheadCount > 0 && hasOriginRemote;
+    !isBusy &&
+    hasBranch &&
+    !hasChanges &&
+    !isBehind &&
+    gitStatus.aheadCount > 0 &&
+    (gitStatus.hasUpstream || canPushWithoutUpstream);
   const canCreatePr =
     !isBusy &&
     hasBranch &&
@@ -131,7 +137,7 @@ export function buildMenuItems(
     !hasOpenPr &&
     gitStatus.aheadCount > 0 &&
     !isBehind &&
-    hasOriginRemote;
+    (gitStatus.hasUpstream || canPushWithoutUpstream);
   const canOpenPr = !isBusy && hasOpenPr;
 
   return [
@@ -206,7 +212,7 @@ export function resolveQuickAction(
   }
 
   if (hasChanges) {
-    if (!hasOriginRemote) {
+    if (!gitStatus.hasUpstream && !hasOriginRemote) {
       return { label: "Commit", disabled: false, kind: "run_action", action: "commit" };
     }
     if (hasOpenPr || isDefaultBranch) {
@@ -328,9 +334,9 @@ export function resolveDefaultBranchActionDialogCopy(input: {
 
   if (input.includesCommit) {
     return {
-      title: "Commit, push & PR from default branch?",
+      title: "Commit, push & create PR from default branch?",
       description: `This action will commit, push, and create a PR${suffix}`,
-      continueLabel: `Commit, push & PR`,
+      continueLabel: `Commit, push & create PR`,
     };
   }
   return {

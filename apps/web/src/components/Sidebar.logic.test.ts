@@ -2,40 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   hasUnseenCompletion,
+  resolveProjectStatusIndicator,
+  resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
-  shouldOpenProjectFolderPickerImmediately,
 } from "./Sidebar.logic";
-
-describe("shouldOpenProjectFolderPickerImmediately", () => {
-  it("opens the folder picker immediately in Electron on desktop", () => {
-    expect(
-      shouldOpenProjectFolderPickerImmediately({
-        isElectron: true,
-        isMobile: false,
-      }),
-    ).toBe(true);
-  });
-
-  it("keeps manual project entry on mobile Electron layouts", () => {
-    expect(
-      shouldOpenProjectFolderPickerImmediately({
-        isElectron: true,
-        isMobile: true,
-      }),
-    ).toBe(false);
-  });
-
-  it("keeps manual project entry outside Electron", () => {
-    expect(
-      shouldOpenProjectFolderPickerImmediately({
-        isElectron: false,
-        isMobile: false,
-      }),
-    ).toBe(false);
-  });
-});
 
 function makeLatestTurn(overrides?: {
   completedAt?: string | null;
@@ -93,6 +65,25 @@ describe("shouldClearThreadSelectionOnMouseDown", () => {
   });
 });
 
+describe("resolveSidebarNewThreadEnvMode", () => {
+  it("uses the app default when the caller does not request a specific mode", () => {
+    expect(
+      resolveSidebarNewThreadEnvMode({
+        defaultEnvMode: "worktree",
+      }),
+    ).toBe("worktree");
+  });
+
+  it("preserves an explicit requested mode over the app default", () => {
+    expect(
+      resolveSidebarNewThreadEnvMode({
+        requestedEnvMode: "local",
+        defaultEnvMode: "worktree",
+      }),
+    ).toBe("local");
+  });
+});
+
 describe("resolveThreadStatusPill", () => {
   const baseThread = {
     interactionMode: "plan" as const,
@@ -128,20 +119,10 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Awaiting Input", pulse: false });
   });
 
-  it("shows planning when running in plan mode", () => {
+  it("falls back to working when the thread is actively running without blockers", () => {
     expect(
       resolveThreadStatusPill({
         thread: baseThread,
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
-      }),
-    ).toMatchObject({ label: "Planning", pulse: true });
-  });
-
-  it("shows working when running in default mode", () => {
-    expect(
-      resolveThreadStatusPill({
-        thread: { ...baseThread, interactionMode: "default" as const },
         hasPendingApprovals: false,
         hasPendingUserInput: false,
       }),
@@ -161,6 +142,8 @@ describe("resolveThreadStatusPill", () => {
               createdAt: "2026-03-09T10:00:00.000Z",
               updatedAt: "2026-03-09T10:05:00.000Z",
               planMarkdown: "# Plan",
+              implementedAt: null,
+              implementationThreadId: null,
             },
           ],
           session: {
@@ -173,6 +156,35 @@ describe("resolveThreadStatusPill", () => {
         hasPendingUserInput: false,
       }),
     ).toMatchObject({ label: "Plan Ready", pulse: false });
+  });
+
+  it("does not show plan ready after the proposed plan was implemented elsewhere", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          latestTurn: makeLatestTurn(),
+          proposedPlans: [
+            {
+              id: "plan-1" as never,
+              turnId: "turn-1" as never,
+              createdAt: "2026-03-09T10:00:00.000Z",
+              updatedAt: "2026-03-09T10:05:00.000Z",
+              planMarkdown: "# Plan",
+              implementedAt: "2026-03-09T10:06:00.000Z",
+              implementationThreadId: "thread-implement" as never,
+            },
+          ],
+          session: {
+            ...baseThread.session,
+            status: "ready",
+            orchestrationStatus: "ready",
+          },
+        },
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+      }),
+    ).toMatchObject({ label: "Completed", pulse: false });
   });
 
   it("shows completed when there is an unseen completion and no active blocker", () => {
@@ -217,5 +229,55 @@ describe("resolveThreadRowClassName", () => {
     const className = resolveThreadRowClassName({ isActive: true, isSelected: false });
     expect(className).toContain("bg-accent/85");
     expect(className).toContain("hover:bg-accent");
+  });
+});
+
+describe("resolveProjectStatusIndicator", () => {
+  it("returns null when no threads have a notable status", () => {
+    expect(resolveProjectStatusIndicator([null, null])).toBeNull();
+  });
+
+  it("surfaces the highest-priority actionable state across project threads", () => {
+    expect(
+      resolveProjectStatusIndicator([
+        {
+          label: "Completed",
+          colorClass: "text-emerald-600",
+          dotClass: "bg-emerald-500",
+          pulse: false,
+        },
+        {
+          label: "Pending Approval",
+          colorClass: "text-amber-600",
+          dotClass: "bg-amber-500",
+          pulse: false,
+        },
+        {
+          label: "Working",
+          colorClass: "text-sky-600",
+          dotClass: "bg-sky-500",
+          pulse: true,
+        },
+      ]),
+    ).toMatchObject({ label: "Pending Approval", dotClass: "bg-amber-500" });
+  });
+
+  it("prefers plan-ready over completed when no stronger action is needed", () => {
+    expect(
+      resolveProjectStatusIndicator([
+        {
+          label: "Completed",
+          colorClass: "text-emerald-600",
+          dotClass: "bg-emerald-500",
+          pulse: false,
+        },
+        {
+          label: "Plan Ready",
+          colorClass: "text-violet-600",
+          dotClass: "bg-violet-500",
+          pulse: false,
+        },
+      ]),
+    ).toMatchObject({ label: "Plan Ready", dotClass: "bg-violet-500" });
   });
 });

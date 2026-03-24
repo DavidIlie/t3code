@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { TrimmedNonEmptyString, NonNegativeInt } from "./baseSchemas";
+import { TrimmedNonEmptyString } from "./baseSchemas";
 import { ProviderModelOptions } from "./model";
 import {
   ApprovalRequestId,
@@ -19,11 +19,11 @@ import {
   ProviderKind,
   ProviderRequestKind,
   ProviderSandboxMode,
+  ProviderStartOptions,
   ProviderUserInputAnswers,
   RuntimeMode,
 } from "./orchestration";
 
-const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const ProviderSessionStatus = Schema.Literals([
   "connecting",
   "ready",
@@ -36,55 +36,22 @@ export const ProviderSession = Schema.Struct({
   provider: ProviderKind,
   status: ProviderSessionStatus,
   runtimeMode: RuntimeMode,
-  cwd: Schema.optional(TrimmedNonEmptyStringSchema),
-  model: Schema.optional(TrimmedNonEmptyStringSchema),
+  cwd: Schema.optional(TrimmedNonEmptyString),
+  model: Schema.optional(TrimmedNonEmptyString),
   threadId: ThreadId,
   resumeCursor: Schema.optional(Schema.Unknown),
   activeTurnId: Schema.optional(TurnId),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
-  lastError: Schema.optional(TrimmedNonEmptyStringSchema),
+  lastError: Schema.optional(TrimmedNonEmptyString),
 });
 export type ProviderSession = typeof ProviderSession.Type;
-
-const CodexProviderStartOptions = Schema.Struct({
-  binaryPath: Schema.optional(TrimmedNonEmptyStringSchema),
-  homePath: Schema.optional(TrimmedNonEmptyStringSchema),
-});
-
-const ClaudeCodeThinkingConfig = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("adaptive") }),
-  Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("disabled") }),
-]);
-
-const ClaudeCodeProviderStartOptions = Schema.Struct({
-  binaryPath: Schema.optional(TrimmedNonEmptyStringSchema),
-  baseUrl: Schema.optional(TrimmedNonEmptyStringSchema),
-  apiKey: Schema.optional(TrimmedNonEmptyStringSchema),
-  permissionMode: Schema.optional(TrimmedNonEmptyStringSchema),
-  maxThinkingTokens: Schema.optional(NonNegativeInt),
-  thinking: Schema.optional(ClaudeCodeThinkingConfig),
-  maxTurns: Schema.optional(NonNegativeInt),
-  maxBudgetUsd: Schema.optional(Schema.Number),
-});
-
-const CursorProviderStartOptions = Schema.Struct({
-  binaryPath: Schema.optional(TrimmedNonEmptyStringSchema),
-});
-
-export const ProviderStartOptions = Schema.Struct({
-  codex: Schema.optional(CodexProviderStartOptions),
-  claudeCode: Schema.optional(ClaudeCodeProviderStartOptions),
-  cursor: Schema.optional(CursorProviderStartOptions),
-});
-export type ProviderStartOptions = typeof ProviderStartOptions.Type;
 
 export const ProviderSessionStartInput = Schema.Struct({
   threadId: ThreadId,
   provider: Schema.optional(ProviderKind),
-  cwd: Schema.optional(TrimmedNonEmptyStringSchema),
-  model: Schema.optional(TrimmedNonEmptyStringSchema),
+  cwd: Schema.optional(TrimmedNonEmptyString),
+  model: Schema.optional(TrimmedNonEmptyString),
   modelOptions: Schema.optional(ProviderModelOptions),
   resumeCursor: Schema.optional(Schema.Unknown),
   approvalPolicy: Schema.optional(ProviderApprovalPolicy),
@@ -97,12 +64,12 @@ export type ProviderSessionStartInput = typeof ProviderSessionStartInput.Type;
 export const ProviderSendTurnInput = Schema.Struct({
   threadId: ThreadId,
   input: Schema.optional(
-    TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)),
+    TrimmedNonEmptyString.check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)),
   ),
   attachments: Schema.optional(
     Schema.Array(ChatAttachment).check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_ATTACHMENTS)),
   ),
-  model: Schema.optional(TrimmedNonEmptyStringSchema),
+  model: Schema.optional(TrimmedNonEmptyString),
   modelOptions: Schema.optional(ProviderModelOptions),
   interactionMode: Schema.optional(ProviderInteractionMode),
 });
@@ -142,16 +109,48 @@ export type ProviderRespondToUserInputInput = typeof ProviderRespondToUserInputI
 
 export const ProviderReconnectMcpServerInput = Schema.Struct({
   threadId: ThreadId,
-  serverName: TrimmedNonEmptyStringSchema,
+  serverName: TrimmedNonEmptyString,
 });
 export type ProviderReconnectMcpServerInput = typeof ProviderReconnectMcpServerInput.Type;
 
 export const ProviderToggleMcpServerInput = Schema.Struct({
   threadId: ThreadId,
-  serverName: TrimmedNonEmptyStringSchema,
+  serverName: TrimmedNonEmptyString,
   enabled: Schema.Boolean,
 });
 export type ProviderToggleMcpServerInput = typeof ProviderToggleMcpServerInput.Type;
+
+export interface ProviderUsageTier {
+  readonly key: string;
+  readonly label: string;
+  readonly utilization: number;
+  readonly resetsAt: string | null;
+}
+
+export interface ProviderUsageResult {
+  readonly claudeCode: {
+    readonly available: boolean;
+    readonly plan: string | null;
+    readonly tiers: readonly ProviderUsageTier[];
+    readonly extraUsage: {
+      readonly enabled: boolean;
+      readonly spent: number;
+      readonly limit: number;
+    } | null;
+    readonly error: string | null;
+  };
+  readonly codex: {
+    readonly available: boolean;
+    readonly plan: string | null;
+    readonly tiers: readonly ProviderUsageTier[];
+    readonly extraUsage: {
+      readonly enabled: boolean;
+      readonly spent: number;
+      readonly limit: number;
+    } | null;
+    readonly error: string | null;
+  };
+}
 
 const ProviderEventKind = Schema.Literals(["session", "notification", "request", "error"]);
 
@@ -161,8 +160,8 @@ export const ProviderEvent = Schema.Struct({
   provider: ProviderKind,
   threadId: ThreadId,
   createdAt: IsoDateTime,
-  method: TrimmedNonEmptyStringSchema,
-  message: Schema.optional(TrimmedNonEmptyStringSchema),
+  method: TrimmedNonEmptyString,
+  message: Schema.optional(TrimmedNonEmptyString),
   turnId: Schema.optional(TurnId),
   itemId: Schema.optional(ProviderItemId),
   requestId: Schema.optional(ApprovalRequestId),

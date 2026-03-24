@@ -123,11 +123,9 @@ function HomePage() {
   const projects = useStore((s) => s.projects);
   const threads = useStore((s) => s.threads);
   const [prompt, setPrompt] = useState("");
-  const { settings, updateSettings } = useAppSettings();
-  const [selectedProvider, setSelectedProvider] = useState<ProviderKind>(settings.defaultProvider);
-  const [selectedModel, setSelectedModel] = useState<ModelSlug>(
-    (settings.defaultModel as ModelSlug) || getDefaultModel(settings.defaultProvider),
-  );
+  const { settings } = useAppSettings();
+  const [selectedProvider, setSelectedProvider] = useState<ProviderKind>("codex");
+  const [selectedModel, setSelectedModel] = useState<ModelSlug>(getDefaultModel("codex"));
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>(DEFAULT_RUNTIME_MODE);
   const [interactionMode, setInteractionMode] =
     useState<ProviderInteractionMode>(DEFAULT_INTERACTION_MODE);
@@ -143,7 +141,6 @@ function HomePage() {
   const setComposerDraftModel = useComposerDraftStore((s) => s.setModel);
   const setComposerDraftRuntimeMode = useComposerDraftStore((s) => s.setRuntimeMode);
   const setComposerDraftInteractionMode = useComposerDraftStore((s) => s.setInteractionMode);
-  const markAutoSubmit = useComposerDraftStore((s) => s.markAutoSubmit);
   const addDraftImages = useComposerDraftStore((s) => s.addImages);
 
   const modelOptionsByProvider = useMemo(
@@ -379,7 +376,6 @@ function HomePage() {
 
       if (message) {
         setComposerPrompt(threadId, message);
-        markAutoSubmit(threadId);
       }
       setComposerDraftProvider(threadId, selectedProvider);
       setComposerDraftModel(threadId, selectedModel);
@@ -399,7 +395,6 @@ function HomePage() {
       setComposerDraftModel,
       setComposerDraftRuntimeMode,
       setComposerDraftInteractionMode,
-      markAutoSubmit,
       selectedProvider,
       selectedModel,
       runtimeMode,
@@ -443,7 +438,6 @@ function HomePage() {
       setComposerDraftModel(threadId, selectedModel);
       setComposerDraftRuntimeMode(threadId, runtimeMode);
       setComposerDraftInteractionMode(threadId, interactionMode);
-      markAutoSubmit(threadId);
 
       setPrompt("");
       await navigate({
@@ -463,7 +457,6 @@ function HomePage() {
       setComposerDraftModel,
       setComposerDraftRuntimeMode,
       setComposerDraftInteractionMode,
-      markAutoSubmit,
       selectedProvider,
       selectedModel,
       runtimeMode,
@@ -493,7 +486,8 @@ function HomePage() {
     });
   }, [homeProject, navigate, setProjectDraftThreadId]);
 
-  const workingDirectory = settings.workingDirectory || "~";
+  const workingDirectory =
+    ((settings as Record<string, unknown>).workingDirectory as string) || "~";
 
   const handleClone = useCallback(
     async (e?: { preventDefault: () => void }) => {
@@ -506,7 +500,11 @@ function HomePage() {
 
       try {
         const api = ensureNativeApi();
-        const result = await api.git.clone({
+        // git.clone is not yet in the NativeApi type but is available at runtime via WS
+        const gitApi = api.git as typeof api.git & {
+          clone: (input: { url: string; cwd: string }) => Promise<{ path: string }>;
+        };
+        const result = await gitApi.clone({
           url: trimmedUrl,
           cwd: workingDirectory,
         });
@@ -709,7 +707,6 @@ function HomePage() {
                     onProviderModelChange={(provider, model) => {
                       setSelectedProvider(provider);
                       setSelectedModel(model);
-                      updateSettings({ defaultProvider: provider, defaultModel: model });
                     }}
                   />
                   <button

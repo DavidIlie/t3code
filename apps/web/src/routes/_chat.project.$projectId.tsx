@@ -5,10 +5,10 @@ import ProjectLandingPage from "../components/ProjectLandingPage";
 import {
   type DiffRouteSearch,
   parseDiffRouteSearch,
-  stripHistorySearchParams,
+  stripDiffSearchParams,
 } from "../diffRouteSearch";
 import { DiffWorkerPoolProvider } from "../components/DiffWorkerPoolProvider";
-import { DiffPanelLoadingState, type DiffPanelMode } from "../components/DiffPanelShell";
+import { DiffPanelLoadingState } from "../components/DiffPanelShell";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useStore } from "../store";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
@@ -20,9 +20,9 @@ const HISTORY_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "project_history_sidebar_width"
 const HISTORY_INLINE_DEFAULT_WIDTH = "clamp(28rem,48vw,44rem)";
 const HISTORY_INLINE_SIDEBAR_MIN_WIDTH = 26 * 16;
 
-const LazyHistoryPanel = ({ mode }: { mode: DiffPanelMode }) => (
+const LazyHistoryPanel = ({ mode }: { mode: "sheet" | "inline" }) => (
   <DiffWorkerPoolProvider>
-    <Suspense fallback={<DiffPanelLoadingState mode={mode} />}>
+    <Suspense fallback={<DiffPanelLoadingState label="Loading history..." />}>
       <GitHistoryPanel mode={mode} />
     </Suspense>
   </DiffWorkerPoolProvider>
@@ -64,9 +64,9 @@ const HistoryPanelInlineSidebar = (props: {
         }}
       >
         {shouldRenderHistoryContent ? (
-          <LazyHistoryPanel mode="sidebar" />
+          <LazyHistoryPanel mode="inline" />
         ) : (
-          <DiffPanelLoadingState mode="sidebar" />
+          <DiffPanelLoadingState label="Loading history..." />
         )}
         <SidebarRail />
       </Sidebar>
@@ -79,7 +79,7 @@ function ProjectRouteView() {
   const { projectId } = Route.useParams();
   const search = Route.useSearch();
   const projectExists = useStore((store) => store.projects.some((p) => p.id === projectId));
-  const historyOpen = search.history === "1";
+  const historyOpen = search.diff === "1";
   const [hasOpenedHistory, setHasOpenedHistory] = useState(historyOpen);
   const shouldUseSheet = useMediaQuery(HISTORY_INLINE_LAYOUT_MEDIA_QUERY);
   const shouldRenderHistoryContent = historyOpen || hasOpenedHistory;
@@ -93,8 +93,7 @@ function ProjectRouteView() {
       to: "/project/$projectId",
       params: { projectId },
       search: (previous) => ({
-        ...stripHistorySearchParams(previous),
-        history: undefined,
+        ...stripDiffSearchParams(previous),
       }),
     });
   }, [navigate, projectId]);
@@ -103,7 +102,7 @@ function ProjectRouteView() {
     void navigate({
       to: "/project/$projectId",
       params: { projectId },
-      search: (previous) => ({ ...previous, history: "1" as const }),
+      search: (previous) => ({ ...previous, diff: "1" as const }),
     });
   }, [navigate, projectId]);
 
@@ -159,7 +158,7 @@ function ProjectRouteView() {
           {shouldRenderHistoryContent ? (
             <LazyHistoryPanel mode="sheet" />
           ) : (
-            <DiffPanelLoadingState mode="sheet" />
+            <DiffPanelLoadingState label="Loading history..." />
           )}
         </SheetPopup>
       </Sheet>
@@ -170,7 +169,7 @@ function ProjectRouteView() {
 export const Route = createFileRoute("/_chat/project/$projectId")({
   validateSearch: (search) => parseDiffRouteSearch(search),
   search: {
-    middlewares: [retainSearchParams<DiffRouteSearch>(["history"])],
+    middlewares: [retainSearchParams<DiffRouteSearch>(["diff"])],
   },
   component: ProjectRouteView,
 });

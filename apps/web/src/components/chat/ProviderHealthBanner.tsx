@@ -2,7 +2,6 @@ import { type ServerProviderStatus } from "@t3tools/contracts";
 import { memo } from "react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { CircleAlertIcon } from "lucide-react";
-import { PROVIDER_OPTIONS } from "../../session-logic";
 
 export const ProviderHealthBanner = memo(function ProviderHealthBanner({
   status,
@@ -13,35 +12,25 @@ export const ProviderHealthBanner = memo(function ProviderHealthBanner({
     return null;
   }
 
+  const providerLabel =
+    status.provider === "codex"
+      ? "Codex"
+      : status.provider === "claudeAgent"
+        ? "Claude"
+        : status.provider;
   const defaultMessage =
     status.status === "error"
-      ? `${status.provider} provider is unavailable.`
-      : `${status.provider} provider has limited availability.`;
-
-  const docsUrl = PROVIDER_OPTIONS.find((p) => p.value === status.provider)?.docsUrl;
+      ? `${providerLabel} provider is unavailable.`
+      : `${providerLabel} provider has limited availability.`;
+  const title = `${providerLabel} provider status`;
 
   return (
     <div className="pt-3 mx-auto max-w-3xl">
       <Alert variant={status.status === "error" ? "error" : "warning"}>
         <CircleAlertIcon />
-        <AlertTitle>
-          {status.provider === "codex" ? "Codex provider status" : `${status.provider} status`}
-        </AlertTitle>
+        <AlertTitle>{title}</AlertTitle>
         <AlertDescription className="line-clamp-3" title={status.message ?? defaultMessage}>
           {status.message ?? defaultMessage}
-          {docsUrl && (
-            <>
-              {" "}
-              <a
-                href={docsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:no-underline"
-              >
-                Learn more
-              </a>
-            </>
-          )}
         </AlertDescription>
       </Alert>
     </div>

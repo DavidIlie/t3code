@@ -5,8 +5,8 @@ interface Props {
 }
 
 const {
-  title = "T3 Gurt",
-  description = "T3 Gurt — Code with Claude. An opinionated fork of T3 Code with full Claude Code support.",
+  title = "T3 Code",
+  description = "T3 Code — The best way to code with AI.",
 } = Astro.props;
 ---
 
@@ -32,10 +32,9 @@ const {
       <nav class="nav">
         <a href="/" class="nav-brand">
           <img src="/icon.png" alt="T3" class="nav-icon" />
-          <span class="nav-label">Gurt</span>
         </a>
         <a
-          href="https://github.com/DavidIlie/t3code"
+          href="https://github.com/pingdotgg/t3code"
           target="_blank"
           rel="noopener noreferrer"
           class="nav-github"
@@ -50,10 +49,10 @@ const {
       </main>
 
       <footer class="footer">
-        <span class="footer-copy">Forked by <a href="https://davidilie.com" target="_blank" rel="noopener noreferrer" class="footer-link">David Ilie</a></span>
+        <span class="footer-copy">&copy; {new Date().getFullYear()} T3 Tools Inc</span>
         <div class="footer-links">
-          <a href="https://github.com/DavidIlie/t3code" target="_blank" rel="noopener noreferrer">GitHub</a>
-          <a href="https://github.com/pingdotgg/t3code" target="_blank" rel="noopener noreferrer">Upstream</a>
+          <a href="https://github.com/pingdotgg/t3code" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://discord.gg/jn4EGJjrvv" target="_blank" rel="noopener noreferrer">Discord</a>
         </div>
       </footer>
     </div>
@@ -151,21 +150,12 @@ const {
   .nav-brand {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
   }
 
   .nav-icon {
     width: 28px;
     height: 28px;
     border-radius: 6px;
-  }
-
-  .nav-label {
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--fg-muted);
   }
 
   .nav-github {
@@ -208,18 +198,6 @@ const {
     padding: 1.5rem 2.5rem;
     font-size: 0.8rem;
     color: var(--fg-dim);
-  }
-
-  .footer-link {
-    color: var(--fg-muted);
-    text-decoration: underline;
-    text-decoration-color: rgba(255, 255, 255, 0.15);
-    text-underline-offset: 2px;
-    transition: color 0.3s ease;
-  }
-
-  .footer-link:hover {
-    color: var(--fg);
   }
 
   .footer-links {

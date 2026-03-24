@@ -27,7 +27,7 @@ export const ORCHESTRATION_WS_CHANNELS = {
   domainEvent: "orchestration.domainEvent",
 } as const;
 
-export const ProviderKind = Schema.Literals(["codex", "claudeCode", "cursor"]);
+export const ProviderKind = Schema.Literals(["codex", "claudeAgent"]);
 export type ProviderKind = typeof ProviderKind.Type;
 export const ProviderApprovalPolicy = Schema.Literals([
   "untrusted",
@@ -43,6 +43,29 @@ export const ProviderSandboxMode = Schema.Literals([
 ]);
 export type ProviderSandboxMode = typeof ProviderSandboxMode.Type;
 export const DEFAULT_PROVIDER_KIND: ProviderKind = "codex";
+
+export const CodexProviderStartOptions = Schema.Struct({
+  binaryPath: Schema.optional(TrimmedNonEmptyString),
+  homePath: Schema.optional(TrimmedNonEmptyString),
+});
+
+export const ClaudeProviderStartOptions = Schema.Struct({
+  binaryPath: Schema.optional(TrimmedNonEmptyString),
+  permissionMode: Schema.optional(TrimmedNonEmptyString),
+  maxThinkingTokens: Schema.optional(NonNegativeInt),
+  thinking: Schema.optional(Schema.Unknown),
+  maxTurns: Schema.optional(NonNegativeInt),
+  maxBudgetUsd: Schema.optional(Schema.Number),
+  baseUrl: Schema.optional(TrimmedNonEmptyString),
+  apiKey: Schema.optional(TrimmedNonEmptyString),
+});
+
+export const ProviderStartOptions = Schema.Struct({
+  codex: Schema.optional(CodexProviderStartOptions),
+  claudeAgent: Schema.optional(ClaudeProviderStartOptions),
+});
+export type ProviderStartOptions = typeof ProviderStartOptions.Type;
+
 export const RuntimeMode = Schema.Literals(["approval-required", "full-access"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
 export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
@@ -141,7 +164,6 @@ export const OrchestrationMessage = Schema.Struct({
   id: MessageId,
   role: OrchestrationMessageRole,
   text: Schema.String,
-  reasoning: Schema.optional(Schema.String),
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   turnId: Schema.NullOr(TurnId),
   streaming: Schema.Boolean,
@@ -157,10 +179,17 @@ export const OrchestrationProposedPlan = Schema.Struct({
   id: OrchestrationProposedPlanId,
   turnId: Schema.NullOr(TurnId),
   planMarkdown: TrimmedNonEmptyString,
+  implementedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),
+  implementationThreadId: Schema.NullOr(ThreadId).pipe(Schema.withDecodingDefault(() => null)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
 export type OrchestrationProposedPlan = typeof OrchestrationProposedPlan.Type;
+
+const SourceProposedPlanReference = Schema.Struct({
+  threadId: ThreadId,
+  planId: OrchestrationProposedPlanId,
+});
 
 export const OrchestrationSessionStatus = Schema.Literals([
   "idle",
@@ -241,6 +270,7 @@ export const OrchestrationLatestTurn = Schema.Struct({
   startedAt: Schema.NullOr(IsoDateTime),
   completedAt: Schema.NullOr(IsoDateTime),
   assistantMessageId: Schema.NullOr(MessageId),
+  sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
 });
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
 
@@ -362,11 +392,13 @@ export const ThreadTurnStartCommand = Schema.Struct({
   provider: Schema.optional(ProviderKind),
   model: Schema.optional(TrimmedNonEmptyString),
   modelOptions: Schema.optional(ProviderModelOptions),
+  providerOptions: Schema.optional(ProviderStartOptions),
   assistantDeliveryMode: Schema.optional(AssistantDeliveryMode),
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
   ),
+  sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
 });
 
@@ -383,9 +415,11 @@ const ClientThreadTurnStartCommand = Schema.Struct({
   provider: Schema.optional(ProviderKind),
   model: Schema.optional(TrimmedNonEmptyString),
   modelOptions: Schema.optional(ProviderModelOptions),
+  providerOptions: Schema.optional(ProviderStartOptions),
   assistantDeliveryMode: Schema.optional(AssistantDeliveryMode),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
 });
 
@@ -481,7 +515,6 @@ const ThreadMessageAssistantDeltaCommand = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
   delta: Schema.String,
-  reasoning: Schema.optional(Schema.String),
   turnId: Schema.optional(TurnId),
   createdAt: IsoDateTime,
 });
@@ -650,7 +683,6 @@ export const ThreadMessageSentPayload = Schema.Struct({
   messageId: MessageId,
   role: OrchestrationMessageRole,
   text: Schema.String,
-  reasoning: Schema.optional(Schema.String),
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   turnId: Schema.NullOr(TurnId),
   streaming: Schema.Boolean,
@@ -664,11 +696,13 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   provider: Schema.optional(ProviderKind),
   model: Schema.optional(TrimmedNonEmptyString),
   modelOptions: Schema.optional(ProviderModelOptions),
+  providerOptions: Schema.optional(ProviderStartOptions),
   assistantDeliveryMode: Schema.optional(AssistantDeliveryMode),
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
   ),
+  sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
 });
 

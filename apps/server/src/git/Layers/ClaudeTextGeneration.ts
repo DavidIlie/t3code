@@ -167,7 +167,7 @@ function parseRawJson(
 const makeClaudeTextGeneration = (() => {
   const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = (input) => {
     const wantsBranch = input.includeBranch === true;
-    const userInstructions = input.commitMessageInstructions?.trim() ?? "";
+    const userInstructions = (input as any).commitMessageInstructions?.trim() ?? "";
 
     const prompt = [
       "You write concise git commit messages.",

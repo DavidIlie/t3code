@@ -1,9 +1,9 @@
-import { type DiffLineAnnotation, parsePatchFiles } from "@pierre/diffs";
+import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff, type FileDiffMetadata, Virtualizer } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { ThreadId, type TurnId } from "@t3tools/contracts";
-import { ChevronLeftIcon, ChevronRightIcon, Columns2Icon, Rows3Icon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, Columns2Icon, Rows3Icon } from "lucide-react";
 import {
   type WheelEvent as ReactWheelEvent,
   useCallback,
@@ -19,22 +19,15 @@ import { cn } from "~/lib/utils";
 import { readNativeApi } from "../nativeApi";
 import { resolvePathLinkTarget } from "../terminal-links";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
-import { isElectron } from "../env";
 import { useTheme } from "../hooks/useTheme";
 import { buildPatchCacheKey } from "../lib/diffRendering";
 import { resolveDiffThemeName } from "../lib/diffRendering";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { useStore } from "../store";
+import { useAppSettings } from "../appSettings";
+import { formatShortTimestamp } from "../timestampFormat";
+import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { ToggleGroup, Toggle } from "./ui/toggle-group";
-import {
-  DiffContextCommentDraft as DiffContextCommentDraftCard,
-  DiffContextCommentPreview,
-} from "./DiffContextCommentDraft";
-import {
-  buildFileDiffRenderKey as buildCommentFileKey,
-  type DiffCommentAnnotationMetadata,
-  useDiffContextCommentDrafts,
-} from "./DiffPanel.logic";
 
 type DiffRenderMode = "stacked" | "split";
 type DiffThemeType = "light" | "dark";
@@ -158,24 +151,16 @@ function buildFileDiffRenderKey(fileDiff: FileDiffMetadata): string {
   return fileDiff.cacheKey ?? `${fileDiff.prevName ?? "none"}:${fileDiff.name}`;
 }
 
-function formatTurnChipTimestamp(isoDate: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(isoDate));
-}
-
 interface DiffPanelProps {
-  mode?: "inline" | "sheet" | "sidebar";
-  /** External close handler — required when rendered in a portal (sheet mode) where router context may be unavailable. */
-  onClose?: (() => void) | undefined;
+  mode?: DiffPanelMode;
 }
 
 export { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 
-export default function DiffPanel({ mode = "inline", onClose }: DiffPanelProps) {
+export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
+  const { settings } = useAppSettings();
   const [diffRenderMode, setDiffRenderMode] = useState<DiffRenderMode>("stacked");
   const patchViewportRef = useRef<HTMLDivElement>(null);
   const turnStripRef = useRef<HTMLDivElement>(null);
@@ -308,93 +293,6 @@ export default function DiffPanel({ mode = "inline", onClose }: DiffPanelProps) 
     );
   }, [renderablePatch]);
 
-  const {
-    editingCommentBody,
-    editingCommentError,
-    lineAnnotationsByFileKey,
-    manualCommentBody,
-    manualCommentError,
-    selectedLinesForFileKey,
-    visiblePendingDiffContextComments,
-    beginEditingComment,
-    cancelEditingComment,
-    clearManualCommentSelection,
-    deleteEditingComment,
-    handleManualCommentSelectionChange,
-    saveEditingComment,
-    setEditingCommentBody,
-    setManualCommentBody,
-    submitManualComment,
-  } = useDiffContextCommentDrafts({
-    activeThreadId,
-    selectedTurnId,
-    renderableFiles,
-  });
-
-  const renderDraftAnnotation = useCallback(
-    (annotation: DiffLineAnnotation<DiffCommentAnnotationMetadata>) => {
-      const { metadata } = annotation;
-      if (metadata.kind === "draft-comment") {
-        return (
-          <DiffContextCommentDraftCard
-            filePath={metadata.filePath}
-            lineStart={metadata.lineStart}
-            lineEnd={metadata.lineEnd}
-            body={manualCommentBody}
-            error={manualCommentError}
-            onBodyChange={setManualCommentBody}
-            onCancel={clearManualCommentSelection}
-            onSubmit={submitManualComment}
-          />
-        );
-      }
-
-      const comment = visiblePendingDiffContextComments.find(
-        (entry: { id: string }) => entry.id === metadata.commentId,
-      );
-      if (!comment) return null;
-
-      if (metadata.isEditing) {
-        return (
-          <DiffContextCommentDraftCard
-            filePath={comment.filePath}
-            lineStart={comment.lineStart}
-            lineEnd={comment.lineEnd}
-            body={editingCommentBody}
-            error={editingCommentError}
-            onBodyChange={setEditingCommentBody}
-            onCancel={cancelEditingComment}
-            onDelete={deleteEditingComment}
-            onSubmit={saveEditingComment}
-            submitLabel="Save"
-          />
-        );
-      }
-
-      return (
-        <DiffContextCommentPreview
-          body={comment.body}
-          onEdit={() => beginEditingComment(comment)}
-        />
-      );
-    },
-    [
-      beginEditingComment,
-      cancelEditingComment,
-      clearManualCommentSelection,
-      deleteEditingComment,
-      editingCommentBody,
-      editingCommentError,
-      manualCommentBody,
-      manualCommentError,
-      saveEditingComment,
-      setEditingCommentBody,
-      setManualCommentBody,
-      submitManualComment,
-      visiblePendingDiffContextComments,
-    ],
-  );
-
   useEffect(() => {
     if (!selectedFilePath || !patchViewportRef.current) {
       return;
@@ -500,7 +398,6 @@ export default function DiffPanel({ mode = "inline", onClose }: DiffPanelProps) 
     selectedChip?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
   }, [selectedTurn?.turnId, selectedTurnId]);
 
-  const shouldUseDragRegion = isElectron && mode !== "sheet";
   const headerRow = (
     <>
       <div className="relative min-w-0 flex-1 [-webkit-app-region:no-drag]">
@@ -585,7 +482,7 @@ export default function DiffPanel({ mode = "inline", onClose }: DiffPanelProps) 
                       "?"}
                   </span>
                   <span className="text-[9px] leading-tight opacity-70">
-                    {formatTurnChipTimestamp(summary.completedAt)}
+                    {formatShortTimestamp(summary.completedAt, settings.timestampFormat)}
                   </span>
                 </div>
               </div>
@@ -612,48 +509,11 @@ export default function DiffPanel({ mode = "inline", onClose }: DiffPanelProps) 
           <Columns2Icon className="size-3" />
         </Toggle>
       </ToggleGroup>
-      <button
-        type="button"
-        className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
-        aria-label="Close diff panel"
-        onClick={() => {
-          if (onClose) {
-            onClose();
-          } else if (routeThreadId) {
-            void navigate({
-              to: "/$threadId",
-              params: { threadId: routeThreadId },
-              search: (previous) => stripDiffSearchParams(previous),
-            });
-          }
-        }}
-      >
-        <XIcon className="size-3.5" />
-      </button>
     </>
-  );
-  const headerRowClassName = cn(
-    "flex items-center justify-between gap-2 px-4",
-    shouldUseDragRegion ? "drag-region h-[52px] border-b border-border" : "h-12",
   );
 
   return (
-    <div
-      className={cn(
-        "flex h-full min-w-0 flex-col bg-background",
-        mode === "inline"
-          ? "w-[42vw] min-w-[360px] max-w-[560px] shrink-0 border-l border-border"
-          : "w-full",
-      )}
-    >
-      {shouldUseDragRegion ? (
-        <div className={headerRowClassName}>{headerRow}</div>
-      ) : (
-        <div className="border-b border-border">
-          <div className={headerRowClassName}>{headerRow}</div>
-        </div>
-      )}
-
+    <DiffPanelShell mode={mode} header={headerRow}>
       {!activeThread ? (
         <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-muted-foreground/70">
           Select a thread to inspect turn diffs.
@@ -678,15 +538,17 @@ export default function DiffPanel({ mode = "inline", onClose }: DiffPanelProps) 
               </div>
             )}
             {!renderablePatch ? (
-              <div className="flex h-full items-center justify-center px-3 py-2 text-xs text-muted-foreground/70">
-                <p>
-                  {isLoadingCheckpointDiff
-                    ? "Loading checkpoint diff..."
-                    : hasNoNetChanges
+              isLoadingCheckpointDiff ? (
+                <DiffPanelLoadingState label="Loading checkpoint diff..." />
+              ) : (
+                <div className="flex h-full items-center justify-center px-3 py-2 text-xs text-muted-foreground/70">
+                  <p>
+                    {hasNoNetChanges
                       ? "No net changes in this selection."
                       : "No patch available for this selection."}
-                </p>
-              </div>
+                  </p>
+                </div>
+              )
             ) : renderablePatch.kind === "files" ? (
               <Virtualizer
                 className="diff-render-surface h-full min-h-0 overflow-auto px-2 pb-2"
@@ -698,7 +560,6 @@ export default function DiffPanel({ mode = "inline", onClose }: DiffPanelProps) 
                 {renderableFiles.map((fileDiff) => {
                   const filePath = resolveFileDiffPath(fileDiff);
                   const fileKey = buildFileDiffRenderKey(fileDiff);
-                  const commentFileKey = buildCommentFileKey(fileDiff);
                   const themedFileKey = `${fileKey}:${resolvedTheme}`;
                   return (
                     <div
@@ -718,30 +579,9 @@ export default function DiffPanel({ mode = "inline", onClose }: DiffPanelProps) 
                     >
                       <FileDiff
                         fileDiff={fileDiff}
-                        lineAnnotations={lineAnnotationsByFileKey[commentFileKey] ?? []}
-                        selectedLines={
-                          selectedLinesForFileKey?.fileKey === commentFileKey
-                            ? selectedLinesForFileKey.range
-                            : null
-                        }
-                        renderAnnotation={renderDraftAnnotation}
                         options={{
                           diffStyle: diffRenderMode === "split" ? "split" : "unified",
                           lineDiffType: "none",
-                          enableGutterUtility: true,
-                          enableLineSelection: true,
-                          onGutterUtilityClick: (range) =>
-                            handleManualCommentSelectionChange({
-                              file: fileDiff,
-                              fileKey: commentFileKey,
-                              range,
-                            }),
-                          onLineSelected: (range) =>
-                            handleManualCommentSelectionChange({
-                              file: fileDiff,
-                              fileKey: commentFileKey,
-                              range,
-                            }),
                           theme: resolveDiffThemeName(resolvedTheme),
                           themeType: resolvedTheme as DiffThemeType,
                           unsafeCSS: DIFF_PANEL_UNSAFE_CSS,
@@ -764,6 +604,6 @@ export default function DiffPanel({ mode = "inline", onClose }: DiffPanelProps) 
           </div>
         </>
       )}
-    </div>
+    </DiffPanelShell>
   );
 }

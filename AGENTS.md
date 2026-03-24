@@ -2,19 +2,12 @@
 
 ## Task Completion Requirements
 
-- Both `bun lint` and `bun typecheck` must pass before considering tasks completed.
+- All of `bun fmt`, `bun lint`, and `bun typecheck` must pass before considering tasks completed.
 - NEVER run `bun test`. Always use `bun run test` (runs Vitest).
-- **NEVER skip failing tests.** If you see test failures, fix every single one. Do not mark a task as done while tests are broken.
-
-## Git Safety
-
-- **Commit frequently.** After completing each discrete feature or fix, create a commit immediately. Do not accumulate large amounts of uncommitted work.
-- **NEVER run `git checkout -- .` or `git restore .`** on a dirty working tree. These commands destroy all uncommitted changes permanently with no recovery. If you need to undo a cherry-pick or merge, use `git reset HEAD` (unstage only) and handle files individually.
-- Before any git operation that could affect the working tree (cherry-pick, merge, rebase, checkout), ensure all work is committed first.
 
 ## Project Snapshot
 
-T3 Gurt is a minimal web GUI for using code agents like Codex and Claude Code (coming soon).
+T3 Code is a minimal web GUI for using coding agents like Codex and Claude.
 
 This repository is a VERY EARLY WIP. Proposing sweeping changes that improve long-term maintainability is encouraged.
 
@@ -39,7 +32,7 @@ Long term maintainability is a core priority. If you add new functionality, firs
 
 ## Codex App Server (Important)
 
-T3 Gurt is currently Codex-first. The server starts `codex app-server` (JSON-RPC over stdio) per provider session, then streams structured events to the browser through WebSocket push messages.
+T3 Code is currently Codex-first. The server starts `codex app-server` (JSON-RPC over stdio) per provider session, then streams structured events to the browser through WebSocket push messages.
 
 How we use it in this codebase:
 

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import {
   EventId,
   IsoDateTime,
@@ -98,11 +98,7 @@ const RuntimeErrorClass = Schema.Literals([
 ]);
 export type RuntimeErrorClass = typeof RuntimeErrorClass.Type;
 
-export const CanonicalItemType = Schema.Literals([
-  "user_message",
-  "assistant_message",
-  "reasoning",
-  "plan",
+export const TOOL_LIFECYCLE_ITEM_TYPES = [
   "command_execution",
   "file_change",
   "mcp_tool_call",
@@ -110,6 +106,21 @@ export const CanonicalItemType = Schema.Literals([
   "collab_agent_tool_call",
   "web_search",
   "image_view",
+] as const;
+
+export const ToolLifecycleItemType = Schema.Literals(TOOL_LIFECYCLE_ITEM_TYPES);
+export type ToolLifecycleItemType = typeof ToolLifecycleItemType.Type;
+
+export function isToolLifecycleItemType(value: string): value is ToolLifecycleItemType {
+  return TOOL_LIFECYCLE_ITEM_TYPES.includes(value as ToolLifecycleItemType);
+}
+
+export const CanonicalItemType = Schema.Literals([
+  "user_message",
+  "assistant_message",
+  "reasoning",
+  "plan",
+  ...TOOL_LIFECYCLE_ITEM_TYPES,
   "review_entered",
   "review_exited",
   "context_compaction",
@@ -405,6 +416,9 @@ export const UserInputQuestion = Schema.Struct({
   header: TrimmedNonEmptyStringSchema,
   question: TrimmedNonEmptyStringSchema,
   options: Schema.Array(UserInputQuestionOption),
+  multiSelect: Schema.optional(Schema.Boolean).pipe(
+    Schema.withConstructorDefault(() => Option.some(false)),
+  ),
 });
 export type UserInputQuestion = typeof UserInputQuestion.Type;
 
@@ -428,6 +442,7 @@ export type TaskStartedPayload = typeof TaskStartedPayload.Type;
 const TaskProgressPayload = Schema.Struct({
   taskId: RuntimeTaskId,
   description: TrimmedNonEmptyStringSchema,
+  summary: Schema.optional(TrimmedNonEmptyStringSchema),
   usage: Schema.optional(Schema.Unknown),
   lastToolName: Schema.optional(TrimmedNonEmptyStringSchema),
 });

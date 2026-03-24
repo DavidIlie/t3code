@@ -13,7 +13,6 @@ import {
   type UsageTier,
 } from "../providerSessionStore";
 import { useStore } from "../store";
-import { readNativeApi } from "../nativeApi";
 import { Popover, PopoverTrigger, PopoverPopup } from "./ui/popover";
 import { SidebarMenuButton } from "./ui/sidebar";
 
@@ -25,31 +24,9 @@ import { SidebarMenuButton } from "./ui/sidebar";
  * available regardless of which components are mounted.
  */
 export async function fetchProviderUsage(): Promise<void> {
-  const api = readNativeApi();
-  if (!api) return;
-  try {
-    const result = await api.provider.getUsage();
-    const store = useProviderSessionStore.getState();
-    if (result.claudeCode.available || result.claudeCode.tiers.length > 0) {
-      store.setProviderUsage("claudeCode", {
-        provider: "claudeCode",
-        plan: result.claudeCode.plan,
-        tiers: result.claudeCode.tiers.map((t) => ({
-          label: t.label,
-          percentUsed: t.utilization,
-          resetAt: t.resetsAt,
-          status: severityFromPercent(t.utilization),
-        })),
-        extraUsage: result.claudeCode.extraUsage
-          ? { spent: result.claudeCode.extraUsage.spent, limit: result.claudeCode.extraUsage.limit }
-          : null,
-        updatedAt: new Date().toISOString(),
-        raw: result.claudeCode,
-      });
-    }
-  } catch {
-    // Non-critical
-  }
+  // The `provider` namespace was removed from NativeApi.
+  // Usage data is now populated via real-time rate-limit events
+  // pushed through the WebSocket (see parseRateLimitPayload).
 }
 
 type Severity = "ok" | "warning" | "critical";
@@ -342,7 +319,7 @@ export function ProviderUsageContent({
 
 export function UsageCard() {
   const [open, setOpen] = useState(false);
-  const [activeProvider, setActiveProvider] = useState<ProviderKind>("claudeCode");
+  const [activeProvider, setActiveProvider] = useState<ProviderKind>("claudeAgent");
   const [refreshing, setRefreshing] = useState(false);
   const [, setTick] = useState(0);
 
@@ -361,7 +338,7 @@ export function UsageCard() {
       providers.add(key);
     }
     // Always show claudeCode
-    providers.add("claudeCode");
+    providers.add("claudeAgent");
     return providers;
   }, [threads, usageByProvider]);
 
@@ -438,11 +415,7 @@ export function UsageCard() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-foreground">
-                {activeProvider === "claudeCode"
-                  ? "Claude"
-                  : activeProvider === "codex"
-                    ? "Codex"
-                    : "Cursor"}
+                {activeProvider === "claudeAgent" ? "Claude" : "Codex"}
               </span>
               {plan && (
                 <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
@@ -451,7 +424,7 @@ export function UsageCard() {
               )}
             </div>
             <div className="flex items-center gap-1">
-              {activeProvider === "claudeCode" && (
+              {activeProvider === "claudeAgent" && (
                 <a
                   href="https://console.anthropic.com/settings/usage"
                   target="_blank"
@@ -476,7 +449,7 @@ export function UsageCard() {
           {/* Provider tabs */}
           {activeProviders.size > 1 && (
             <div className="flex gap-1">
-              {(["claudeCode", "codex", "cursor"] as const)
+              {(["claudeAgent", "codex"] as const satisfies readonly ProviderKind[])
                 .filter((p) => activeProviders.has(p))
                 .map((p) => (
                   <button
@@ -489,7 +462,7 @@ export function UsageCard() {
                     }`}
                     onClick={handleProviderClick(p)}
                   >
-                    {p === "claudeCode" ? "Claude" : p === "codex" ? "Codex" : "Cursor"}
+                    {p === "claudeAgent" ? "Claude" : "Codex"}
                   </button>
                 ))}
             </div>
@@ -540,7 +513,7 @@ export function SidebarUsageBars() {
   const lastTiersRef = useRef<UsageTier[]>([]);
 
   const allTiers: UsageTier[] = [];
-  const claude = usageByProvider.claudeCode;
+  const claude = usageByProvider.claudeAgent;
   if (claude) {
     for (const t of claude.tiers) {
       if (PRIMARY_TIER_LABELS.has(t.label)) allTiers.push(t);

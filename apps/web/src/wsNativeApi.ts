@@ -1,4 +1,5 @@
 import {
+  type GitActionProgressEvent,
   ORCHESTRATION_WS_CHANNELS,
   ORCHESTRATION_WS_METHODS,
   type ContextMenuItem,
@@ -9,14 +10,13 @@ import {
   type WsWelcomePayload,
 } from "@t3tools/contracts";
 
-import { useProviderSessionStore } from "./providerSessionStore";
-
 import { showContextMenuFallback } from "./contextMenuFallback";
 import { WsTransport } from "./wsTransport";
 
 let instance: { api: NativeApi; transport: WsTransport } | null = null;
 const welcomeListeners = new Set<(payload: WsWelcomePayload) => void>();
 const serverConfigUpdatedListeners = new Set<(payload: ServerConfigUpdatedPayload) => void>();
+const gitActionProgressListeners = new Set<(payload: GitActionProgressEvent) => void>();
 
 /**
  * Subscribe to the server welcome message. If a welcome was already received
@@ -44,10 +44,6 @@ export function onServerWelcome(listener: (payload: WsWelcomePayload) => void): 
  * Subscribe to server config update events. Replays the latest update for
  * late subscribers to avoid missing config validation feedback.
  */
-export function getLastWelcome(): WsWelcomePayload | null {
-  return instance?.transport.getLatestPush(WS_CHANNELS.serverWelcome)?.data ?? null;
-}
-
 export function onServerConfigUpdated(
   listener: (payload: ServerConfigUpdatedPayload) => void,
 ): () => void {
@@ -75,11 +71,6 @@ export function createWsNativeApi(): NativeApi {
 
   transport.subscribe(WS_CHANNELS.serverWelcome, (message) => {
     const payload = message.data;
-    if (payload.mcpServers && payload.mcpServers.length > 0) {
-      useProviderSessionStore
-        .getState()
-        .setGlobalMcpServers(payload.mcpServers.map((s) => ({ name: s.name, status: s.status })));
-    }
     for (const listener of welcomeListeners) {
       try {
         listener(payload);
@@ -98,16 +89,22 @@ export function createWsNativeApi(): NativeApi {
       }
     }
   });
+  transport.subscribe(WS_CHANNELS.gitActionProgress, (message) => {
+    const payload = message.data;
+    for (const listener of gitActionProgressListeners) {
+      try {
+        listener(payload);
+      } catch {
+        // Swallow listener errors
+      }
+    }
+  });
 
   const api: NativeApi = {
     dialogs: {
       pickFolder: async () => {
         if (!window.desktopBridge) return null;
         return window.desktopBridge.pickFolder();
-      },
-      pickFile: async (filters) => {
-        if (!window.desktopBridge) return null;
-        return window.desktopBridge.pickFile(filters);
       },
       confirm: async (message) => {
         if (window.desktopBridge) {
@@ -123,19 +120,12 @@ export function createWsNativeApi(): NativeApi {
       clear: (input) => transport.request(WS_METHODS.terminalClear, input),
       restart: (input) => transport.request(WS_METHODS.terminalRestart, input),
       close: (input) => transport.request(WS_METHODS.terminalClose, input),
-      listShells: () => transport.request(WS_METHODS.terminalListShells, {}),
       onEvent: (callback) =>
         transport.subscribe(WS_CHANNELS.terminalEvent, (message) => callback(message.data)),
     },
     projects: {
       searchEntries: (input) => transport.request(WS_METHODS.projectsSearchEntries, input),
       writeFile: (input) => transport.request(WS_METHODS.projectsWriteFile, input),
-      importHistory: (input) => transport.request(WS_METHODS.projectsImportHistory, input),
-      getSessionMessages: (input) =>
-        transport.request(WS_METHODS.projectsGetSessionMessages, input),
-      getMcpServers: (input) => transport.request(WS_METHODS.projectsGetMcpServers, input),
-      addMcpServer: (input) => transport.request(WS_METHODS.projectsAddMcpServer, input),
-      removeMcpServer: (input) => transport.request(WS_METHODS.projectsRemoveMcpServer, input),
     },
     shell: {
       openInEditor: (cwd, editor) =>
@@ -157,21 +147,23 @@ export function createWsNativeApi(): NativeApi {
     git: {
       pull: (input) => transport.request(WS_METHODS.gitPull, input),
       status: (input) => transport.request(WS_METHODS.gitStatus, input),
-      runStackedAction: (input) => transport.request(WS_METHODS.gitRunStackedAction, input),
+      runStackedAction: (input) =>
+        transport.request(WS_METHODS.gitRunStackedAction, input, { timeoutMs: null }),
       listBranches: (input) => transport.request(WS_METHODS.gitListBranches, input),
       createWorktree: (input) => transport.request(WS_METHODS.gitCreateWorktree, input),
       removeWorktree: (input) => transport.request(WS_METHODS.gitRemoveWorktree, input),
       createBranch: (input) => transport.request(WS_METHODS.gitCreateBranch, input),
       checkout: (input) => transport.request(WS_METHODS.gitCheckout, input),
       init: (input) => transport.request(WS_METHODS.gitInit, input),
-      clone: (input) => transport.request(WS_METHODS.gitClone, input),
       resolvePullRequest: (input) => transport.request(WS_METHODS.gitResolvePullRequest, input),
       preparePullRequestThread: (input) =>
         transport.request(WS_METHODS.gitPreparePullRequestThread, input),
-      log: (input) => transport.request(WS_METHODS.gitLog, input),
-      showCommitDiff: (input) => transport.request(WS_METHODS.gitShowCommitDiff, input),
-      generateCommitMessage: (input) =>
-        transport.request(WS_METHODS.gitGenerateCommitMessage, input),
+      onActionProgress: (callback) => {
+        gitActionProgressListeners.add(callback);
+        return () => {
+          gitActionProgressListeners.delete(callback);
+        };
+      },
     },
     contextMenu: {
       show: async <T extends string>(
@@ -183,20 +175,6 @@ export function createWsNativeApi(): NativeApi {
         }
         return showContextMenuFallback(items, position);
       },
-    },
-    provider: {
-      getUsage: () => transport.request(WS_METHODS.providerGetUsage, {}),
-      reconnectMcpServer: (input) =>
-        transport.request(WS_METHODS.providerReconnectMcpServer, input),
-      toggleMcpServer: (input) => transport.request(WS_METHODS.providerToggleMcpServer, input),
-      onAccountUpdated: (callback) =>
-        transport.subscribe(WS_CHANNELS.providerAccountUpdated, (message) =>
-          callback(message.data),
-        ),
-      onSessionConfigured: (callback) =>
-        transport.subscribe(WS_CHANNELS.providerSessionConfigured, (message) =>
-          callback(message.data),
-        ),
     },
     server: {
       getConfig: () => transport.request(WS_METHODS.serverGetConfig),
