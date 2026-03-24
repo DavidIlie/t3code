@@ -150,7 +150,10 @@ function makeHarness(config?: {
       : {}),
   };
 
-  const fsLayer = FileSystem.layerNoop({});
+  const fsLayer = FileSystem.layerNoop({
+    makeDirectory: () => Effect.void,
+    makeTempDirectoryScoped: () => Effect.succeed("/tmp/test-temp"),
+  });
   const testDepsLayer = Layer.provideMerge(
     Layer.provide(
       ServerConfig.layerTest("/tmp/test-cwd", "/tmp/test-state"),
