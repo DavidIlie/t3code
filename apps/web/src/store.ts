@@ -204,10 +204,7 @@ function inferProviderForThreadModel(input: {
   readonly model: string;
   readonly sessionProviderName: string | null;
 }): ProviderKind {
-  if (
-    input.sessionProviderName === "codex" ||
-    input.sessionProviderName === "claudeAgent"
-  ) {
+  if (input.sessionProviderName === "codex" || input.sessionProviderName === "claudeAgent") {
     return input.sessionProviderName;
   }
   const normalizedClaude = normalizeModelSlug(input.model, "claudeAgent");

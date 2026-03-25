@@ -412,7 +412,6 @@ function SettingsRouteView() {
   >({
     codex: "",
     claudeAgent: "",
-
   });
   const [customModelErrorByProvider, setCustomModelErrorByProvider] = useState<
     Partial<Record<ProviderKind, string | null>>

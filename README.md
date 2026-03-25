@@ -10,18 +10,18 @@ Every single change in this fork was made entirely with [Claude Code](https://do
 
 ## What's different from T3 Code
 
-| Feature | T3 Code | T3 Gurt |
-|---------|---------|---------|
-| Claude Code support | Partial | Full (images, thinking, Agent SDK) |
-| Claude usage tracking | No | Session + weekly + daily tiers |
-| Image attachments for Claude | Text description only | Actual base64 image blocks |
-| Git clone from home page | No | Paste URL and go |
-| Git history browser | No | Browse commits, view diffs, search |
-| SVG upload protection | No | Blocked (XSS prevention) |
-| Working directory setting | No | Configurable in settings |
-| MCP server management | CLI only | Full UI (add, remove, browse) |
-| Imported session viewer | No | Browse + resume Claude sessions |
-| Commit message instructions | No | Custom template in settings |
+| Feature                      | T3 Code               | T3 Gurt                            |
+| ---------------------------- | --------------------- | ---------------------------------- |
+| Claude Code support          | Partial               | Full (images, thinking, Agent SDK) |
+| Claude usage tracking        | No                    | Session + weekly + daily tiers     |
+| Image attachments for Claude | Text description only | Actual base64 image blocks         |
+| Git clone from home page     | No                    | Paste URL and go                   |
+| Git history browser          | No                    | Browse commits, view diffs, search |
+| SVG upload protection        | No                    | Blocked (XSS prevention)           |
+| Working directory setting    | No                    | Configurable in settings           |
+| MCP server management        | CLI only              | Full UI (add, remove, browse)      |
+| Imported session viewer      | No                    | Browse + resume Claude sessions    |
+| Commit message instructions  | No                    | Custom template in settings        |
 
 ### Claude usage stats
 

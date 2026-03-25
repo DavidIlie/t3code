@@ -96,8 +96,7 @@ describe("ProviderCommandReactor", () => {
         typeof input === "object" &&
         input !== null &&
         "provider" in input &&
-        (input.provider === "codex" ||
-          input.provider === "claudeAgent")
+        (input.provider === "codex" || input.provider === "claudeAgent")
           ? input.provider
           : "codex";
       const resumeCursor =

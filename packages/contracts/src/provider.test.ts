@@ -69,7 +69,6 @@ describe("ProviderSessionStartInput", () => {
     expect(parsed.providerOptions?.claudeAgent?.maxThinkingTokens).toBe(12_000);
     expect(parsed.runtimeMode).toBe("full-access");
   });
-
 });
 
 describe("ProviderSendTurnInput", () => {

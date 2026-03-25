@@ -186,7 +186,6 @@ it.effect("accepts provider-scoped model options in thread.turn.start", () =>
   }),
 );
 
-
 it.effect(
   "decodes thread.turn-start-requested defaults for provider, runtime mode, and interaction mode",
   () =>

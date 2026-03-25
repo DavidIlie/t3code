@@ -41,7 +41,10 @@ export async function fetchProviderUsage(): Promise<void> {
           status: severityFromPercent(t.utilization),
         })),
         extraUsage: result.claudeAgent.extraUsage
-          ? { spent: result.claudeAgent.extraUsage.spent, limit: result.claudeAgent.extraUsage.limit }
+          ? {
+              spent: result.claudeAgent.extraUsage.spent,
+              limit: result.claudeAgent.extraUsage.limit,
+            }
           : null,
         updatedAt: new Date().toISOString(),
         raw: result.claudeAgent,

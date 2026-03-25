@@ -25,7 +25,6 @@ describe("normalizeCustomModelSlugs", () => {
     expect(normalizeCustomModelSlugs(["claude/custom-sonnet"], "claudeAgent")).toEqual([
       "claude/custom-sonnet",
     ]);
-
   });
 });
 
