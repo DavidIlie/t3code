@@ -1,6 +1,8 @@
 # T3 Gurt
 
-An opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code) by [Ping](https://ping.gg). No hate, no bans pls — just for my personal use.
+An opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code) by [Ping](https://ping.gg), built by [David Ilie](https://davidilie.com). No hate, no bans pls — just for my personal use.
+
+Every single change in this fork was made entirely with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — zero manual edits, zero issues. From the Claude Code adapter to the marketing site, it's all agent-written.
 
 ![Home](docs/screenshots/home.png)
 
