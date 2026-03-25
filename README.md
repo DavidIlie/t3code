@@ -1,6 +1,6 @@
 # T3 Gurt
 
-> **Why "Gurt"?** T3 Code → T3 Co:de → T3 Yo:gurt → T3 Gurt. It's the [yo:gurt meme](https://knowyourmeme.com/memes/gogurt). That's it. That's the reason.
+> **Why "Gurt"?** T3 Code → T3 Co:de → T3 Yo:gurt → T3 Gurt. It's the [yo:gurt meme](https://knowyourmeme.com/memes/yogurt-gurt-yo). That's it. That's the reason.
 
 An opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code) by [Ping](https://ping.gg), built by [David Ilie](https://davidilie.com). No hate, no bans pls — just for my personal use.
 
