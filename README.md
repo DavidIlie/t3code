@@ -1,5 +1,7 @@
 # T3 Gurt
 
+> **Why "Gurt"?** T3 Code → T3 Co:de → T3 Yo:gurt → T3 Gurt. It's the [yo:gurt meme](https://knowyourmeme.com/memes/gogurt). That's it. That's the reason.
+
 An opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code) by [Ping](https://ping.gg), built by [David Ilie](https://davidilie.com). No hate, no bans pls — just for my personal use.
 
 Every single change in this fork was made entirely with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — zero manual edits, zero issues. From the Claude Code adapter to the marketing site, it's all agent-written.

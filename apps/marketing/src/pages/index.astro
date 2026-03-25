@@ -9,6 +9,11 @@ import Layout from "../layouts/Layout.astro";
     A fork of <a href="https://github.com/pingdotgg/t3code" target="_blank" rel="noopener noreferrer" class="subtle-link">T3 Code</a> with full Claude Code and Codex support. Available for macOS, Windows, and Linux.
   </p>
 
+  <p class="name-origin">
+    Why "Gurt"? T3 Code &rarr; T3 Co:de &rarr; T3 Yo:gurt &rarr; <strong>T3 Gurt</strong>. Yes, it's the <a href="https://knowyourmeme.com/memes/gogurt" target="_blank" rel="noopener noreferrer" class="subtle-link">yo:gurt meme</a>.<br />
+    Built entirely with <a href="https://docs.anthropic.com/en/docs/claude-code" target="_blank" rel="noopener noreferrer" class="subtle-link">Claude Code</a> by <a href="https://davidilie.com" target="_blank" rel="noopener noreferrer" class="subtle-link">David Ilie</a> &mdash; zero manual edits.
+  </p>
+
   <a
     id="download-btn"
     href="https://github.com/DavidIlie/t3code/releases"
@@ -357,6 +362,24 @@ import Layout from "../layouts/Layout.astro";
   .subtle-link:hover {
     color: var(--fg);
     text-decoration-color: var(--fg);
+  }
+
+  /* ── Name origin ── */
+
+  .name-origin {
+    font-size: 0.8rem;
+    color: var(--fg-dim);
+    text-align: center;
+    line-height: 1.7;
+    max-width: 480px;
+    padding: 0 1rem;
+    margin-bottom: 2.5rem;
+    opacity: 0;
+    animation: fade-in 1s ease-out 0.12s forwards;
+  }
+
+  .name-origin strong {
+    color: var(--fg-muted);
   }
 
   /* ── Hero button ── */
