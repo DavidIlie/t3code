@@ -189,7 +189,7 @@ function toLegacySessionStatus(
 }
 
 function toLegacyProvider(providerName: string | null): ProviderKind {
-  if (providerName === "codex" || providerName === "claudeCode" || providerName === "cursor") {
+  if (providerName === "codex" || providerName === "claudeAgent") {
     return providerName;
   }
   return "codex";
@@ -197,13 +197,7 @@ function toLegacyProvider(providerName: string | null): ProviderKind {
 
 const CODEX_MODEL_SLUGS = new Set<string>(getModelOptions("codex").map((option) => option.slug));
 const CLAUDE_MODEL_SLUGS = new Set<string>(
-  getModelOptions("claudeCode").map((option) => option.slug),
-);
-const CURSOR_MODEL_SLUGS = new Set<string>(getModelOptions("cursor").map((option) => option.slug));
-const CURSOR_DISTINCT_MODEL_SLUGS = new Set(
-  [...CURSOR_MODEL_SLUGS].filter(
-    (slug) => !CODEX_MODEL_SLUGS.has(slug) && !CLAUDE_MODEL_SLUGS.has(slug),
-  ),
+  getModelOptions("claudeAgent").map((option) => option.slug),
 );
 
 function inferProviderForThreadModel(input: {
@@ -212,31 +206,19 @@ function inferProviderForThreadModel(input: {
 }): ProviderKind {
   if (
     input.sessionProviderName === "codex" ||
-    input.sessionProviderName === "claudeCode" ||
-    input.sessionProviderName === "cursor"
+    input.sessionProviderName === "claudeAgent"
   ) {
     return input.sessionProviderName;
   }
-  const normalizedCursor = normalizeModelSlug(input.model, "cursor");
-  if (normalizedCursor && CURSOR_DISTINCT_MODEL_SLUGS.has(normalizedCursor)) {
-    return "cursor";
-  }
-  const normalizedClaude = normalizeModelSlug(input.model, "claudeCode");
+  const normalizedClaude = normalizeModelSlug(input.model, "claudeAgent");
   if (normalizedClaude && CLAUDE_MODEL_SLUGS.has(normalizedClaude)) {
-    return "claudeCode";
+    return "claudeAgent";
   }
   const normalizedCodex = normalizeModelSlug(input.model, "codex");
   if (normalizedCodex && CODEX_MODEL_SLUGS.has(normalizedCodex)) {
     return "codex";
   }
-  if (
-    input.model.trim().startsWith("composer-") ||
-    input.model.trim().startsWith("gemini-") ||
-    input.model.trim().endsWith("-thinking")
-  ) {
-    return "cursor";
-  }
-  return input.model.trim().startsWith("claude-") ? "claudeCode" : "codex";
+  return input.model.trim().startsWith("claude-") ? "claudeAgent" : "codex";
 }
 
 function resolveWsHttpOrigin(): string {

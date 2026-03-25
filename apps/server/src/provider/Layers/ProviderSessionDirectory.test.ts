@@ -141,8 +141,8 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
 
       yield* runtimeRepository.upsert({
         threadId,
-        providerName: "cursor",
-        adapterKey: "cursor",
+        providerName: "claudeAgent",
+        adapterKey: "claudeAgent",
         runtimeMode: "full-access",
         status: "running",
         lastSeenAt: new Date().toISOString(),
@@ -205,22 +205,22 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
       fs.rmSync(tempDir, { recursive: true, force: true });
     }));
 
-  it("accepts cursor provider bindings", () =>
+  it("accepts claudeAgent provider bindings", () =>
     Effect.gen(function* () {
       const directory = yield* ProviderSessionDirectory;
-      const threadId = ThreadId.makeUnsafe("thread-cursor");
+      const threadId = ThreadId.makeUnsafe("thread-claude-agent");
 
       yield* directory.upsert({
-        provider: "cursor",
+        provider: "claudeAgent",
         threadId,
       });
 
       const provider = yield* directory.getProvider(threadId);
-      assert.equal(provider, "cursor");
+      assert.equal(provider, "claudeAgent");
       const resolvedBinding = yield* directory.getBinding(threadId);
       assertSome(resolvedBinding, {
         threadId,
-        provider: "cursor",
+        provider: "claudeAgent",
       });
       if (Option.isSome(resolvedBinding)) {
         assert.equal(resolvedBinding.value.threadId, threadId);

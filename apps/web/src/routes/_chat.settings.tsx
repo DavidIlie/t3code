@@ -118,7 +118,7 @@ const MODEL_PROVIDER_SETTINGS: Array<{
     example: "gpt-6.7-codex-ultra-preview",
   },
   {
-    provider: "claudeCode",
+    provider: "claudeAgent",
     title: "Claude Code",
     description: "Save additional Claude model slugs for the picker and `/model` command.",
     placeholder: "your-claude-model-slug",
@@ -131,10 +131,8 @@ function getCustomModelsForProvider(
   provider: ProviderKind,
 ) {
   switch (provider) {
-    case "claudeCode":
+    case "claudeAgent":
       return settings.customClaudeModels;
-    case "cursor":
-      return settings.customCursorModels;
     case "codex":
     default:
       return settings.customCodexModels;
@@ -146,10 +144,8 @@ function getDefaultCustomModelsForProvider(
   provider: ProviderKind,
 ) {
   switch (provider) {
-    case "claudeCode":
+    case "claudeAgent":
       return defaults.customClaudeModels;
-    case "cursor":
-      return defaults.customCursorModels;
     case "codex":
     default:
       return defaults.customCodexModels;
@@ -158,10 +154,8 @@ function getDefaultCustomModelsForProvider(
 
 function patchCustomModels(provider: ProviderKind, models: string[]) {
   switch (provider) {
-    case "claudeCode":
+    case "claudeAgent":
       return { customClaudeModels: models };
-    case "cursor":
-      return { customCursorModels: models };
     case "codex":
     default:
       return { customCodexModels: models };
@@ -417,8 +411,8 @@ function SettingsRouteView() {
     Record<ProviderKind, string>
   >({
     codex: "",
-    claudeCode: "",
-    cursor: "",
+    claudeAgent: "",
+
   });
   const [customModelErrorByProvider, setCustomModelErrorByProvider] = useState<
     Partial<Record<ProviderKind, string | null>>

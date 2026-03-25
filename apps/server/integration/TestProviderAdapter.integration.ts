@@ -35,7 +35,7 @@ export interface TestTurnResponse {
 export type FixtureProviderRuntimeEvent = {
   readonly type: string;
   readonly eventId: EventId;
-  readonly provider: "codex" | "claudeCode" | "cursor";
+  readonly provider: "codex" | "claudeAgent";
   readonly createdAt: string;
   readonly threadId: string;
   readonly turnId?: string | undefined;
@@ -177,7 +177,7 @@ function normalizeFixtureEvent(rawEvent: Record<string, unknown>): ProviderRunti
 
 export interface TestProviderAdapterHarness {
   readonly adapter: ProviderAdapterShape<ProviderAdapterError>;
-  readonly provider: "codex" | "claudeCode";
+  readonly provider: "codex" | "claudeAgent";
   readonly queueTurnResponse: (
     threadId: ThreadId,
     response: TestTurnResponse,
@@ -197,7 +197,7 @@ export interface TestProviderAdapterHarness {
 }
 
 interface MakeTestProviderAdapterHarnessOptions {
-  readonly provider?: "codex" | "claudeCode";
+  readonly provider?: "codex" | "claudeAgent";
 }
 
 function nowIso(): string {
@@ -205,7 +205,7 @@ function nowIso(): string {
 }
 
 function sessionNotFound(
-  provider: "codex" | "claudeCode",
+  provider: "codex" | "claudeAgent",
   threadId: ThreadId,
 ): ProviderAdapterSessionNotFoundError {
   return new ProviderAdapterSessionNotFoundError({
@@ -215,7 +215,7 @@ function sessionNotFound(
 }
 
 function missingSessionEffect(
-  provider: "codex" | "claudeCode",
+  provider: "codex" | "claudeAgent",
   threadId: ThreadId,
 ): Effect.Effect<never, ProviderAdapterError> {
   return Effect.fail(sessionNotFound(provider, threadId));

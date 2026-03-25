@@ -45,7 +45,7 @@ const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
 type LegacyProviderRuntimeEvent = {
   readonly type: string;
   readonly eventId: EventId;
-  readonly provider: "codex" | "claudeCode" | "cursor";
+  readonly provider: "codex" | "claudeAgent";
   readonly createdAt: string;
   readonly threadId: ThreadId;
   readonly turnId?: string | undefined;
@@ -416,7 +416,7 @@ describe("ProviderRuntimeIngestion", () => {
         session: {
           threadId: ThreadId.makeUnsafe("thread-1"),
           status: "ready",
-          providerName: "claudeCode",
+          providerName: "claudeAgent",
           runtimeMode: "approval-required",
           activeTurnId: null,
           updatedAt: seededAt,
@@ -429,7 +429,7 @@ describe("ProviderRuntimeIngestion", () => {
     harness.emit({
       type: "turn.started",
       eventId: asEventId("evt-turn-started-claude-placeholder"),
-      provider: "claudeCode",
+      provider: "claudeAgent",
       createdAt: new Date().toISOString(),
       threadId: asThreadId("thread-1"),
       turnId: asTurnId("turn-claude-placeholder"),
@@ -445,7 +445,7 @@ describe("ProviderRuntimeIngestion", () => {
     harness.emit({
       type: "turn.completed",
       eventId: asEventId("evt-turn-completed-claude-placeholder"),
-      provider: "claudeCode",
+      provider: "claudeAgent",
       createdAt: new Date().toISOString(),
       threadId: asThreadId("thread-1"),
       turnId: asTurnId("turn-claude-placeholder"),

@@ -69,14 +69,9 @@ const ClaudeCodeProviderStartOptions = Schema.Struct({
   maxBudgetUsd: Schema.optional(Schema.Number),
 });
 
-const CursorProviderStartOptions = Schema.Struct({
-  binaryPath: Schema.optional(TrimmedNonEmptyStringSchema),
-});
-
 export const ProviderStartOptions = Schema.Struct({
   codex: Schema.optional(CodexProviderStartOptions),
-  claudeCode: Schema.optional(ClaudeCodeProviderStartOptions),
-  cursor: Schema.optional(CursorProviderStartOptions),
+  claudeAgent: Schema.optional(ClaudeCodeProviderStartOptions),
 });
 export type ProviderStartOptions = typeof ProviderStartOptions.Type;
 

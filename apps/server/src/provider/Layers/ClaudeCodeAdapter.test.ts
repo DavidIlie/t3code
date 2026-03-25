@@ -182,7 +182,7 @@ const THREAD_ID = ThreadId.makeUnsafe("thread-claude-1");
 const RESUME_THREAD_ID = ThreadId.makeUnsafe("thread-claude-resume");
 
 describe("ClaudeCodeAdapterLive", () => {
-  it.effect("returns validation error for non-claudeCode provider on startSession", () => {
+  it.effect("returns validation error for non-claudeAgent provider on startSession", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeCodeAdapter;
@@ -197,9 +197,9 @@ describe("ClaudeCodeAdapterLive", () => {
       assert.deepEqual(
         result.failure,
         new ProviderAdapterValidationError({
-          provider: "claudeCode",
+          provider: "claudeAgent",
           operation: "startSession",
-          issue: "Expected provider 'claudeCode' but received 'codex'.",
+          issue: "Expected provider 'claudeAgent' but received 'codex'.",
         }),
       );
     }).pipe(
@@ -214,7 +214,7 @@ describe("ClaudeCodeAdapterLive", () => {
       const adapter = yield* ClaudeCodeAdapter;
       yield* adapter.startSession({
         threadId: THREAD_ID,
-        provider: "claudeCode",
+        provider: "claudeAgent",
         runtimeMode: "full-access",
       });
 
@@ -233,10 +233,10 @@ describe("ClaudeCodeAdapterLive", () => {
       const adapter = yield* ClaudeCodeAdapter;
       yield* adapter.startSession({
         threadId: THREAD_ID,
-        provider: "claudeCode",
+        provider: "claudeAgent",
         runtimeMode: "full-access",
         providerOptions: {
-          claudeCode: {
+          claudeAgent: {
             permissionMode: "plan",
           },
         },
@@ -263,7 +263,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
       const session = yield* adapter.startSession({
         threadId: THREAD_ID,
-        provider: "claudeCode",
+        provider: "claudeAgent",
         model: "claude-sonnet-4-5",
         runtimeMode: "full-access",
       });
@@ -402,7 +402,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
         const session = yield* adapter.startSession({
           threadId: THREAD_ID,
-          provider: "claudeCode",
+          provider: "claudeAgent",
           runtimeMode: "full-access",
         });
 
@@ -494,7 +494,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
       const session = yield* adapter.startSession({
         threadId: THREAD_ID,
-        provider: "claudeCode",
+        provider: "claudeAgent",
         runtimeMode: "full-access",
       });
 
@@ -564,7 +564,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
       const session = yield* adapter.startSession({
         threadId: THREAD_ID,
-        provider: "claudeCode",
+        provider: "claudeAgent",
         runtimeMode: "full-access",
       });
       assert.equal(session.threadId, THREAD_ID);
@@ -634,7 +634,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
       const session = yield* adapter.startSession({
         threadId: THREAD_ID,
-        provider: "claudeCode",
+        provider: "claudeAgent",
         runtimeMode: "approval-required",
       });
 
@@ -711,7 +711,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
       const session = yield* adapter.startSession({
         threadId: RESUME_THREAD_ID,
-        provider: "claudeCode",
+        provider: "claudeAgent",
         resumeCursor: {
           threadId: "resume-thread-1",
           resume: "550e8400-e29b-41d4-a716-446655440000",
@@ -745,7 +745,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
       const session = yield* adapter.startSession({
         threadId: THREAD_ID,
-        provider: "claudeCode",
+        provider: "claudeAgent",
         runtimeMode: "full-access",
       });
 
@@ -768,7 +768,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
         const session = yield* adapter.startSession({
           threadId: THREAD_ID,
-          provider: "claudeCode",
+          provider: "claudeAgent",
           runtimeMode: "full-access",
         });
 
@@ -848,7 +848,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
       const session = yield* adapter.startSession({
         threadId: THREAD_ID,
-        provider: "claudeCode",
+        provider: "claudeAgent",
         runtimeMode: "full-access",
       });
       yield* adapter.sendTurn({
@@ -890,7 +890,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
       const session = yield* adapter.startSession({
         threadId: THREAD_ID,
-        provider: "claudeCode",
+        provider: "claudeAgent",
         runtimeMode: "full-access",
       });
       const turn = yield* adapter.sendTurn({
@@ -933,7 +933,7 @@ describe("ClaudeCodeAdapterLive", () => {
 
       assert.equal(nativeEvents.length > 0, true);
       assert.equal(
-        nativeEvents.some((record) => record.event?.provider === "claudeCode"),
+        nativeEvents.some((record) => record.event?.provider === "claudeAgent"),
         true,
       );
       assert.equal(

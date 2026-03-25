@@ -684,10 +684,10 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     yield* Effect.sleep(Duration.seconds(3));
     const pushUsage = Effect.gen(function* () {
       const usage = yield* Effect.tryPromise(() => fetchProviderUsage());
-      if (usage.claudeCode.available && usage.claudeCode.tiers.length > 0) {
+      if (usage.claudeAgent.available && usage.claudeAgent.tiers.length > 0) {
         yield* pushBus.publishAll(WS_CHANNELS.providerAccountUpdated, {
-          provider: "claudeCode",
-          data: usage.claudeCode,
+          provider: "claudeAgent",
+          data: usage.claudeAgent,
         });
       }
     }).pipe(Effect.catch(() => Effect.void));

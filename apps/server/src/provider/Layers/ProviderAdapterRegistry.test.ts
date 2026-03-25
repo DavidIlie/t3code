@@ -29,7 +29,7 @@ const fakeCodexAdapter: CodexAdapterShape = {
 };
 
 const fakeClaudeAdapter: ClaudeCodeAdapterShape = {
-  provider: "claudeCode",
+  provider: "claudeAgent",
   capabilities: { sessionModelSwitch: "in-session" },
   startSession: vi.fn(),
   sendTurn: vi.fn(),
@@ -65,12 +65,12 @@ layer("ProviderAdapterRegistryLive", (it) => {
     Effect.gen(function* () {
       const registry = yield* ProviderAdapterRegistry;
       const codex = yield* registry.getByProvider("codex");
-      const claude = yield* registry.getByProvider("claudeCode");
+      const claude = yield* registry.getByProvider("claudeAgent");
       assert.equal(codex, fakeCodexAdapter);
       assert.equal(claude, fakeClaudeAdapter);
 
       const providers = yield* registry.listProviders();
-      assert.deepEqual(providers, ["codex", "claudeCode"]);
+      assert.deepEqual(providers, ["codex", "claudeAgent"]);
     }),
   );
 

@@ -657,9 +657,9 @@ describe("deriveActiveWorkStartedAt", () => {
 });
 
 describe("PROVIDER_OPTIONS", () => {
-  it("advertises Claude Code as available while keeping Cursor as a placeholder", () => {
-    const claude = PROVIDER_OPTIONS.find((option) => option.value === "claudeCode");
-    const cursor = PROVIDER_OPTIONS.find((option) => option.value === "cursor");
+  it("advertises Codex and Claude Code as available providers", () => {
+    const claude = PROVIDER_OPTIONS.find((option) => option.value === "claudeAgent");
+
     expect(PROVIDER_OPTIONS).toEqual([
       {
         value: "codex",
@@ -668,24 +668,17 @@ describe("PROVIDER_OPTIONS", () => {
         docsUrl: "https://developers.openai.com/codex/sdk/",
       },
       {
-        value: "claudeCode",
+        value: "claudeAgent",
         label: "Claude Code",
         available: true,
         docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
       },
-      { value: "cursor", label: "Cursor", available: false, docsUrl: "https://docs.cursor.com" },
     ]);
     expect(claude).toEqual({
-      value: "claudeCode",
+      value: "claudeAgent",
       label: "Claude Code",
       available: true,
       docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
-    });
-    expect(cursor).toEqual({
-      value: "cursor",
-      label: "Cursor",
-      available: false,
-      docsUrl: "https://docs.cursor.com",
     });
   });
 });

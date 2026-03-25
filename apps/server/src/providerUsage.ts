@@ -181,7 +181,7 @@ async function callUsageApi(accessToken: string): Promise<Response> {
 function parseUsageResponse(
   data: Record<string, unknown>,
   plan: string | null,
-): ProviderUsageResult["claudeCode"] {
+): ProviderUsageResult["claudeAgent"] {
   const tiers: ProviderUsageTier[] = [];
 
   for (const [key, value] of Object.entries(data)) {
@@ -200,7 +200,7 @@ function parseUsageResponse(
   }
 
   // Parse extra usage
-  let extraUsage: ProviderUsageResult["claudeCode"]["extraUsage"] = null;
+  let extraUsage: ProviderUsageResult["claudeAgent"]["extraUsage"] = null;
   const extra = data.extra_usage;
   if (extra && typeof extra === "object") {
     const e = extra as Record<string, unknown>;
@@ -214,7 +214,7 @@ function parseUsageResponse(
   return { available: true, plan, tiers, extraUsage, error: null };
 }
 
-async function fetchClaudeUsage(): Promise<ProviderUsageResult["claudeCode"]> {
+async function fetchClaudeUsage(): Promise<ProviderUsageResult["claudeAgent"]> {
   const credentials = await readClaudeCredentials();
   if (!credentials?.claudeAiOauth?.accessToken) {
     return { available: false, plan: null, tiers: [], extraUsage: null, error: null };
@@ -288,10 +288,10 @@ export async function fetchProviderUsage(): Promise<ProviderUsageResult> {
     return cachedUsage.result;
   }
 
-  const claudeCode = await fetchClaudeUsage();
+  const claudeAgent = await fetchClaudeUsage();
 
   const result: ProviderUsageResult = {
-    claudeCode,
+    claudeAgent,
     codex: {
       available: false,
       plan: null,
@@ -302,7 +302,7 @@ export async function fetchProviderUsage(): Promise<ProviderUsageResult> {
   };
 
   // Cache: shorter TTL on errors so retries happen sooner
-  const ttl = claudeCode.error ? CACHE_TTL_ERROR : CACHE_TTL_OK;
+  const ttl = claudeAgent.error ? CACHE_TTL_ERROR : CACHE_TTL_OK;
   cachedUsage = { result, expiresAt: Date.now() + ttl };
 
   return result;

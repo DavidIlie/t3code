@@ -65,7 +65,7 @@ import {
 import { ClaudeCodeAdapter, type ClaudeCodeAdapterShape } from "../Services/ClaudeCodeAdapter.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
-const PROVIDER = "claudeCode" as const;
+const PROVIDER = "claudeAgent" as const;
 
 /**
  * Build a sanitized environment for the Claude Code child process.
@@ -1952,7 +1952,7 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
             }),
           );
 
-        const providerOptions = input.providerOptions?.claudeCode;
+        const providerOptions = input.providerOptions?.claudeAgent;
         const permissionMode =
           toPermissionMode(providerOptions?.permissionMode) ??
           (input.runtimeMode === "full-access" ? "bypassPermissions" : undefined);

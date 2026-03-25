@@ -204,7 +204,7 @@ describe("store read model sync", () => {
     expect(next.threads[0]?.model).toBe("claude-opus-4-6");
   });
 
-  it("resolves claude aliases when session provider is claudeCode", () => {
+  it("resolves claude aliases when session provider is claudeAgent", () => {
     const initialState = makeState(makeThread());
     const readModel = makeReadModel(
       makeReadModelThread({
@@ -212,7 +212,7 @@ describe("store read model sync", () => {
         session: {
           threadId: ThreadId.makeUnsafe("thread-1"),
           status: "ready",
-          providerName: "claudeCode",
+          providerName: "claudeAgent",
           runtimeMode: "approval-required",
           activeTurnId: null,
           lastError: null,
@@ -226,15 +226,15 @@ describe("store read model sync", () => {
     expect(next.threads[0]?.model).toBe("claude-sonnet-4-6");
   });
 
-  it("resolves cursor aliases when session provider is cursor", () => {
+  it("resolves claude aliases when session provider is claudeAgent", () => {
     const initialState = makeState(makeThread());
     const readModel = makeReadModel(
       makeReadModelThread({
-        model: "composer",
+        model: "sonnet",
         session: {
           threadId: ThreadId.makeUnsafe("thread-1"),
           status: "ready",
-          providerName: "cursor",
+          providerName: "claudeAgent",
           runtimeMode: "approval-required",
           activeTurnId: null,
           lastError: null,
@@ -245,8 +245,8 @@ describe("store read model sync", () => {
 
     const next = syncServerReadModel(initialState, readModel);
 
-    expect(next.threads[0]?.model).toBe("composer-1.5");
-    expect(next.threads[0]?.session?.provider).toBe("cursor");
+    expect(next.threads[0]?.model).toBe("claude-sonnet-4-6");
+    expect(next.threads[0]?.session?.provider).toBe("claudeAgent");
   });
 
   it("preserves the current project order when syncing incoming read model updates", () => {

@@ -258,7 +258,7 @@ function EventRouter() {
     });
     const unsubProviderAccount = api.provider.onAccountUpdated((payload) => {
       const provider = payload.provider;
-      if (provider === "claudeCode" || provider === "codex" || provider === "cursor") {
+      if (provider === "claudeAgent" || provider === "codex") {
         const snapshot = parseRateLimitPayload(provider, payload.data);
         useProviderSessionStore.getState().setProviderUsage(provider, snapshot);
       }

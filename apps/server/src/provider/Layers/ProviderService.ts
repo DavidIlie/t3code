@@ -539,7 +539,7 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
         ? Effect.succeed(claudeAdapter.value)
         : Effect.fail(
             new ProviderUnsupportedError({
-              provider: "claudeCode",
+              provider: "claudeAgent",
             }),
           );
 
@@ -573,7 +573,7 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
           const bindingOption = yield* directory.getBinding(threadId);
           if (Option.isNone(bindingOption)) continue;
           const binding = bindingOption.value;
-          if (binding.provider !== "claudeCode") continue;
+          if (binding.provider !== "claudeAgent") continue;
           const cursor = binding.resumeCursor as { resume?: string } | null | undefined;
           if (cursor && typeof cursor.resume === "string") {
             sessionIds.push(cursor.resume);

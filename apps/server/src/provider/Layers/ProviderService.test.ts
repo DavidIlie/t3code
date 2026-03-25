@@ -52,7 +52,7 @@ const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
 type LegacyProviderRuntimeEvent = {
   readonly type: string;
   readonly eventId: EventId;
-  readonly provider: "codex" | "claudeCode" | "cursor";
+  readonly provider: "codex" | "claudeAgent";
   readonly createdAt: string;
   readonly threadId: ThreadId;
   readonly turnId?: string | undefined;
@@ -217,15 +217,15 @@ const sleep = (ms: number) =>
 
 function makeProviderServiceLayer() {
   const codex = makeFakeCodexAdapter();
-  const claude = makeFakeCodexAdapter("claudeCode");
+  const claude = makeFakeCodexAdapter("claudeAgent");
   const registry: typeof ProviderAdapterRegistry.Service = {
     getByProvider: (provider) =>
       provider === "codex"
         ? Effect.succeed(codex.adapter)
-        : provider === "claudeCode"
+        : provider === "claudeAgent"
           ? Effect.succeed(claude.adapter)
           : Effect.fail(new ProviderUnsupportedError({ provider })),
-    listProviders: () => Effect.succeed(["codex", "claudeCode"]),
+    listProviders: () => Effect.succeed(["codex", "claudeAgent"]),
   };
 
   const providerAdapterLayer = Layer.succeed(ProviderAdapterRegistry, registry);
@@ -537,24 +537,24 @@ routing.layer("ProviderServiceLive routing", (it) => {
     }),
   );
 
-  it.effect("routes explicit claudeCode provider session starts to the claude adapter", () =>
+  it.effect("routes explicit claudeAgent provider session starts to the claude adapter", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
 
       const session = yield* provider.startSession(asThreadId("thread-claude"), {
-        provider: "claudeCode",
+        provider: "claudeAgent",
         threadId: asThreadId("thread-claude"),
         cwd: "/tmp/project-claude",
         runtimeMode: "full-access",
       });
 
-      assert.equal(session.provider, "claudeCode");
+      assert.equal(session.provider, "claudeAgent");
       assert.equal(routing.claude.startSession.mock.calls.length, 1);
       const startInput = routing.claude.startSession.mock.calls[0]?.[0];
       assert.equal(typeof startInput === "object" && startInput !== null, true);
       if (startInput && typeof startInput === "object") {
         const startPayload = startInput as { provider?: string; cwd?: string };
-        assert.equal(startPayload.provider, "claudeCode");
+        assert.equal(startPayload.provider, "claudeAgent");
         assert.equal(startPayload.cwd, "/tmp/project-claude");
       }
     }),
@@ -618,8 +618,8 @@ routing.layer("ProviderServiceLive routing", (it) => {
       yield* routing.codex.stopAll();
 
       const remaining = yield* provider.listSessions();
-      // Only the codex sessions are cleared; the claudeCode session started by
-      // the earlier "routes explicit claudeCode provider session starts" test
+      // Only the codex sessions are cleared; the claudeAgent session started by
+      // the earlier "routes explicit claudeAgent provider session starts" test
       // is still alive in the shared claude adapter, so 1 session remains.
       assert.equal(remaining.length, 1);
     }),

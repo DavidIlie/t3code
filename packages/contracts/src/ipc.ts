@@ -171,7 +171,7 @@ export interface ProviderUsageProviderData {
 }
 
 export interface ProviderUsageResult {
-  claudeCode: ProviderUsageProviderData;
+  claudeAgent: ProviderUsageProviderData;
   codex: ProviderUsageProviderData;
 }
 

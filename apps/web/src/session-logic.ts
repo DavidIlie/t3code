@@ -16,7 +16,7 @@ import type {
   TurnDiffSummary,
 } from "./types";
 
-export type ProviderPickerKind = ProviderKind | "claudeCode" | "cursor";
+export type ProviderPickerKind = ProviderKind;
 
 export const PROVIDER_OPTIONS: Array<{
   value: ProviderPickerKind;
@@ -31,12 +31,11 @@ export const PROVIDER_OPTIONS: Array<{
     docsUrl: "https://developers.openai.com/codex/sdk/",
   },
   {
-    value: "claudeCode",
+    value: "claudeAgent",
     label: "Claude Code",
     available: true,
     docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
   },
-  { value: "cursor", label: "Cursor", available: false, docsUrl: "https://docs.cursor.com" },
 ];
 
 export interface WorkLogEntry {
