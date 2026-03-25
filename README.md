@@ -4,19 +4,33 @@ An opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code) by [Ping](
 
 ![Home](docs/screenshots/home.png)
 
-## What's different
+## What's different from T3 Code
 
-- **Claude Code support** alongside Codex
-- **Rebranded** to "T3 Gurt"
-- **Automated unsigned releases** on every push to main
-- Imported session rendering, bug fixes, and other QOL improvements
+| Feature | T3 Code | T3 Gurt |
+|---------|---------|---------|
+| Claude Code support | Partial | Full (images, thinking, Agent SDK) |
+| Claude usage tracking | No | Session + weekly + daily tiers |
+| Image attachments for Claude | Text description only | Actual base64 image blocks |
+| Git clone from home page | No | Paste URL and go |
+| Git history browser | No | Browse commits, view diffs, search |
+| SVG upload protection | No | Blocked (XSS prevention) |
+| Working directory setting | No | Configurable in settings |
+| MCP server management | CLI only | Full UI (add, remove, browse) |
+| Imported session viewer | No | Browse + resume Claude sessions |
+| Commit message instructions | No | Custom template in settings |
+
+### Claude usage stats
+
+![Usage stats](docs/screenshots/usage.png)
+
+See your session and weekly Claude usage at a glance — rate limit tiers, reset times, and plan info right in the sidebar.
 
 ## Screenshots
 
 |                                               |                                                    |
 | --------------------------------------------- | -------------------------------------------------- |
 | ![Project view](docs/screenshots/project.png) | ![Conversation](docs/screenshots/conversation.png) |
-| ![Terminal](docs/screenshots/terminal.png)    |                                                    |
+| ![Terminal](docs/screenshots/terminal.png)    | ![Usage](docs/screenshots/usage.png)               |
 
 ## Upstream
 
@@ -25,5 +39,7 @@ This fork tracks [pingdotgg/t3code](https://github.com/pingdotgg/t3code). See [U
 ## Install
 
 Download the [desktop app from the Releases page](https://github.com/DavidIlie/t3code/releases).
+
+Available for macOS (Apple Silicon + Intel), Windows, and Linux.
 
 For more info about the original project, see the [upstream repo](https://github.com/pingdotgg/t3code).
