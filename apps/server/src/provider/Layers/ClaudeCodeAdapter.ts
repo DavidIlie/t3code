@@ -237,6 +237,8 @@ interface ClaudeSessionContext {
   lastAssistantUuid: string | undefined;
   lastThreadStartedId: string | undefined;
   stopped: boolean;
+  /** Memoized model ID to avoid redundant setModel calls on every turn. */
+  currentModelId: string | undefined;
   /** First user message text, used for auto-generating a thread title. */
   firstUserMessage: string | undefined;
   /** Whether a title has already been generated for this thread. */
@@ -1759,6 +1761,9 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
         const prompt = Stream.fromQueue(promptQueue).pipe(
           Stream.filter((item) => item.type === "message"),
           Stream.map((item) => item.message),
+          Stream.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause) ? Stream.empty : Stream.failCause(cause),
+          ),
           Stream.toAsyncIterable,
         );
 
@@ -2040,6 +2045,7 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           lastAssistantUuid: resumeState?.resumeSessionAt,
           lastThreadStartedId: undefined,
           stopped: false,
+          currentModelId: input.model ?? undefined,
           firstUserMessage: undefined,
           titleGenerated: !!(resumeState?.turnCount && resumeState.turnCount > 0),
           anthropicApiKey: providerOptions?.apiKey,
@@ -2175,11 +2181,12 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
           context.firstUserMessage = input.input.trim();
         }
 
-        if (input.model) {
+        if (input.model && context.currentModelId !== input.model) {
           yield* Effect.tryPromise({
             try: () => context.query.setModel(input.model),
             catch: (cause) => toRequestError(input.threadId, "turn/setModel", cause),
           });
+          context.currentModelId = input.model;
         }
 
         // Switch to plan permission mode when interaction mode is "plan".
