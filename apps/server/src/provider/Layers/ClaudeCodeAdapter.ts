@@ -516,7 +516,7 @@ function buildUserMessage(
 
 function turnStatusFromResult(result: SDKResultMessage): ProviderRuntimeTurnStatus {
   if (result.subtype === "success") {
-    return "completed";
+    return (result as { is_error?: boolean }).is_error === true ? "failed" : "completed";
   }
 
   const errors = result.errors.join(" ").toLowerCase();
@@ -527,6 +527,17 @@ function turnStatusFromResult(result: SDKResultMessage): ProviderRuntimeTurnStat
     return "cancelled";
   }
   return "failed";
+}
+
+function errorMessageFromResult(result: SDKResultMessage): string | undefined {
+  if (result.subtype === "success") {
+    if ((result as { is_error?: boolean }).is_error !== true) {
+      return undefined;
+    }
+    const trimmed = (result as { result?: string }).result?.trim() ?? "";
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  return result.errors[0];
 }
 
 function streamKindFromDeltaType(deltaType: string): "assistant_text" | "reasoning_text" {
@@ -1348,7 +1359,7 @@ function makeClaudeCodeAdapter(options?: ClaudeCodeAdapterLiveOptions) {
         }
 
         const status = turnStatusFromResult(message);
-        const errorMessage = message.subtype === "success" ? undefined : message.errors[0];
+        const errorMessage = errorMessageFromResult(message);
 
         if (status === "failed") {
           yield* emitRuntimeError(context, errorMessage ?? "Claude turn failed.");
