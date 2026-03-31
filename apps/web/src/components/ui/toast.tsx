@@ -5,8 +5,10 @@ import { useEffect, type CSSProperties } from "react";
 import { useParams } from "@tanstack/react-router";
 import { ThreadId } from "@t3tools/contracts";
 import {
+  CheckIcon,
   CircleAlertIcon,
   CircleCheckIcon,
+  CopyIcon,
   InfoIcon,
   LoaderCircleIcon,
   TriangleAlertIcon,
@@ -15,6 +17,7 @@ import {
 
 import { cn } from "~/lib/utils";
 import { buttonVariants } from "~/components/ui/button";
+import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { buildVisibleToastLayout, shouldHideCollapsedToastContent } from "./toast.logic";
 
 type ThreadToastData = {
@@ -27,6 +30,25 @@ const toastManager = Toast.createToastManager<ThreadToastData>();
 const anchoredToastManager = Toast.createToastManager<ThreadToastData>();
 type ToastId = ReturnType<typeof toastManager.add>;
 const threadToastVisibleTimeoutRemainingMs = new Map<ToastId, number>();
+
+function CopyErrorButton({ text }: { text: string }) {
+  const { copyToClipboard, isCopied } = useCopyToClipboard();
+
+  return (
+    <button
+      className="shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground opacity-60 transition-opacity hover:opacity-100"
+      onClick={() => copyToClipboard(text)}
+      title="Copy error"
+      type="button"
+    >
+      {isCopied ? (
+        <CheckIcon className="size-3.5 text-success" />
+      ) : (
+        <CopyIcon className="size-3.5" />
+      )}
+    </button>
+  );
+}
 
 const TOAST_ICONS = {
   error: CircleAlertIcon,
@@ -285,12 +307,17 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
                   )}
 
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <Toast.Title
-                      className="min-w-0 break-words font-medium"
-                      data-slot="toast-title"
-                    />
+                    <div className="flex items-center gap-1">
+                      <Toast.Title
+                        className="min-w-0 break-words font-medium"
+                        data-slot="toast-title"
+                      />
+                      {toast.type === "error" && typeof toast.description === "string" && (
+                        <CopyErrorButton text={toast.description} />
+                      )}
+                    </div>
                     <Toast.Description
-                      className="min-w-0 break-words text-muted-foreground"
+                      className="min-w-0 select-text break-words text-muted-foreground"
                       data-slot="toast-description"
                     />
                   </div>
@@ -382,12 +409,17 @@ function AnchoredToasts() {
                         )}
 
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <Toast.Title
-                            className="min-w-0 break-words font-medium"
-                            data-slot="toast-title"
-                          />
+                          <div className="flex items-center gap-1">
+                            <Toast.Title
+                              className="min-w-0 break-words font-medium"
+                              data-slot="toast-title"
+                            />
+                            {toast.type === "error" && typeof toast.description === "string" && (
+                              <CopyErrorButton text={toast.description} />
+                            )}
+                          </div>
                           <Toast.Description
-                            className="min-w-0 break-words text-muted-foreground"
+                            className="min-w-0 select-text break-words text-muted-foreground"
                             data-slot="toast-description"
                           />
                         </div>

@@ -50,6 +50,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
 }) {
   return (
     <Command
+      autoHighlight={false}
       mode="none"
       onItemHighlighted={(highlightedValue) => {
         props.onHighlightedItemChange(
@@ -93,7 +94,7 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
     <CommandItem
       value={props.item.id}
       className={cn(
-        "cursor-pointer select-none gap-2",
+        "cursor-pointer select-none gap-2 data-highlighted:bg-transparent data-highlighted:text-inherit",
         props.isActive && "bg-accent text-accent-foreground",
       )}
       onMouseDown={(event) => {
