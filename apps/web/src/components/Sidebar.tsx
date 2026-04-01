@@ -1,4 +1,5 @@
 import {
+  ArchiveIcon,
   ArrowLeftIcon,
   ChevronRightIcon,
   FolderIcon,
@@ -340,6 +341,8 @@ export default function Sidebar() {
   const [showAddProjectDialog, setShowAddProjectDialog] = useState(false);
   const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
+  const [confirmingArchiveThreadId, setConfirmingArchiveThreadId] = useState<ThreadId | null>(null);
+  const confirmArchiveButtonRefs = useRef(new Map<ThreadId, HTMLButtonElement>());
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
     ReadonlySet<ProjectId>
   >(() => new Set());
@@ -359,6 +362,11 @@ export default function Sidebar() {
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const isSearching = normalizedSearchQuery.length > 0;
+
+  const visibleThreads = useMemo(
+    () => threads.filter((thread) => thread.archivedAt === null),
+    [threads],
+  );
 
   useEffect(() => {
     if (isSearching) {
@@ -457,10 +465,28 @@ export default function Sidebar() {
     });
   }, []);
 
+  const attemptArchiveThread = useCallback(async (threadId: ThreadId) => {
+    const api = readNativeApi();
+    if (!api) return;
+    try {
+      await api.orchestration.dispatchCommand({
+        type: "thread.archive",
+        commandId: newCommandId(),
+        threadId,
+      });
+    } catch (error) {
+      toastManager.add({
+        type: "error",
+        title: "Failed to archive thread",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
+    }
+  }, []);
+
   const focusMostRecentThreadForProject = useCallback(
     (projectId: ProjectId) => {
       const latestThread = sortThreadsForSidebar(
-        threads.filter((thread) => thread.projectId === projectId),
+        threads.filter((thread) => thread.projectId === projectId && thread.archivedAt === null),
         appSettings.sidebarThreadSortOrder,
       )[0];
       if (!latestThread) return;
@@ -1591,7 +1617,7 @@ export default function Sidebar() {
                   .filter((p) => p.name !== "Home")
                   .map((project) => {
                     const projectThreads = sortThreadsForSidebar(
-                      threads.filter((thread) => thread.projectId === project.id),
+                      visibleThreads.filter((thread) => thread.projectId === project.id),
                       appSettings.sidebarThreadSortOrder,
                     );
 
@@ -1611,11 +1637,12 @@ export default function Sidebar() {
 
                     const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
                     const activeThreadId = routeThreadId ?? undefined;
-                    const { hasHiddenThreads, visibleThreads } = isSearching
-                      ? {
+                    const { hasHiddenThreads, visibleThreads: visibleProjectThreads } = isSearching
+                      ? ({
                           hasHiddenThreads: false,
+                          hiddenThreads: [],
                           visibleThreads: filteredProjectThreads,
-                        }
+                        } as ReturnType<typeof getVisibleThreadsForProject>)
                       : getVisibleThreadsForProject({
                           threads: filteredProjectThreads,
                           activeThreadId,
@@ -1705,11 +1732,24 @@ export default function Sidebar() {
                             </div>
 
                             <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 overflow-hidden px-1.5 py-0">
+                              {project.expanded && filteredProjectThreads.length === 0 && (
+                                <SidebarMenuSubItem className="w-full" data-thread-selection-safe>
+                                  <div
+                                    data-thread-selection-safe
+                                    className="flex h-6 w-full translate-x-0 items-center px-2 text-left text-[10px] text-muted-foreground/60"
+                                  >
+                                    <span>No threads yet</span>
+                                  </div>
+                                </SidebarMenuSubItem>
+                              )}
                               {project.expanded &&
-                                visibleThreads.map((thread) => {
+                                visibleProjectThreads.map((thread) => {
                                   const isActive = routeThreadId === thread.id;
                                   const isSelected = selectedThreadIds.has(thread.id);
                                   const isHighlighted = isActive || isSelected;
+                                  const isThreadRunning =
+                                    thread.session?.status === "running" &&
+                                    thread.session.activeTurnId != null;
                                   const threadStatus = resolveThreadStatusPill({
                                     thread,
                                     hasPendingApprovals:
@@ -1728,17 +1768,33 @@ export default function Sidebar() {
                                   return (
                                     <SidebarMenuSubItem
                                       key={thread.id}
-                                      className="w-full"
+                                      className="group/menu-sub-item w-full"
                                       data-thread-item
+                                      onMouseLeave={() => {
+                                        setConfirmingArchiveThreadId((current) =>
+                                          current === thread.id ? null : current,
+                                        );
+                                      }}
+                                      onBlurCapture={(event) => {
+                                        const currentTarget = event.currentTarget;
+                                        requestAnimationFrame(() => {
+                                          if (currentTarget.contains(document.activeElement)) {
+                                            return;
+                                          }
+                                          setConfirmingArchiveThreadId((current) =>
+                                            current === thread.id ? null : current,
+                                          );
+                                        });
+                                      }}
                                     >
                                       <SidebarMenuSubButton
                                         render={<div role="button" tabIndex={0} />}
                                         size="sm"
                                         isActive={isActive}
-                                        className={resolveThreadRowClassName({
+                                        className={`${resolveThreadRowClassName({
                                           isActive,
                                           isSelected,
-                                        })}
+                                        })} relative isolate`}
                                         onClick={(event) => {
                                           handleThreadClick(
                                             event,
@@ -1873,15 +1929,117 @@ export default function Sidebar() {
                                               />
                                             </span>
                                           )}
-                                          <span
-                                            className={`text-[10px] ${
-                                              isHighlighted
-                                                ? "text-foreground/72 dark:text-foreground/82"
-                                                : "text-muted-foreground/40"
-                                            }`}
-                                          >
-                                            {formatRelativeTime(thread.createdAt)}
-                                          </span>
+                                          <div className="flex min-w-12 justify-end">
+                                            {confirmingArchiveThreadId === thread.id &&
+                                            !isThreadRunning ? (
+                                              <button
+                                                ref={(element) => {
+                                                  if (element) {
+                                                    confirmArchiveButtonRefs.current.set(
+                                                      thread.id,
+                                                      element,
+                                                    );
+                                                  } else {
+                                                    confirmArchiveButtonRefs.current.delete(
+                                                      thread.id,
+                                                    );
+                                                  }
+                                                }}
+                                                type="button"
+                                                data-thread-selection-safe
+                                                data-testid={`thread-archive-confirm-${thread.id}`}
+                                                aria-label={`Confirm archive ${thread.title}`}
+                                                className="absolute top-1/2 right-1 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-full bg-destructive/12 px-2 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
+                                                onPointerDown={(event) => {
+                                                  event.stopPropagation();
+                                                }}
+                                                onClick={(event) => {
+                                                  event.preventDefault();
+                                                  event.stopPropagation();
+                                                  setConfirmingArchiveThreadId((current) =>
+                                                    current === thread.id ? null : current,
+                                                  );
+                                                  void attemptArchiveThread(thread.id);
+                                                }}
+                                              >
+                                                Confirm
+                                              </button>
+                                            ) : !isThreadRunning ? (
+                                              appSettings.confirmThreadArchive ? (
+                                                <div className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity duration-150 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
+                                                  <button
+                                                    type="button"
+                                                    data-thread-selection-safe
+                                                    data-testid={`thread-archive-${thread.id}`}
+                                                    aria-label={`Archive ${thread.title}`}
+                                                    className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                                                    onPointerDown={(event) => {
+                                                      event.stopPropagation();
+                                                    }}
+                                                    onClick={(event) => {
+                                                      event.preventDefault();
+                                                      event.stopPropagation();
+                                                      setConfirmingArchiveThreadId(thread.id);
+                                                      requestAnimationFrame(() => {
+                                                        confirmArchiveButtonRefs.current
+                                                          .get(thread.id)
+                                                          ?.focus();
+                                                      });
+                                                    }}
+                                                  >
+                                                    <ArchiveIcon className="size-3.5" />
+                                                  </button>
+                                                </div>
+                                              ) : (
+                                                <Tooltip>
+                                                  <TooltipTrigger
+                                                    render={
+                                                      <div className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity duration-150 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
+                                                        <button
+                                                          type="button"
+                                                          data-thread-selection-safe
+                                                          data-testid={`thread-archive-${thread.id}`}
+                                                          aria-label={`Archive ${thread.title}`}
+                                                          className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                                                          onPointerDown={(event) => {
+                                                            event.stopPropagation();
+                                                          }}
+                                                          onClick={(event) => {
+                                                            event.preventDefault();
+                                                            event.stopPropagation();
+                                                            void attemptArchiveThread(thread.id);
+                                                          }}
+                                                        >
+                                                          <ArchiveIcon className="size-3.5" />
+                                                        </button>
+                                                      </div>
+                                                    }
+                                                  />
+                                                  <TooltipPopup side="top">Archive</TooltipPopup>
+                                                </Tooltip>
+                                              )
+                                            ) : null}
+                                            <span
+                                              className={`pointer-events-none ${
+                                                confirmingArchiveThreadId === thread.id &&
+                                                !isThreadRunning
+                                                  ? "opacity-0"
+                                                  : !isThreadRunning
+                                                    ? "transition-opacity duration-150 group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0"
+                                                    : ""
+                                              }`}
+                                            >
+                                              <span
+                                                className={`text-[10px] ${
+                                                  isHighlighted
+                                                    ? "text-foreground/72 dark:text-foreground/82"
+                                                    : "text-muted-foreground/40"
+                                                }`}
+                                              >
+                                                {formatRelativeTime(thread.createdAt)}
+                                              </span>
+                                            </span>
+                                          </div>
                                         </div>
                                       </SidebarMenuSubButton>
                                     </SidebarMenuSubItem>
