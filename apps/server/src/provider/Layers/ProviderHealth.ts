@@ -22,6 +22,7 @@ import {
   isCodexCliVersionSupported,
   parseCodexCliVersion,
 } from "../codexCliVersion";
+import { isWindowsCommandNotFound } from "../../processRunner";
 import { ProviderHealth, type ProviderHealthShape } from "../Services/ProviderHealth";
 
 const DEFAULT_TIMEOUT_MS = 4_000;
@@ -261,7 +262,11 @@ const runCodexCommand = (args: ReadonlyArray<string>) =>
       { concurrency: "unbounded" },
     );
 
-    return { stdout, stderr, code: exitCode } satisfies CommandResult;
+    const result: CommandResult = { stdout, stderr, code: exitCode };
+    if (isWindowsCommandNotFound(exitCode, stderr)) {
+      return yield* Effect.fail(new Error(`spawn codex ENOENT`));
+    }
+    return result;
   }).pipe(Effect.scoped);
 
 // ── Health check ────────────────────────────────────────────────────

@@ -16,10 +16,17 @@ class StatusUpstreamRefreshCacheKey extends Data.Class<{
   upstreamBranch: string;
 }> {}
 
+const PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES = 49_000;
+const RANGE_COMMIT_SUMMARY_MAX_OUTPUT_BYTES = 19_000;
+const RANGE_DIFF_SUMMARY_MAX_OUTPUT_BYTES = 19_000;
+const RANGE_DIFF_PATCH_MAX_OUTPUT_BYTES = 59_000;
+
 interface ExecuteGitOptions {
   timeoutMs?: number | undefined;
   allowNonZeroExit?: boolean | undefined;
   fallbackErrorMessage?: string | undefined;
+  maxOutputBytes?: number | undefined;
+  truncateOutputAtMaxBytes?: boolean | undefined;
 }
 
 function parseBranchAb(value: string): { ahead: number; behind: number } {
@@ -235,6 +242,10 @@ const makeGitCore = Effect.gen(function* () {
         args,
         allowNonZeroExit: true,
         ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+        ...(options.maxOutputBytes !== undefined ? { maxOutputBytes: options.maxOutputBytes } : {}),
+        ...(options.truncateOutputAtMaxBytes !== undefined
+          ? { truncateOutputAtMaxBytes: options.truncateOutputAtMaxBytes }
+          : {}),
       })
       .pipe(
         Effect.flatMap((result) => {
@@ -278,6 +289,14 @@ const makeGitCore = Effect.gen(function* () {
     executeGit(operation, cwd, args, { allowNonZeroExit }).pipe(
       Effect.map((result) => result.stdout),
     );
+
+  const runGitStdoutWithOptions = (
+    operation: string,
+    cwd: string,
+    args: readonly string[],
+    options: ExecuteGitOptions = {},
+  ): Effect.Effect<string, GitCommandError> =>
+    executeGit(operation, cwd, args, options).pipe(Effect.map((result) => result.stdout));
 
   const branchExists = (cwd: string, branch: string): Effect.Effect<boolean, GitCommandError> =>
     executeGit(
@@ -759,12 +778,15 @@ const makeGitCore = Effect.gen(function* () {
         return null;
       }
 
-      const stagedPatch = yield* runGitStdout("GitCore.prepareCommitContext.stagedPatch", cwd, [
-        "diff",
-        "--cached",
-        "--patch",
-        "--minimal",
-      ]);
+      const stagedPatch = yield* runGitStdoutWithOptions(
+        "GitCore.prepareCommitContext.stagedPatch",
+        cwd,
+        ["diff", "--cached", "--patch", "--minimal"],
+        {
+          maxOutputBytes: PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES,
+          truncateOutputAtMaxBytes: true,
+        },
+      );
 
       return {
         stagedSummary,
@@ -937,14 +959,33 @@ const makeGitCore = Effect.gen(function* () {
       const range = `${baseBranch}..HEAD`;
       const [commitSummary, diffSummary, diffPatch] = yield* Effect.all(
         [
-          runGitStdout("GitCore.readRangeContext.log", cwd, ["log", "--oneline", range]),
-          runGitStdout("GitCore.readRangeContext.diffStat", cwd, ["diff", "--stat", range]),
-          runGitStdout("GitCore.readRangeContext.diffPatch", cwd, [
-            "diff",
-            "--patch",
-            "--minimal",
-            range,
-          ]),
+          runGitStdoutWithOptions(
+            "GitCore.readRangeContext.log",
+            cwd,
+            ["log", "--oneline", range],
+            {
+              maxOutputBytes: RANGE_COMMIT_SUMMARY_MAX_OUTPUT_BYTES,
+              truncateOutputAtMaxBytes: true,
+            },
+          ),
+          runGitStdoutWithOptions(
+            "GitCore.readRangeContext.diffStat",
+            cwd,
+            ["diff", "--stat", range],
+            {
+              maxOutputBytes: RANGE_DIFF_SUMMARY_MAX_OUTPUT_BYTES,
+              truncateOutputAtMaxBytes: true,
+            },
+          ),
+          runGitStdoutWithOptions(
+            "GitCore.readRangeContext.diffPatch",
+            cwd,
+            ["diff", "--patch", "--minimal", range],
+            {
+              maxOutputBytes: RANGE_DIFF_PATCH_MAX_OUTPUT_BYTES,
+              truncateOutputAtMaxBytes: true,
+            },
+          ),
         ],
         { concurrency: "unbounded" },
       );

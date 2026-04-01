@@ -398,6 +398,22 @@ function SettingsRouteView() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // Escape navigates back from settings
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        window.history.back();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
   const show = useMemo(() => {
     const q = searchQuery.trim();
     const result: Record<string, boolean> = {};

@@ -19,6 +19,7 @@ export interface ExecuteGitInput {
   readonly allowNonZeroExit?: boolean;
   readonly timeoutMs?: number;
   readonly maxOutputBytes?: number;
+  readonly truncateOutputAtMaxBytes?: boolean;
 }
 
 export interface ExecuteGitResult {

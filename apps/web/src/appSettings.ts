@@ -62,6 +62,12 @@ const AppSettingsSchema = Schema.Struct({
   timestampFormat: Schema.Literals(["locale", "12-hour", "24-hour"]).pipe(
     Schema.withConstructorDefault(() => Option.some("locale")),
   ),
+  sidebarProjectSortOrder: Schema.Literals(["updated_at", "created_at", "manual"]).pipe(
+    Schema.withConstructorDefault(() => Option.some("updated_at")),
+  ),
+  sidebarThreadSortOrder: Schema.Literals(["updated_at", "created_at"]).pipe(
+    Schema.withConstructorDefault(() => Option.some("updated_at")),
+  ),
   commitMessageInstructions: Schema.String.pipe(
     Schema.withConstructorDefault(() => Option.some("")),
   ),
@@ -72,6 +78,10 @@ const AppSettingsSchema = Schema.Struct({
 export type AppSettings = typeof AppSettingsSchema.Type;
 export type TimestampFormat = AppSettings["timestampFormat"];
 export const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
+export type SidebarProjectSortOrder = AppSettings["sidebarProjectSortOrder"];
+export const DEFAULT_SIDEBAR_PROJECT_SORT_ORDER: SidebarProjectSortOrder = "updated_at";
+export type SidebarThreadSortOrder = AppSettings["sidebarThreadSortOrder"];
+export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "updated_at";
 export interface AppModelOption {
   slug: string;
   name: string;

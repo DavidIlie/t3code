@@ -81,11 +81,13 @@ import {
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
 import {
+  getFallbackThreadIdAfterDelete,
+  getVisibleThreadsForProject,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
+  sortThreadsForSidebar,
 } from "./Sidebar.logic";
-import { Collapsible, CollapsibleContent } from "./ui/collapsible";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
   SidebarContent,
@@ -457,13 +459,10 @@ export default function Sidebar() {
 
   const focusMostRecentThreadForProject = useCallback(
     (projectId: ProjectId) => {
-      const latestThread = threads
-        .filter((thread) => thread.projectId === projectId)
-        .toSorted((a, b) => {
-          const byDate = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-          if (byDate !== 0) return byDate;
-          return b.id.localeCompare(a.id);
-        })[0];
+      const latestThread = sortThreadsForSidebar(
+        threads.filter((thread) => thread.projectId === projectId),
+        appSettings.sidebarThreadSortOrder,
+      )[0];
       if (!latestThread) return;
 
       void navigate({
@@ -471,7 +470,7 @@ export default function Sidebar() {
         params: { threadId: latestThread.id },
       });
     },
-    [navigate, threads],
+    [appSettings.sidebarThreadSortOrder, navigate, threads],
   );
 
   const addProjectFromPath = useCallback(
@@ -688,8 +687,12 @@ export default function Sidebar() {
 
       const allDeletedIds = deletedIds ?? new Set<ThreadId>();
       const shouldNavigateToFallback = routeThreadId === threadId;
-      const fallbackThreadId =
-        threads.find((entry) => entry.id !== threadId && !allDeletedIds.has(entry.id))?.id ?? null;
+      const fallbackThreadId = getFallbackThreadIdAfterDelete({
+        threads,
+        deletedThreadId: threadId,
+        deletedThreadIds: allDeletedIds,
+        sortOrder: appSettings.sidebarThreadSortOrder,
+      });
       await api.orchestration.dispatchCommand({
         type: "thread.delete",
         commandId: newCommandId(),
@@ -736,6 +739,7 @@ export default function Sidebar() {
       }
     },
     [
+      appSettings.sidebarThreadSortOrder,
       clearComposerDraftForThread,
       clearProjectDraftThreadById,
       clearTerminalState,
@@ -1586,14 +1590,10 @@ export default function Sidebar() {
                 {projects
                   .filter((p) => p.name !== "Home")
                   .map((project) => {
-                    const projectThreads = threads
-                      .filter((thread) => thread.projectId === project.id)
-                      .toSorted((a, b) => {
-                        const byDate =
-                          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                        if (byDate !== 0) return byDate;
-                        return b.id.localeCompare(a.id);
-                      });
+                    const projectThreads = sortThreadsForSidebar(
+                      threads.filter((thread) => thread.projectId === project.id),
+                      appSettings.sidebarThreadSortOrder,
+                    );
 
                     const filteredProjectThreads = isSearching
                       ? projectThreads.filter((thread) =>
@@ -1610,18 +1610,24 @@ export default function Sidebar() {
                     }
 
                     const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
-                    const hasHiddenThreads =
-                      !isSearching && filteredProjectThreads.length > THREAD_PREVIEW_LIMIT;
-                    const visibleThreads =
-                      hasHiddenThreads && !isThreadListExpanded
-                        ? filteredProjectThreads.slice(0, THREAD_PREVIEW_LIMIT)
-                        : filteredProjectThreads;
+                    const activeThreadId = routeThreadId ?? undefined;
+                    const { hasHiddenThreads, visibleThreads } = isSearching
+                      ? {
+                          hasHiddenThreads: false,
+                          visibleThreads: filteredProjectThreads,
+                        }
+                      : getVisibleThreadsForProject({
+                          threads: filteredProjectThreads,
+                          activeThreadId,
+                          isThreadListExpanded,
+                          previewLimit: THREAD_PREVIEW_LIMIT,
+                        });
                     const orderedProjectThreadIds = filteredProjectThreads.map((t) => t.id);
 
                     return (
                       <SortableProjectItem key={project.id} projectId={project.id}>
                         {(dragHandleProps) => (
-                          <Collapsible className="group/collapsible" open={project.expanded}>
+                          <>
                             <div
                               className="group/project-header relative cursor-grab active:cursor-grabbing"
                               {...dragHandleProps.attributes}
@@ -1698,9 +1704,9 @@ export default function Sidebar() {
                               </Tooltip>
                             </div>
 
-                            <CollapsibleContent keepMounted>
-                              <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 px-1.5 py-0">
-                                {visibleThreads.map((thread) => {
+                            <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 overflow-hidden px-1.5 py-0">
+                              {project.expanded &&
+                                visibleThreads.map((thread) => {
                                   const isActive = routeThreadId === thread.id;
                                   const isSelected = selectedThreadIds.has(thread.id);
                                   const isHighlighted = isActive || isSelected;
@@ -1882,39 +1888,38 @@ export default function Sidebar() {
                                   );
                                 })}
 
-                                {hasHiddenThreads && !isThreadListExpanded && (
-                                  <SidebarMenuSubItem className="w-full">
-                                    <SidebarMenuSubButton
-                                      render={<button type="button" />}
-                                      data-thread-selection-safe
-                                      size="sm"
-                                      className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-                                      onClick={() => {
-                                        expandThreadListForProject(project.id);
-                                      }}
-                                    >
-                                      <span>Show more</span>
-                                    </SidebarMenuSubButton>
-                                  </SidebarMenuSubItem>
-                                )}
-                                {hasHiddenThreads && isThreadListExpanded && (
-                                  <SidebarMenuSubItem className="w-full">
-                                    <SidebarMenuSubButton
-                                      render={<button type="button" />}
-                                      data-thread-selection-safe
-                                      size="sm"
-                                      className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-                                      onClick={() => {
-                                        collapseThreadListForProject(project.id);
-                                      }}
-                                    >
-                                      <span>Show less</span>
-                                    </SidebarMenuSubButton>
-                                  </SidebarMenuSubItem>
-                                )}
-                              </SidebarMenuSub>
-                            </CollapsibleContent>
-                          </Collapsible>
+                              {hasHiddenThreads && !isThreadListExpanded && (
+                                <SidebarMenuSubItem className="w-full">
+                                  <SidebarMenuSubButton
+                                    render={<button type="button" />}
+                                    data-thread-selection-safe
+                                    size="sm"
+                                    className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                                    onClick={() => {
+                                      expandThreadListForProject(project.id);
+                                    }}
+                                  >
+                                    <span>Show more</span>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )}
+                              {hasHiddenThreads && isThreadListExpanded && (
+                                <SidebarMenuSubItem className="w-full">
+                                  <SidebarMenuSubButton
+                                    render={<button type="button" />}
+                                    data-thread-selection-safe
+                                    size="sm"
+                                    className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                                    onClick={() => {
+                                      collapseThreadListForProject(project.id);
+                                    }}
+                                  >
+                                    <span>Show less</span>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )}
+                            </SidebarMenuSub>
+                          </>
                         )}
                       </SortableProjectItem>
                     );
