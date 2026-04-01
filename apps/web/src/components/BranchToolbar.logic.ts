@@ -98,6 +98,29 @@ export function resolveBranchSelectionTarget(input: {
   };
 }
 
+export function shouldIncludeBranchPickerItem(input: {
+  itemValue: string;
+  normalizedQuery: string;
+  createBranchItemValue: string | null;
+  checkoutPullRequestItemValue: string | null;
+}): boolean {
+  const { itemValue, normalizedQuery, createBranchItemValue, checkoutPullRequestItemValue } = input;
+
+  if (normalizedQuery.length === 0) {
+    return true;
+  }
+
+  if (createBranchItemValue && itemValue === createBranchItemValue) {
+    return true;
+  }
+
+  if (checkoutPullRequestItemValue && itemValue === checkoutPullRequestItemValue) {
+    return true;
+  }
+
+  return itemValue.toLowerCase().includes(normalizedQuery);
+}
+
 export function dedupeRemoteBranchesWithLocalMatches(
   branches: ReadonlyArray<GitBranch>,
 ): ReadonlyArray<GitBranch> {
