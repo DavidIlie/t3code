@@ -3251,6 +3251,18 @@ function providerFailureFromResult(
     return null;
   }
   const apiErrorStatus = message.api_error_status ?? null;
+  // API-key gateways do not get Claude's OAuth-only rate_limit_event.
+  const proxyRetryAt =
+    apiErrorStatus === 429 && message.is_error && message.terminal_reason === "api_error"
+      ? / \[retry_at=(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\]$/.exec(message.result.trim())?.[1]
+      : undefined;
+  const proxyResetMs = proxyRetryAt === undefined ? NaN : Date.parse(proxyRetryAt);
+  const resetAt =
+    Number.isFinite(proxyResetMs) &&
+    proxyResetMs > DateTime.toEpochMillis(completedAt) &&
+    DateTime.formatIso(DateTime.makeUnsafe(proxyResetMs)) === proxyRetryAt?.replace("Z", ".000Z")
+      ? DateTime.formatIso(DateTime.makeUnsafe(proxyResetMs))
+      : undefined;
   return makeProviderFailure({
     message: listedError ?? structuredError ?? failureHint ?? message.result,
     code:
@@ -3259,6 +3271,7 @@ function providerFailureFromResult(
         : `api_error_${apiErrorStatus}`,
     class: failureClass,
     retryable: apiErrorStatus === 429 || apiErrorStatus === 529 ? true : null,
+    ...(resetAt === undefined ? {} : { resetAt }),
   });
 }
 

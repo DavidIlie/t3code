@@ -4621,6 +4621,56 @@ describe("ClaudeAdapterV2 background wake turns", () => {
   );
 
   it.effect.each([
+    {
+      status: 429,
+      suffix: "[retry_at=2026-11-01T12:00:00Z]",
+      expected: "2026-11-01T12:00:00.000Z",
+    },
+    { status: 429, suffix: "[retry_at=invalid]", expected: null },
+    { status: 429, suffix: "[retry_at=2026-02-30T12:00:00Z]", expected: null },
+    { status: 429, suffix: "[retry_at=2000-01-01T12:00:00Z]", expected: null },
+    { status: 500, suffix: "[retry_at=2026-11-01T12:00:00Z]", expected: null },
+  ])("recovers proxy retry deadlines only for quota errors: $status $suffix", (input) =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(Date.parse("2026-10-25T16:00:00Z"));
+      const harness = yield* makeWakeHarness;
+      const now = yield* DateTime.now;
+      yield* harness.runtime.startTurn(
+        makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now,
+          attemptId: RunAttemptId.make("attempt-proxy-limit"),
+          text: "Continue.",
+          attachments: [],
+        }),
+      );
+      yield* Queue.offerAll(harness.sdkMessages, [
+        makeAssistantErrorFrame({
+          uuid: "00000000-0000-4000-8000-000000000654",
+          error: input.status === 429 ? "rate_limit" : "server_error",
+        }),
+        makeResultFrame({
+          uuid: "00000000-0000-4000-8000-000000000655",
+          result: `API Error: Request rejected (${input.status}) · Usage limit reached ${input.suffix}`,
+          terminalReason: "api_error",
+          isError: true,
+          apiErrorStatus: input.status,
+        }),
+      ]);
+      const terminal = yield* Queue.take(harness.terminalReceipts);
+      assert.equal(terminal.status, "failed");
+      if (terminal.status !== "failed") return;
+      assert.equal(terminal.failure.class, input.status === 429 ? "usage_limit" : "provider_error");
+      assert.equal(terminal.failure.resetAt ?? null, input.expected);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect.each([
     { status: 503, cooldown: "4m 6s", seconds: 246 },
     { status: 503, cooldown: "1h 2m 3s", seconds: 3723 },
     { status: 503, cooldown: "7s", seconds: 7 },
